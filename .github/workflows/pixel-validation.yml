@@ -1,0 +1,67 @@
+name: Pixel Schema Linting
+
+on:
+    push:
+      branches:
+      - develop
+    pull_request:
+      paths:
+      - 'PixelDefinitions/**'
+
+jobs:
+    pixel-validation:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Use Node.js 20
+              uses: actions/setup-node@v4
+              with:
+                node-version: 20.x
+
+            - uses: actions/cache@v4
+              with:
+                path: ~/.npm
+                key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+                restore-keys: |
+                  ${{ runner.os }}-node-
+
+            - name: Checkout internal-github-asana-utils repo
+              uses: actions/checkout@v4
+              with:
+                  token: ${{ secrets.DAXMOBILE_ANDROID_AUTOMATION }}
+                  path: internal-github-asana-utils
+                  repository: duckduckgo/internal-github-asana-utils
+
+            - name: Install dependencies
+              run: npm ci --verbose
+              working-directory: PixelDefinitions
+
+            - name: Lint
+              run: npm run lint || (npm run lint.fix; git --no-pager diff; echo 'Pixel lint check failed, review diff above or run "npm run lint.fix"'; exit 1)
+              working-directory: PixelDefinitions
+
+            - name: Run pixel validation
+              run: npm run validate-defs-without-formatting -- -g ../internal-github-asana-utils/user_map.yml
+              working-directory: PixelDefinitions
+
+            # Validation regenerates generated_schemas/ in place and exits 0 either way.
+            # If there are any changes after previous steps, it means the committed schemas
+            # no longer match the definitions they come from.
+            - name: Check generated schemas match definitions
+              run: |
+                changes=$(git status --porcelain -- PixelDefinitions)
+                if [ -n "$changes" ]; then
+                  echo 'Generated schemas do not match the pixel definitions.'
+                  echo
+                  echo "$changes"
+                  echo
+                  git --no-pager diff -- PixelDefinitions
+                  echo
+                  echo 'Run "npm run validate-defs-without-formatting" in PixelDefinitions and commit the result.'
+                  exit 1
+                fi
+

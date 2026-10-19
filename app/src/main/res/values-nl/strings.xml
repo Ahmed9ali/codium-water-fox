@@ -1,0 +1,1021 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2022 DuckDuckGo
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<!-- smartling.entity_escaping = false -->
+<!-- smartling.instruction_attributes = instruction -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="appName" translatable="false">DuckDuckGo</string>
+    <string name="appDescription" translatable="false">DuckDuckGo</string>
+    <string name="duckDuckGoLogoDescription">Logo DuckDuckGo</string>
+    <string name="duckDuckGoProtectionPrivacyPeaceTagLine">Bescherming. Privacy.Gemoedsrust.</string>
+    <string name="yes">Ja</string>
+    <string name="no">Nee</string>
+    <string name="open">Openen</string>
+    <string name="cancel">Annuleren</string>
+    <string name="search">Zoeken</string>
+
+    <!--Duck.ai contextual fire-->
+    <string name="duckAiChatDeletedSnackbar">Chat verwijderd</string>
+
+    <!-- Onboarding Activity -->
+    <string name="onboardingDefaultBrowserDescription">Ga naar Instellingen om elke keer te zoeken en te browsen met DuckDuckGo.</string>
+    <string name="onboardingDefaultBrowserTitle">Stel DuckDuckGo in als standaard</string>
+
+    <!-- Default Browser -->
+    <string name="cannotLaunchDefaultAppSettings">Kan het instellingenscherm voor standaard-apps niet openen</string>
+    <string name="setAsDefaultBrowser">Instellen als standaard browser</string>
+    <string name="defaultBrowserMaybeLater">Later misschien</string>
+    <string name="defaultBrowserDescriptionNoDefault">Open links altijd met een gerust hart.</string>
+    <string name="defaultBrowserInstructions">Selecteer DuckDuckGo en tik op <font color="#678fff">Altijd </font>.</string>
+
+    <!-- Browser Activity -->
+    <string name="browserPopupMenu">Browsermenu</string>
+    <string name="refresh">Vernieuwen</string>
+    <string name="back">Terug</string>
+    <string name="forward">Vooruit</string>
+
+    <string name="omnibarInputHint">URL typen of zoeken</string>
+    <string name="clearButtonContentDescription">Zoekinvoer wissen</string>
+    <string name="no_compatible_third_party_app_installed">Geen compatibele app geïnstalleerd</string>
+
+    <string name="addFavoriteMenuTitle">Favoriet toevoegen</string>
+    <string name="removeFavoriteMenuTitle">Favoriet verwijderen</string>
+    <string name="favoriteAddedMessage">Favoriet toegevoegd</string>
+    <string name="bookmarkAddedMessage">Bladwijzer toegevoegd</string>
+    <string name="downloadsMenuTitle">Downloads</string>
+    <string name="favoriteDeleteConfirmationMessage">Favoriet verwijderd</string>
+    <string name="fireproofDeleteConfirmationMessage">Brandveiligheid uitgeschakeld</string>
+    <string name="privacyProtectionEnabledConfirmationMessage" instruction="Placeholder is a website">Privacybescherming ingeschakeld voor %1$s</string>
+    <string name="privacyProtectionDisabledConfirmationMessage" instruction="Placeholder is a website">Privacybescherming uitgeschakeld voor %1$s</string>
+    <string name="undoSnackbarAction">Ongedaan maken</string>
+    <!-- Trackers blocked animation-->
+    <plurals name="trackersBlockedAnimationMessage" tools:ignore="ImpliedQuantity">
+        <item quantity="one" instruction="This sentence is preceded by a number greater than zero, i.e. 1 Tracker Blocked">Tracker geblokkeerd</item>
+        <item quantity="other" instruction="This sentence is preceded by a number greater than zero, i.e. 5 Trackers Blocked">Trackers geblokkeerd</item>
+    </plurals>
+
+    <!-- Downloading files -->
+    <string name="downloadImage">Afbeelding downloaden</string>
+    <string name="permissionRequiredToDownload">Voor downloaden is opslagtoestemming vereist</string>
+
+    <!-- Sharing options -->
+    <string name="options">Opties</string>
+    <string name="shareLink">Link delen</string>
+    <string name="copyUrl">Adres link kopiëren</string>
+    <string name="urlCopiedToClipboard">URL gekopieerd naar klembord</string>
+
+    <!-- Find in page -->
+    <string name="nextSearchTermDescription">Volgende zoeken</string>
+    <string name="previousSearchTermDescription">Vorige zoeken</string>
+    <string name="closeFindInPageButtonDescription">Scherm zoek op pagina sluiten</string>
+    <string name="findInPageHint">Zoek op pagina</string>
+    <string name="findInPageMatches" translatable="false">%1$d/%2$d</string>
+
+    <!-- AutoComplete Suggestions -->
+    <string name="editQueryBeforeSubmitting">Bewerk query alvorens te zoeken</string>
+    <string name="autocompleteRemoveItemTitle">Zoeksuggestie verwijderen?</string>
+    <string name="autocompleteRemoveItemCancel">Annuleren</string>
+    <string name="autocompleteRemoveItemRemove">Verwijderen</string>
+    <string name="autocompleteSwitchToTab" instruction="Placeholder is a website">Overschakelen naar tabblad · %1$s</string>
+
+    <!-- Opening external apps -->
+    <string name="openExternalApp">Externe app openen</string>
+    <string name="launchingExternalApp">Open in een andere app</string>
+    <string name="confirmOpenExternalApp">Wil je DuckDuckGo verlaten om deze content te bekijken?</string>
+    <string name="unableToOpenLink">Kan dit type link niet openen</string>
+
+    <!-- Tabs -->
+    <string name="homeTab" translatable="false">DuckDuckGo</string>
+    <string name="tabActivityTitle">Tabbladen</string>
+    <string name="tabsMenuItem">Tabbladen</string>
+    <string name="newTabMenuItem">Nieuw tabblad</string>
+    <string name="openInNewTab">Openen in nieuw tabblad</string>
+    <string name="openInNewBackgroundTab">In tabblad op achtergrond openen</string>
+    <string name="openImageInNewTab">Afbeelding openen in tabblad op achtergrond</string>
+    <string name="faviconContentDescription">Favicon</string>
+    <string name="closeContentDescription">Sluiten</string>
+    <string name="closeAllTabsMenuItem">Alle tabbladen sluiten</string>
+    <string name="closeTab">Tabblad sluiten</string>
+    <string name="tabClosed">Tabblad gesloten</string>
+    <string name="tabClosedUndo">Ongedaan maken</string>
+    <string name="downloadsMenuItemTitle">Downloads</string>
+    <string name="tabSwitcherListViewMenu">Lijstweergave</string>
+    <string name="tabSwitcherGridViewMenu">Rasterweergave</string>
+
+    <!--Tab Switcher Animation-->
+    <string name="trackersBlockedInTheLast7days" instruction="Placeholder is the number of trackers blocked &gt; 1">&lt;b&gt;%1$s trackers geblokkeerd &lt;/b&gt; in de afgelopen 7 dagen</string>
+    <string name="trackersBlocked" instruction="Placeholder is the number of trackers blocked">&lt;b&gt;%1$s trackers geblokkeerd &lt;/b&gt;</string>
+    <string name="inTheLast7Days">in de afgelopen 7 dagen</string>
+
+    <!-- Fire -->
+    <string name="fireMenu">Gegevens wissen</string>
+    <string name="fireClearAll">Tabbladen en gegevens verwijderen</string>
+    <string name="fireCancel">Annuleren</string>
+    <string name="fireDataCleared">Gegevens gewist</string>
+
+    <!-- Settings Activity -->
+    <string name="settingsActivityTitle">Instellingen</string>
+    <string name="settingsMenuItemTitle">Instellingen</string>
+    <string name="settingsHeadingProtections">Bescherming</string>
+    <string name="settingsHeadingAppearance">Uiterlijk</string>
+    <string name="settingsWhatsNew">Wat is er nieuw?</string>
+    <string name="settingsHeadingAbout">Over</string>
+    <string name="settingsAboutDuckduckgo">Over DuckDuckGo</string>
+    <string name="settingsVersion">Versie</string>
+    <string name="leaveFeedback">Feedback delen</string>
+    <string name="leaveFeedbackNew">Verstuur feedback</string>
+    <string name="settingsEmailProtectionTitle">E-mailbescherming</string>
+    <string name="settingsHeadingNextSteps">Volgende stappen</string>
+    <string name="settingsNextStepsHideItem">Verbergen</string>
+    <string name="settingsLightTheme">Licht</string>
+    <string name="settingsTheme">Thema</string>
+    <string name="settingsDarkTheme">Donker</string>
+    <string name="settingsSystemTheme">Systeemstandaard</string>
+    <string name="settingsThemeDialogSave">Thema instellen</string>
+    <string name="settingsTitleAppLinks">Koppelingen openen in apps</string>
+    <string name="settingsTitleAppLinksDialog">Koppelingen openen in apps</string>
+    <string name="settingsAppLinksAskEveryTime">Elke keer vragen</string>
+    <string name="settingsAppLinksAlways">Altijd</string>
+    <string name="settingsAppLinksNever">Nooit</string>
+    <string name="settingsTitleNotifications">Meldingen</string>
+    <string name="settingsSubtitleNotificationsDisabled">Uitgeschakeld</string>
+    <string name="settingsSubtitleNotificationsEnabled">Ingeschakeld</string>
+    <string name="settingsDefaultBrowserTitle">Standaardbrowser</string>
+    <string name="settingsPrivateSearchTitle">Privé-zoekopdracht</string>
+    <string name="settingsGeneral" instruction="List item for general settings">Algemeen</string>
+    <string name="settingsWebTrackingProtectionTitle">Bescherming tegen webtracking</string>
+    <string name="settingsHeadingMainSettings">Overige Instellingen</string>
+    <string name="settingsPermissionsSetting">Toestemmingen</string>
+    <string name="settingsSyncSetting">Synchronisatie en back-up</string>
+    <string name="settingsDataClearing">Gegevens wissen</string>
+    <string name="settingsAddWidget">Widget toevoegen aan startscherm</string>
+    <string name="settingsAddressBarPosition">Positie van adresbalk instellen</string>
+    <string name="settingsEnableVoiceSearch">Privé voice search inschakelen</string>
+    <string name="settingsDDGOnOtherPlatforms">DuckDuckGo op andere platforms</string>
+    <string name="settingsDuckAi">AI-functies</string>
+
+    <!-- Private Search -->
+    <string name="privateSearchActivityTitle">Privé-zoekopdracht</string>
+    <string name="privateSearchDescription">DuckDuckGo Private Search is je standaardzoekmachine, zodat je op het web kunt zoeken zonder gevolgd te worden.</string>
+    <string name="privateSearchMoreSearchSettingsPrimaryText">Meer zoekinstellingen</string>
+    <string name="privateSearchMoreSearchSettingsSecondaryText">Pas je zoektaal, regio en meer aan</string>
+    <string name="privateSearchMoreSearchSettingsTitle">Meer zoekinstellingen</string>
+    <string name="privateSearchAutocompleteToggle">Zoeksuggesties</string>
+    <string name="privateSearchAutocompleteHint">Toon suggesties voor zoekopdrachten terwijl je typt, inclusief je bladwijzers. Alle zoekopdrachten zijn privé.</string>
+    <string name="privateSearchAutocompleteRecentlyVisitedSitesToggle">Onlangs bezochte websites</string>
+    <string name="privateSearchAutocompleteRecentlyVisitedSitesHint">Toon onlangs bezochte websites in zoeksuggesties. Onlangs bezochte websites zijn privé, worden alleen op je apparaat opgeslagen en kunnen worden gewist met de Fire Button.</string>
+    <string name="privateSearchChatSuggestionsToggle">Chatsuggesties</string>
+    <string name="privateSearchAutocompleteHintWithChatSuggestions">Toon suggesties uit je geschiedenis, bladwijzers en (optioneel) de chatgeschiedenis van Duck.ai terwijl je typt in de zoekbalk. Alle zoekopdrachten zijn privé.</string>
+
+    <!-- General Settings -->
+    <string name="generalSettingsActivityTitle" instruction="Title of the general settings screen">Algemeen</string>
+
+    <!-- Web Tracking Protection -->
+    <string name="webTrackingProtectionActivityTitle">Bescherming tegen webtracking</string>
+    <string name="webTrackingProtectionLearnMoreTitle">Bescherming tegen webtracking</string>
+    <string name="webTrackingProtectionTitle">Bescherming tegen webtracking</string>
+    <string name="webTrackingProtectionExplanationDescription"><![CDATA[De DuckDuckGo-browser biedt bescherming tegen tracking die altijd actief is.\n<a href=\"\">Meer informatie</a>]]></string>
+    <string name="webTrackingProtectionExplanationTitle">Hoe wij je beschermen</string>
+    <string name="webTrackingProtectionThirdPartyTrackersTitle">Blokkeert trackers van derden</string>
+    <string name="webTrackingProtectionThirdPartyTrackersDescription">Helpt bij het blokkeren van cookies van derden die je op elke website volgen door te voorkomen dat trackers van derden überhaupt worden geladen.</string>
+    <string name="webTrackingProtectionTargetedAdsTitle">Blokkeert gerichte advertenties</string>
+    <string name="webTrackingProtectionTargetedAdsDescription">We blokkeren invasieve trackers voordat ze worden geladen. Zo elimineren we effectief advertenties die afhankelijk zijn van tracking.</string>
+    <string name="webTrackingProtectionFingerprintTrackingTitle">Voorkomt fingerprint tracking</string>
+    <string name="webTrackingProtectionFingerprintTrackingDescription">Helpt voorkomen dat trackingbedrijven unieke identificatiegegevens over je browser en apparaat verkrijgen, die ze gebruiken om je op het internet te volgen.</string>
+    <string name="webTrackingProtectionLinkTrackingTitle">Blokkeert het volgen van links</string>
+    <string name="webTrackingProtectionLinkTrackingDescription">Verwijdert trackingparameters in links om te voorkomen dat derden je gedrag op verschillende sites kunnen volgen.</string>
+    <string name="webTrackingProtectionReferrerTrackingTitle">Beschermt tegen referrer tracking</string>
+    <string name="webTrackingProtectionReferrerTrackingDescription">Helpt voorkomen dat bedrijven de laatst bezochte website kunnen identificeren.</string>
+    <string name="webTrackingProtectionFirstPartyCookiesTitle">Laat cookies van eerste partijen vervallen</string>
+    <string name="webTrackingProtectionFirstPartyCookiesDescription">Verlaat automatisch cookies van eerste partijen na 30 dagen, zodat sites je niet onbeperkt kunnen volgen als je bent uitgelogd.</string>
+    <string name="webTrackingProtectionDnsCnameCloakingTitle">Beschermt tegen DNS CNAME cloaking</string>
+    <string name="webTrackingProtectionDnsCnameCloakingDescription">Helpt bij het blokkeren van trackers van derden die zich proberen te vermommen binnen een website met behulp van DNS.</string>
+    <string name="webTrackingProtectionGoogleAmpTrackingTitle">Blokkeert Google\'s AMP-tracking</string>
+    <string name="webTrackingProtectionGoogleAmpTrackingDescription">Vervangt Google AMP-links door de site van de oorspronkelijke uitgever.</string>
+    <string name="webTrackingProtectionGoogleSigninPopupsTitle">Blokkeert de pop-ups voor aanmelden bij Google</string>
+    <string name="webTrackingProtectionGoogleSigninPopupsDescription">Blokkeert aanmeldingspop-ups van Google op sites die niet van Google zijn.</string>
+    <string name="webTrackingProtectionGlobalPrivacyControlTitle">Global Privacy Control (GPC)</string>
+    <string name="webTrackingProtectionGlobalPrivacyControlDescription">Kiest er namens jou voor om je af te melden door sites mee te delen je persoonlijke gegevens niet te verkopen of te delen.</string>
+
+    <!-- Get Desktop Browser -->
+    <string name="getDesktopBrowserSettingItemTitle">Download de desktopbrowser</string>
+    <string name="getDesktopBrowserSettingItemSubtitleTitle">DuckDuckGo voor Mac en Windows</string>
+    <string name="getDesktopBrowserHideItem">Verbergen</string>
+
+    <!-- Cookie Pop-Up Protection -->
+    <string name="cookiePopupProtectionTitle">Bescherming tegen cookiepop-ups</string>
+
+    <!-- Fire Button -->
+    <string name="dataClearingActivityTitle">Gegevens wissen</string>
+    <string name="dataClearingDescription">Het verwijderen van je gegevens kan helpen om je privacy online te beschermen. Gebruik de Fire Button om gegevens handmatig te verwijderen of stel in dat gegevens automatisch worden verwijderd.</string>
+    <plurals name="dataClearingExcludedSites" tools:ignore="ImpliedQuantity">
+        <item quantity="one">%1$d locatie uitgesloten van gegevensverwijdering</item>
+        <item quantity="other" instruction="Placeholder is the number of sites excluded">%1$d locaties uitgesloten van gegevensverwijdering</item>
+    </plurals>
+    <string name="dataClearingAutomaticClearingOn">Aan</string>
+    <string name="dataClearingAutomaticClearingOff">Uit</string>
+    <string name="dataClearingClearBrowsingData">Browsegegevens verwijderen</string>
+    <string name="dataClearingAutomaticDataClearing">Gegevens automatisch verwijderen</string>
+    <string name="dataClearingAutomaticallyClearDataToggle">Gegevens automatisch verwijderen</string>
+    <string name="dataClearingAutomaticTabsOptionDescription">Alle open tabbladen sluiten</string>
+    <string name="dataClearingAutomaticDataOptionDescription">Verwijder alle sitegegevens, inclusief bezochte sites. Mogelijk word je uitgelegd bij accounts.</string>
+    <string name="dataClearingAutomaticChatsOptionDescription">Alle chats verwijderen, inclusief vastgezette chats</string>
+
+    <!-- Fire Dialog Granular Options -->
+    <string name="dataClearingOptionTabs">Tabbladen</string>
+    <string name="dataClearingOptionData">Cookies en sitegegevens</string>
+    <string name="dataClearingDuckAiChats">Duck.ai chats</string>
+
+    <!-- Single tab burning -->
+    <string name="singleTabFireDialogTitle">Tabbladen en sitegegevens verwijderen?</string>
+    <string name="singleTabFireDialogTitleWithChats">Tabbladen, sitegegevens en chats verwijderen?</string>
+    <string name="singleTabFireDialogDeleteAll">Alles verwijderen</string>
+    <string name="singleTabFireDialogDeleteThisTab">Dit tabblad verwijderen</string>
+    <string name="singleTabFireDialogDeleteChat">Chat verwijderen</string>
+    <string name="singleTabFireDialogDeleteChats">Chats verwijderen</string>
+    <string name="singleTabFireDialogTitleDuckAi">Deze chat verwijderen?</string>
+    <string name="singleTabFireDialogSubtitleSiteData">Als je sitegegevens verwijdert, kun je uitloggen bij je accounts.</string>
+    <string name="singleTabFireDialogSubtitleDownloads">Hiermee worden lopende downloads geannuleerd.</string>
+    <plurals name="tabsClearedSnackbarMessage">
+        <item quantity="one" instruction="Placeholder is the number of tabs deleted, e.g. 1 tab and its data deleted">%1$d tabblad en bijbehorende gegevens verwijderd</item>
+        <item quantity="other" instruction="Placeholder is the number of tabs deleted, e.g. 3 tabs and their data deleted">%1$d tabbladen en bijbehorende gegevens verwijderd</item>
+    </plurals>
+    <string name="singleTabFireDialogClearNotSupportedSnackbar">De sitegegevens kunnen niet worden verwijderd. Werk WebView bij.</string>
+    <string name="singleTabFireDialogClearErrorSnackbar">De sitegegevens kunnen niet worden verwijderd vanwege een fout.</string>
+
+    <!-- Permissions -->
+    <string name="permissionsActivityTitle">Toestemmingen</string>
+    <string name="permissionsGeneralPermissionsTitle" instruction="Section header on the Permissions settings screen, above the Notifications and Open Links in Apps settings">Algemene toestemmingen</string>
+
+    <!-- Appearance -->
+    <string name="appearanceActivityTitle">Uiterlijk</string>
+    <string name="settingsShowFullUrlTitle">Volledig siteadres weergeven</string>
+
+    <!-- Settings - Automatically clearing data -->
+    <string name="settingsAutomaticallyClearingDialogSave">Opslaan</string>
+    <string name="settingsAutomaticallyClearWhatDialogTitle">Automatisch wissen…</string>
+    <string name="settingsAutomaticallyClearWhatOptionNone">Geen</string>
+    <string name="settingsAutomaticallyClearWhatOptionTabs">Tabbladen</string>
+    <string name="settingsAutomaticallyClearWhatOptionTabsAndData">Tabbladen en gegevens</string>
+    <string name="settingsAutomaticallyClearWhatOptionTabsAndDataAndChats">Tabbladen, gegevens en Duck.ai-chats</string>
+
+    <string name="settingsAutomaticallyClearWhen">Verwijderen op…</string>
+    <string name="settingsAutomaticallyClearWhenDialogTitle">Verwijderen op…</string>
+    <string name="settingsAutomaticallyClearWhenAppExitOnly">Alleen app afsluiten</string>
+    <string name="settingsAutomaticallyClearWhenAppExit5Seconds">App afsluiten, 5 seconden inactief</string>
+    <string name="settingsAutomaticallyClearWhenAppExit5Minutes">App afsluiten, 5 minuten inactief</string>
+    <string name="settingsAutomaticallyClearWhenAppExit15Minutes">App afsluiten, 15 minuten inactief</string>
+    <string name="settingsAutomaticallyClearWhenAppExit30Minutes">App afsluiten, 30 minuten inactief</string>
+    <string name="settingsAutomaticallyClearWhenAppExit60Minutes">App afsluiten, 1 uur inactief</string>
+    <string name="settingsClearAiDataTitle">Duck.ai-chats verwijderen</string>
+    <string name="settingsClearAiDataDeleteMessage">Fire Button verwijdert ook de Duck.ai-geschiedenis, inclusief vastgepinde chats.</string>
+    <!-- About Activity -->
+    <string name="aboutActivityTitle">Over DuckDuckGo</string>
+    <string name="aboutActivityTitleNew">Over</string>
+    <string name="aboutHeaderNewTagLine">Bescherming. Privacy.Gemoedsrust.</string>
+    <string name="aboutDescriptionBrandUpdate2025">Welkom aan de Duck-kant!\n\nDuckDuckGo is het onafhankelijke onlinebeveiligingsbedrijf voor iedereen die weer controle wil krijgen over zijn of haar persoonlijke gegevens.\n\nWij zijn ervan overtuigd dat je je persoonlijke gegevens het beste tegen hackers, oplichters en privacy-invasieve bedrijven kunt beschermen door te voorkomen dat ze worden verzameld. Daarom kiezen miljoenen mensen <annotation type="chart_comparison">voor DuckDuckGo boven Chrome en andere browsers</annotation> om online te zoeken en te surfen. Onze ingebouwde zoekmachine is zoals Google, maar volgt je zoekopdrachten nooit. En met onze browsebescherming, zoals blokkering van advertentietrackers en cookieblokkering, voorkom je dat andere bedrijven je gegevens verzamelen. Bovendien is onze browser gratis - we verdienen geld met <annotation type="privacy_respecting_ads">zoekadvertenties die de privacy respecteren</annotation>, niet door je gegevens uit te buiten.\n\nDaarnaast bieden we ook een <annotation type="ppro_help_page">DuckDuckGo-abonnement</annotation> aan dat geïntegreerd is in onze browser. Abonnees krijgen nog meer privacybescherming met een snel en eenvoudig <annotation type="vpn_help_page">VPN</annotation> die je online activiteiten helpt beveiligen, toegang tot geavanceerde AI-modellen in onze privé AI-chatservice Duck.ai, een dienst die je persoonlijke gegevens opspoort en verwijdert van zoeksites om mensen op internet te vinden, en een dienst die je identiteit herstelt als deze wordt gestolen.\n\nKrijg weer de controle over je persoonlijke gegevens met de browser die is ontworpen voor gegevensbescherming, niet voor gegevensverzameling.</string>
+    <string name="no_suggestions">Geen suggesties</string>
+
+    <!-- Broken Site Activity -->
+
+
+    <string name="brokenSiteProtectionsOn">Beveiliging is <b>INGESCHAKELD</b> voor deze website</string>
+    <string name="brokenSiteProtectionsOff">Beveiliging is <b>UITGESCHAKELD</b> voor deze website</string>
+    <string name="brokenSiteProtectionsOnBannerMessage">Het kan helpen om de beveiliging uit te schakelen.</string>
+
+    <!-- Widget -->
+    <string name="searchWidgetTextHint">Zoek in DuckDuckGo</string>
+
+    <!-- Favorites widget -->
+    <string name="addFavoriteMenuTitleHighlighted">👋 Favoriet toevoegen</string>
+    <string name="widgetConfigurationTitleText">Thema kiezen</string>
+    <string name="widgetConfigurationSystemThemeOption">Systeemstandaard</string>
+    <string name="widgetConfigurationLightThemeOption">Licht</string>
+    <string name="widgetConfigurationDarkThemeOption">Donker</string>
+    <string name="widgetConfigurationAddWidgetOption">Widget toevoegen</string>
+    <string name="searchWidgetEmtpyFavoritesHint">Nog geen favorieten toegevoegd</string>
+    <string name="searchWidgetEmtpyFavoritesCta">Favoriet toevoegen</string>
+    <string name="widgetConfigurationActivityTitle">Widgetconfiguratie</string>
+    <string name="favoritesWidgetLabel">Zoeken en Favorieten</string>
+    <string name="searchWidgetLabel">Zoeken en Duck.ai</string>
+
+    <!-- Home Screen Shortcuts -->
+
+    <string name="shortcutAddedText" instruction="Placeholder is the name of a website">%1$s is toegevoegd aan je startscherm.</string>
+
+    <!-- User Survey -->
+    <string name="surveyCtaTitle">Help ons de app te verbeteren!</string>
+    <string name="surveyCtaDescription">Doe mee aan onze korte enquête en deel je feedback.</string>
+    <string name="surveyCtaLaunchButton">Vul de enquête in</string>
+    <string name="surveyCtaDismissButton">Nee, bedankt</string>
+    <string name="surveyActivityTitle">Gebruikersenquête</string>
+    <string name="surveyTitle">Enquête DuckDuckGo</string>
+    <string name="surveyDismissContentDescription">Enquête negeren</string>
+    <string name="surveyLoadingErrorTitle">Oh nee!</string>
+    <string name="surveyLoadingErrorText">Onze enquête kan momenteel niet worden geladen.\nProbeer het later opnieuw.</string>
+
+    <!-- Add widget -->
+    <string name="addWidgetCtaTitle">Probeer onze zoekwidget!</string>
+    <string name="addWidgetCtaDescription">Voeg onze zoekwidget toe aan je startscherm voor snelle en gemakkelijke toegang.</string>
+    <string name="addWidgetCtaAutoLaunchButton">Widget toevoegen</string>
+    <string name="addWidgetCtaInstructionsLaunchButton">Laat zien</string>
+    <string name="addWidgetCtaDismissButton">Negeren</string>
+    <string name="addWidgetInstructionsActivityTitle">Widget toevoegen</string>
+    <string name="addWidgetInstruction1Label">1</string>
+    <string name="addWidgetInstruction1">Druk lang op je startscherm en open dan het widgets-menu.</string>
+    <string name="addWidgetInstruction2Label">2</string>
+    <string name="addWidgetInstruction2">Vind de DuckDuckGo-widget.</string>
+    <string name="addWidgetInstruction3Label">3</string>
+    <string name="addWidgetInstruction3">Sleep de widget naar je startscherm.</string>
+    <string name="addWidgetInstructionsButtonGoHome">Ga naar het startscherm</string>
+    <string name="addWidgetInstructionsButtonClose">Sluiten</string>
+
+    <!-- App Enjoyment / Rating / Feedback -->
+    <string name="appEnjoymentDialogTitle">Ben je blij met DuckDuckGo?</string>
+    <string name="appEnjoymentDialogMessage">We horen graag wat je ervan vindt.</string>
+    <string name="appEnjoymentDialogPositiveButton">Het bevalt goed</string>
+    <string name="appEnjoymentDialogNegativeButton">Er moet aan gewerkt worden</string>
+
+    <string name="rateAppDialogTitle">Beoordeel de app</string>
+    <string name="rateAppDialogMessage">Jouw feedback is belangrijk. Schrijf een beoordeling om te laten zien hoe blij je ermee bent.</string>
+    <string name="rateAppDialogPositiveButton">Beoordeel app</string>
+    <string name="rateAppDialogNegativeButton" translatable="false">@string/noThanks</string>
+
+    <string name="giveFeedbackDialogTitle">Dat vinden we jammer om te horen</string>
+    <string name="giveFeedbackDialogMessage">Laat ons weten hoe we de app voor jou kunnen verbeteren.</string>
+    <string name="giveFeedbackDialogPositiveButton">Feedback delen</string>
+    <string name="giveFeedbackDialogNegativeButton" translatable="false">@string/noThanks</string>
+
+    <string name="noThanks">Nee, bedankt</string>
+
+    <!-- Notification Channel Names -->
+    <string name="notificationChannelTutorials">Tutorials</string>
+
+    <!-- Clear Notification -->
+    <string name="clearNotificationTitle">Gegevensverwijdering ingesteld op handmatig</string>
+    <string name="clearNotificationDescription">Pas DuckDuckGo aan om de browsegegevens na elke sessie automatisch te wissen.</string>
+
+    <!-- Privacy Protection Notification -->
+    <string name="privacyProtectionNotificationDefaultTitle">Wij beschermen je privacy</string>
+    <string name="privacyProtectionNotificationReportTitle">Je privacyrapport</string>
+    <string name="privacyProtectionNotificationDefaultDescription">Het gebruik van de DuckDuckGo-app beschermt je gegevens door trackers te blokkeren en verbindingen te coderen.</string>
+    <string name="privacyProtectionNotificationUpgadeDescription" instruction="Placeholder is a the number of connections we have protected">Je hebt je gegevens beschermd door %1$d niet-gecodeerde verbindingen te beveiligen terwijl je DuckDuckGo gebruikt.</string>
+    <string name="privacyProtectionNotificationTrackerDescription" instruction="Placeholder is the numer of trackers blocked">Je hebt je gegevens beschermd door %1$d trackers te blokkeren terwijl je DuckDuckGo gebruikt.</string>
+    <string name="privacyProtectionNotificationBothDescription" instruction="%1$d is the number of trackers blocked and %2$d is the number of unencrypted connections">Je hebt je gegevens beschermd door %1$d trackers te blokkeren en %2$d niet-gecodeerde verbindingen te beveiligen terwijl je DuckDuckGo gebruikt.</string>
+    <string name="privacyProtectionNotificationLaunchButton">Ga verder met browsen</string>
+
+    <!-- Authentication -->
+    <string name="authenticationDialogTitle">Aanmelden</string>
+    <string name="authenticationDialogMessage" instruction="Placeholder is the name of a website">%1$s vereist een gebruikersnaam en wachtwoord.</string>
+    <string name="authenticationDialogPositiveButton">Aanmelden</string>
+    <string name="authenticationDialogNegativeButton">Annuleren</string>
+    <string name="authenticationDialogUsernameHint">Gebruikersnaam</string>
+    <string name="authenticationDialogPasswordHint">Wachtwoord</string>
+
+    <!-- User-facing label for when a user selects text and might want to search for that text -->
+    <string name="systemTextSearchMessage">Zoek in DuckDuckGo</string>
+
+    <!-- Webview Recovery -->
+    <string name="crashedWebViewErrorMessage">"De webpagina kon niet worden weergegeven."</string>
+    <string name="crashedWebViewErrorAction">"Opnieuw laden"</string>
+
+    <!-- System Search-->
+    <string name="systemSearchAppNotFound">Toepassing kon niet worden gevonden</string>
+    <string name="systemSearchOnboardingThanks">Bedankt dat je voor DuckDuckGo hebt gekozen!\nDoor onze browser te gebruiken, blijf je beschermd tegen hackers, oplichters en bedrijven die gegevens indrinken als water.</string>
+    <string name="systemSearchOnboardingFeaturesIntroText">De DuckDuckGo-app:</string>
+    <string name="systemSearchOnboardingFeatureOneText">Blokkeert onveilige trackers.</string>
+    <string name="systemSearchOnboardingFeatureTwoText">Dwingt codering af op websites.</string>
+    <string name="systemSearchOnboardingFeatureThreeText">Wist gegevens met één tik.</string>
+    <string name="systemSearchOnboardingButtonMore">Laat meer zien</string>
+    <string name="systemSearchOnboardingButtonLess">Verbergen</string>
+    <string name="systemSearchOnboardingButtonOk">Ik snap het</string>
+
+    <!-- Dax Dialog -->
+    <string name="daxDialogHighFive">High Five!</string>
+    <string name="daxDialogGotIt">Ik snap het</string>
+
+    <!-- AppTP Retention Experiment Dax Dialog -->
+    <string name="daxDialogAppTpRetentionText"><![CDATA[Je blokkeert verborgen trackers op het web 🎉<br/><br/>Ik kan ook trackers blokkeren die in andere apps verborgen zitten, zelfs als je je telefoon niet gebruikt.]]></string>
+    <string name="daxDialogAppTpRetentionPrimaryButtonText">App Tracking Protection inschakelen</string>
+    <string name="daxDialogAppTpRetentionSecondaryButtonText">Niet nu</string>
+
+    <!-- New Onboarding Experience -->
+    <string name="onboardingWelcomeTitle">"Welkom bij DuckDuckGo!"</string>
+    <string name="onboardingDaxText"><![CDATA[Internet kan best eng zijn.\n\nMaak je geen zorgen! Privé zoeken en browsen is eenvoudiger dan je denkt.]]></string>
+    <string name="onboardingLetsDoItButton">Laten we het doen!</string>
+    <string name="daxNonSerpCtaText"><![CDATA[Terwijl je tikt en scrolt, blokkeer ik vervelende trackers.<br/><br/>Ga je gang, blijf browsen!]]></string>
+    <string name="daxMainNetworkCtaText" instruction="%1$s is the name of a company, %2$s is the website where the tracking is happening, %3$s is the name of the company showing in %1$s">Opgelet! Ik kan niet voorkomen dat %1$s jouw activiteit op %2$s kan zien\n\nMaar als je met mij browset, kan ik ervoor zorgen dat %3$s minder over je te weten komt door hun trackers op veel andere sites te blokkeren.</string>
+    <string name="daxMainNetworkOwnedCtaText" instruction="%1$s is the name of a company, %2$s is the website where the tracking is happening, %3$s is the name of the company showing in %1$s">Opgelet! Omdat %1$s eigenaar is van %2$s, kan ik niet voorkomen dat ze jouw activiteit hier kunnen zien.&lt;br/&gt;&lt;br/&gt;Maar als je met mij surft, kan ik ervoor zorgen dat %3$s minder over je te weten komt door hun trackers op andere sites te blokkeren.</string>
+
+    <!-- Download Confirmation -->
+    <string name="downloadConfirmationSaveFileTitle" instruction="Placeholder is the name of a file">%1$s opslaan</string>
+    <string name="downloadConfirmationKeepBothFilesText">Houd beide</string>
+    <string name="downloadConfirmationReplaceOldFileText">Vervangen</string>
+    <string name="downloadConfirmationOpenFileText">Openen</string>
+    <string name="downloadConfirmationUnableToOpenFileText">Kon het bestand niet openen</string>
+    <string name="downloadConfirmationUnableToDeleteFileText">Kon oud bestand niet verwijderen</string>
+
+    <!-- Change Icon Activity -->
+    <string name="changeIconActivityTitle">App-pictogram</string>
+    <string name="changeIconCtaLabel">App-pictogram</string>
+    <string name="changeIconCtaAccept">Toepassen</string>
+    <string name="changeIconCtaCancel">Annuleren</string>
+    <string name="changeIconDialogTitle">Nieuw pictogram toepassen?</string>
+    <string name="changeIconDialogMessage">De app wordt mogelijk gesloten om wijzigingen toe te passen. Kom terug nadat je je mooie nieuwe pictogram hebt bewonderd.</string>
+
+    <!-- New dashboard / menu buttons -->
+    <string name="manageAllowlist">Onbeschermde sites</string>
+    <string name="reportBrokenSite">Defecte website melden</string>
+
+    <!-- Dialogs -->
+    <string name="dialogAddTitle">Toevoegen</string>
+    <string name="dialogEditTitle">Bewerken</string>
+    <string name="dialogSaveAction">Opslaan</string>
+
+    <!-- Allowlist -->
+    <string name="allowlistActivityTitle">Onbeschermde sites</string>
+    <string name="allowlistEntryOverflowContentDescription" instruction="Placeholder is a website">Meer opties voor onbeschermde site %1$s</string>
+    <string name="allowlistEntryDeleteConfirmMessage" instruction="Placeholder is a website">Weet je zeker dat je &lt;b&gt;%1$s&lt;/b&gt; wilt verwijderen uit onbeschermde sites?</string>
+    <string name="allowlistExplanation">Deze sites worden niet beschermd met Privacybescherming.</string>
+    <string name="allowlistNoEntries">Privacybescherming ingeschakeld voor alle sites</string>
+    <string name="allowlistDomainHint">www.voorbeeld.com</string>
+    <string name="allowlistFormatError">Voer een domein in zoals <b>voorbeeld.com</b> en probeer het opnieuw</string>
+
+    <!-- Settings -->
+    <string name="settingsPrivacyProtectionAllowlist">Onbeschermde sites</string>
+
+    <!-- Fireproof websites -->
+    <string name="fireproofWebsitesActivityTitle">Brandveilige websites</string>
+    <string name="settingsFireproofWebsites">Brandveilige websites</string>
+    <string name="fireproofWebsiteMenuTitleAdd">Deze website brandveilig maken</string>
+    <string name="fireproofWebsiteSnackbarConfirmation" instruction="Placeholder is a website">&lt;b&gt;%1$s&lt;/b&gt; is nu brandveilig</string>
+    <string name="fireproofWebsiteSnackbarAction">Ongedaan maken</string>
+    <string name="fireproofWebsiteDeleteConfirmMessage" instruction="Placeholder is a website">Weet je zeker dat je &lt;b&gt;%1$s&lt;/b&gt; wilt verwijderen?</string>
+    <string name="fireproofWebsiteFeatureDescription">Websites gebruiken cookies om te zorgen dat je ingelogd blijft. Als je een site brandveilig maakt, worden de cookies niet gewist en blijf je ingelogd, zelfs nadat je de vuurknop hebt gebruikt. Trackers van derden worden ook op brandveilige websites geblokkeerd.</string>
+    <string name="fireproofWebsiteOverflowContentDescription" instruction="Placeholder is a website">Meer opties voor een brandveilige website %1$s</string>
+    <string name="fireproofWebsiteLoginDialogTitle" instruction="Placeholder is a website">Wil je %1$s brandveilig maken?</string>
+    <string name="fireproofWebsiteLoginDialogDescription">Als je deze site brandveilig maakt, blijf je ook na het gebruiken van de vuurknop ingelogd.</string>
+    <string name="fireproofWebsiteLoginDialogPositive">Brandveilig</string>
+    <string name="fireproofWebsiteLoginDialogNegative">Niet nu</string>
+    <string name="fireproofWebsiteItemsSectionTitle">Brandveilige websites</string>
+    <string name="fireproofWebsiteEmptyListHint">Nog geen brandveilige websites</string>
+    <string name="fireproofWebsiteSettingSelectionTitle">Brandveilige websites bij aanmelden</string>
+    <string name="fireproofWebsiteRemoveAllConfirmation">Brandveiligheid verwijderd voor alle sites</string>
+    <string name="fireproofWebsiteRemovalConfirmation" instruction="Placeholder is a website">Brandveiligheid verwijderd voor &lt;b&gt;%1$s&lt;/b&gt;</string>
+    <string name="fireproofWebsiteSettingsSelectionDialogAskEveryTime">Elke keer vragen</string>
+    <string name="fireproofWebsiteSettingsSelectionDialogAlways">Altijd</string>
+    <string name="fireproofWebsiteSettingsSelectionDialogNever">Nooit</string>
+    <string name="disableLoginDetectionDialogTitle">Herinnering voor brandveiligheid uitschakelen bij het inloggen?</string>
+    <string name="disableLoginDetectionDialogDescription">Je kunt deze voorkeur op elk moment wijzigen in de instellingen.</string>
+    <string name="disableLoginDetectionDialogPositive">Uitschakelen</string>
+    <string name="disableLoginDetectionDialogNegative">Annuleren</string>
+    <string name="automaticFireproofWebsiteLoginDialogTitle">Websites automatisch brandvrij maken bij aanmelden?</string>
+    <string name="automaticFireproofWebsiteLoginDialogDescription">Als je deze website brandveilig maakt, blijf je ook na het gebruiken van de vuurknop ingelogd. Je kunt dit later altijd nog wijzigen in Instellingen. </string>
+    <string name="automaticFireproofWebsiteLoginDialogFirstOption">Altijd vuurbestendig</string>
+    <string name="automaticFireproofWebsiteLoginDialogSecondOption">Deze website brandveilig maken</string>
+    <string name="automaticFireproofWebsiteLoginDialogThirdOption">Niet nu</string>
+
+
+    <!-- Fire Animation settings -->
+    <string name="settingsFireAnimation">Animatie vuurknop</string>
+    <string name="settingsHeroFireAnimation">Vuurzee</string>
+    <string name="settingsHeroFireAnimationClassic">Vuurzee Klassiek</string>
+    <string name="settingsHeroWaterAnimation">Draaikolk</string>
+    <string name="settingsHeroAbstractAnimation">Luchtstroom</string>
+    <string name="settingsNoneAnimation">Geen</string>
+    <string name="settingsSelectFireAnimationDialog">Animatie vuurknop</string>
+    <string name="settingsSelectFireAnimationDialogSave">Opslaan</string>
+
+    <!-- Dos Attack error-->
+    <string name="dosErrorMessage">Verbinding verbroken. Deze website kan schadelijk zijn voor je apparaat.</string>
+
+    <!-- Precise Location -->
+    <string name="preciseLocationSystemDialogTitle">Apparaatlocatie inschakelen voor DuckDuckGo Privacy Browser?</string>
+    <string name="preciseLocationSystemDialogSubtitle" instruction="%1$s and %2$s are both the name of the website requesting the location">%1$s vraagt om de locatie van je apparaat. Je moet eerst de app toestemming geven om je apparaatlocatie te versturen, waarna %2$s toestemming kan vragen.</string>
+    <string name="preciseLocationSystemDialogAllow">Inschakelen</string>
+    <string name="preciseLocationSystemDialogDeny">Later misschien</string>
+    <string name="preciseLocationSystemDialogNeverAllow">Niet opnieuw vragen voor deze site</string>
+    <string name="preciseLocationSiteDialogTitle" instruction="Placeholder is the name of a website">%1$s toestemming geven om je locatie te gebruiken?</string>
+    <string name="preciseLocationSiteDialogSubtitle">De locatietoegangsmachtigingen die je aan individuele sites hebt gegeven, kun je beheren in Instellingen.</string>
+    <string name="preciseLocationDDGDialogSubtitle">We gebruiken je anonieme locatie alleen om betere resultaten bij je in de buurt aan te bieden. De locatietoegangsmachtigingen die je aan individuele sites hebt gegeven, kun je beheren in Instellingen.</string>
+    <string name="preciseLocationSiteDialogAllowAlways">Altijd</string>
+    <string name="preciseLocationSiteDialogAllowOnce">Alleen voor deze sessie</string>
+    <string name="preciseLocationSiteDialogDenyAlways">Altijd weigeren</string>
+    <string name="preciseLocationSiteDialogDenyOnce">Weigeren voor deze sessie</string>
+    <string name="preciseLocationFeatureDescription">Sites die je bezoekt, kunnen om je apparaatlocatie vragen. Ze kunnen deze pas gebruiken als je hiervoor expliciet toestemming geeft. DuckDuckGo gebruikt je locatie alleen anoniem om lokale zoekresultaten te leveren.</string>
+    <string name="preciseLocationToggleText">Sites mogen om mijn locatie vragen</string>
+    <string name="preciseLocationEmptyListHint">Geen websites hebben toestemming om je locatie te gebruiken</string>
+    <string name="preciseLocationNoSystemPermission">De locatietoegangsmachtigingen die je aan individuele sites hebt gegeven, kun je beheren door locatie voor deze app in te schakelen in de instellingen van Android.</string>
+    <string name="preciseLocationActivityTitle">Locatie</string>
+    <string name="preciseLocationDeleteConfirmMessage" instruction="Placeholder is the name of a website">Weet je zeker dat je &lt;b&gt;%1$s&lt;/b&gt; wilt verwijderen?</string>
+    <string name="preciseLocationDeleteContentDescription" instruction="Placeholder is the domain of a website">Meer opties voor locatiemachtigingen in domein %1$s</string>
+    <string name="preciseLocationAllowedSitesSectionTitle">Verleend</string>
+    <string name="preciseLocationDeniedSitesSectionTitle">Geweigerd</string>
+    <string name="preciseLocationSnackbarMessage" instruction="Placeholder is the name of a website">Je hebt eerder %1$s toestemming gegeven om je apparaatlocatie te gebruiken.</string>
+
+    <!--Fire button education-->
+    <string name="daxClearDataCtaText">Persoonlijke gegevens kunnen zich ophopen in je browser. Bah. Gebruik de vuurknop om alles te verbranden. Probeer het maar! 👇</string>
+
+    <!--  Global Privacy Control-->
+    <string name="globalPrivacyControlActivityTitle">Global Privacy Control (GPC)</string>
+    <string name="globalPrivacyControlDescription"><![CDATA[Veel trackers worden automatisch geblokkeerd door DuckDuckGo. Met Global Privacy Control (GPC) kun je deelnemende websites ook vragen om je persoonsgegevens niet te verkopen aan of te delen met andere bedrijven. <u><a href=\"\">Meer informatie</a><u/>]]></string>
+    <string name="globalPrivacyControlSetting">Global Privacy Control (GPC)</string>
+    <string name="globalPrivacyControlToggle">Global Privacy Control (GPC)</string>
+    <string name="disabled">Uitgeschakeld</string>
+    <string name="enabled">Ingeschakeld</string>
+
+    <!-- Opening app links -->
+    <string name="settingTitleOpenLinksInAssociatedApps">Links openen in bijbehorende apps</string>
+    <string name="settingSubtitleOpenLinksInAssociatedApps">Uitschakelen om te voorkomen dat links automatisch geopend worden in andere geïnstalleerde apps.</string>
+    <string name="appLinkDialogTitle">Openen in een andere app?</string>
+    <string name="appLinkSnackBarAction">Openen in de app</string>
+    <string name="appLinkMultipleSnackBarAction">App kiezen</string>
+    <string name="appLinkSnackBarMessage" instruction="Placeholder is the name of an app">Je kunt deze link openen in %1$s.</string>
+    <string name="appLinkMultipleSnackBarMessage">Je kunt deze link openen in andere apps.</string>
+    <string name="appLinkIntentChooserTitle">Openen met</string>
+
+    <!-- Email Autofill -->
+    <string name="aliasToClipboardMessage">Nieuw adres gekopieerd naar je klembord</string>
+
+    <!-- Autofill -->
+    <string name="autofillSnackbarAction" instruction="Label for a button that lets the user view the details for a login credential">Weergeven</string>
+
+    <!-- Waitlist Notification -->
+    <string name="waitlistNotificationDialogDescription">Wil je dat we je een melding sturen als je aan de beurt bent?</string>
+    <string name="waitlistNotificationDialogNoThanks">Nee, bedankt</string>
+    <string name="waitlistNotificationDialogNotifyMe">MELDING STUREN</string>
+
+    <!-- Email Protection -->
+    <string name="emailProtectionActivityTitle">E-mailbescherming</string>
+    <string name="emailNotSupported">Apparaat wordt niet ondersteund</string>
+    <string name="emailNotSupportedExplanation">Met E-mailbescherming maak je privémailadressen die e-mailtrackers verwijderen. De adressen die je lokaal op je apparaat maakt, dienen we te versleutelen en opslaan. E-mailbescherming is niet beschikbaar omdat je apparaat geen versleutelde opslag ondersteunt.</string>
+
+    <!-- Accessibility-->
+    <string name="settingsAccessibility">Toegankelijkheid</string>
+    <string name="accessibilityActivityTitle">Toegankelijkheid</string>
+    <string name="accessibilityFontSizeTitle">Lettergrootte</string>
+    <string name="accessibilityFontSizeHint">Sleep de schuifregelaar totdat je dit comfortabel kunt lezen. Websites die je in DuckDuckGo bekijkt, worden aan de tekstgrootte aangepast.</string>
+    <string name="accessibilityForceZoomTitle">Handmatig op de pagina inzoomen</string>
+    <string name="accessibilityForceZoomSubtitle">Knijp en zoom in op elke site, zelfs op sites die dit anders zouden voorkomen</string>
+    <string name="accessibilityTextSizeOverrideTitle">Tekstgrootte beheren</string>
+    <string name="accessibilityTextSizeOverrideSubtitle">Tekst op websites die je in DuckDuckGo bekijkt, wordt aangepast aan de onderstaande instelling</string>
+
+    <!-- Privacy Policy -->
+    <string name="settingsPrivacyPolicyDuckduckgo">Privacybeleid</string>
+
+    <!-- Home Screen Widget -->
+    <string name="homeScreenWidgetAdded" instruction="Placeholder is the name of the widget">%1$s widget toegevoegd aan startscherm</string>
+
+    <!-- MacOs Settings -->
+
+    <!-- Downloads -->
+    <string name="downloadsMenuItem">Downloads</string>
+    <string name="downloadsDownloadFinishedActionName">Openen</string>
+
+    <!-- App Tracking Protection -->
+    <string name="atp_SettingsTitle">Bescherming tegen app-tracking</string>
+    <string name="atp_SettingsDeviceShieldNeverEnabled">App trackers blokkeren op je apparaat</string>
+    <string name="atp_SettingsDeviceShieldEnabled">Ingeschakeld</string>
+    <string name="atp_SettingsDeviceShieldDisabled">Uitgeschakeld</string>
+
+    <!-- Autoconsent -->
+    <!-- smartling.character_limit = 82 -->
+    <string name="autoconsentDialogTitle"><![CDATA[<b>Wil je dat ik cookiepop-ups aanpak?</b>]]></string>
+    <!-- smartling.character_limit = 160 -->
+    <string name="autoconsentDialogDescription">Ik kan proberen de striktst mogelijke privacyinstellingen te selecteren en pop-ups zoals deze te verbergen.</string>
+    <!-- smartling.character_limit = 42 -->
+    <string name="autoconsentPrimaryCta">Pop-ups voor mij verbergen</string>
+    <!-- smartling.character_limit = 42 -->
+    <string name="autoconsentSecondaryCta">Nee, ik beheer ze zelf</string>
+
+    <string name="autoconsentCosmeticNoticeAnimationText">Pop-up verborgen</string>
+    <string name="autoconsentManagedNoticeAnimationText">Beheerde cookies</string>
+
+    <!-- Notify Me View on Downloads -->
+
+    <!-- Windows Settings -->
+
+    <!-- Full screen message-->
+    <string name="fullScreenMessage">Sleep van boven naar beneden en tik op de knop \'Terug\' om het volledige scherm af te sluiten</string>
+
+    <!-- Tab Switcher -->
+    <string name="closeAppTabsConfirmationDialogTitle" instruction="Dialog title for deleting all open tabs">Alle tabbladen sluiten?</string>
+    <string name="closeAppTabsConfirmationDialogDescription">Weet je zeker dat je alle tabbladen wilt sluiten?</string>
+    <string name="closeAppTabsConfirmationDialogCancel">Annuleren</string>
+    <string name="closeAppTabsConfirmationDialogClose">Sluiten</string>
+
+    <string name="selectTabsMenuItem">Tabbladen selecteren</string>
+    <string name="selectAllTabsMenuItem">Alles selecteren</string>
+    <string name="deselectAllTabsMenuItem">Alles deselecteren</string>
+    <string name="tabSelectionTitle" tools:ignore="MissingInstruction">%1$d geselecteerd</string>
+    <string name="tabSelectedIndicator">Tabblad geselecteerde indicator</string>
+    <string name="tabNotSelectedIndicator">Tabblad niet geselecteerde indicator</string>
+
+    <string name="shareMultipleLinksTitle" tools:ignore="MissingInstruction">%1$d links van DuckDuckGo</string>
+    <plurals name="shareLinksMenuItem" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Link %1$d delen</item>
+        <item quantity="other">Links %1$d delen</item>
+    </plurals>
+
+    <plurals name="tabSwitcherBookmarkDialogTitle" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Wil je %1$d tabblad als bladwijzer toevoegen?</item>
+        <item quantity="other">Wil je %1$d tabbladen als bladwijzer toevoegen?</item>
+    </plurals>
+    <plurals name="tabSwitcherBookmarkToast" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">%1$d bladwijzer toegevoegd</item>
+        <item quantity="other">%1$d bladwijzers toegevoegd</item>
+    </plurals>
+    <string name="tabSwitcherBookmarkDialogPositiveButton">Toevoegen aan bladwijzers</string>
+    <plurals name="bookmarkTabsMenuItem" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">%1$d Tabblad als bladwijzer toevoegen</item>
+        <item quantity="other">%1$d Tabbladen als bladwijzer toevoegen</item>
+    </plurals>
+    <string name="tabSwitcherBookmarkDialogDescription">Bestaande bladwijzers worden niet gedupliceerd.</string>
+
+    <plurals name="tabSwitcherCloseAllTabsDialogTitle" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">%1$d tabblad sluiten?</item>
+        <item quantity="other">Alle %1$d tabbladen sluiten?</item>
+    </plurals>
+    <plurals name="tabSwitcherCloseOtherTabsDialogTitle" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Ander %1$d tabblad sluiten?</item>
+        <item quantity="other">Andere %1$d tabbladen sluiten?</item>
+    </plurals>
+    <plurals name="tabSwitcherCloseTabsDialogTitle" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">%1$d tabblad sluiten?</item>
+        <item quantity="other">%1$d tabbladen sluiten?</item>
+    </plurals>
+    <plurals name="tabSwitcherCloseAllTabsDialogDescription" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Weet je zeker dat je dit tabblad wilt sluiten?</item>
+        <item quantity="other">Weet je zeker dat je alle tabbladen wilt sluiten?</item>
+    </plurals>
+    <plurals name="tabSwitcherCloseTabsDialogDescription" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Weet je zeker dat je het tabblad wilt sluiten?</item>
+        <item quantity="other">Weet je zeker dat je deze tabbladen wilt sluiten?</item>
+    </plurals>
+    <plurals name="closeTabsConfirmationDialogCloseTabs" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Tabblad sluiten</item>
+        <item quantity="other">Tabbladen sluiten</item>
+    </plurals>
+    <plurals name="closeTabsMenuItem" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Tabblad sluiten?</item>
+        <item quantity="other">%1$d Tabbladen sluiten</item>
+    </plurals>
+    <string name="closeOtherTabsMenuItem">Andere tabbladen sluiten</string>
+    <plurals name="tabSwitcherCloseTabsSnackbar" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">Tabblad gesloten</item>
+        <item quantity="other">%1$d tabbladen gesloten</item>
+    </plurals>
+
+    <plurals name="tabSwitcherTitle" tools:ignore="ImpliedQuantity,MissingInstruction">
+        <item quantity="one">%1$d tabblad</item>
+        <item quantity="other">%1$d tabbladen</item>
+    </plurals>
+
+    <!-- Private voice search -->
+    <string name="accessibilityVoiceSearchSubtitle">Voeg de optie \'Private spraakopdracht\' toe aan de adresbalk. Audio wordt niet opgeslagen en met niemand gedeeld, ook niet met DuckDuckGo.</string>
+    <string name="accessibilityVoiceSearchTitle">Private spraakzoekopdracht</string>
+
+    <!-- Uploading an image from the camera or choosing to use existing image -->
+    <string name="imageCaptureCameraUnavailable">Kan geen toegang krijgen tot de camera</string>
+    <string name="imageCaptureCameraGalleryDisambiguationTitle">Upload een afbeelding</string>
+    <string name="imageCaptureCameraGalleryDisambiguationGalleryOption">Bestand kiezen</string>
+    <string name="imageCaptureCameraGalleryDisambiguationCameraOption">Foto maken</string>
+    <string name="imageCaptureCameraPermissionDeniedTitle">DuckDuckGo toestaan om toegang tot de camera op dit apparaat te vragen</string>
+    <string name="imageCaptureCameraPermissionDeniedMessage">Sites kunnen je camera alleen gebruiken als je DuckDuckGo toestaat om toegang te vragen.</string>
+    <string name="imageCaptureCameraPermissionDeniedPositiveButton">Open Instellingen</string>
+    <string name="imageCaptureCameraPermissionDeniedNegativeButton">Annuleren</string>
+
+    <!-- Autofill -->
+    <string name="settingsPasswordsAndAutofillLoginsSetting">Wachtwoorden en automatisch invullen</string>
+    <string name="autofillLoginSavedSnackbarMessage">Wachtwoord opgeslagen</string>
+    <string name="autofillLoginUpdatedSnackbarMessage">Wachtwoord bijgewerkt</string>
+
+    <!-- SSL Error -->
+    <string name="sslErrorTitle">Waarschuwing: Deze website is mogelijk onveilig</string>
+    <string name="sslErrorHeadline" instruction="Placeholder is domain with certificate issues">Het certificaat voor deze website is ongeldig. Mogelijk maak je verbinding met een server die zich voordoet als %1$s, waardoor je vertrouwelijke informatie in gevaar kan komen.</string>
+    <string name="sslErrorLeaveCTA">Deze website verlaten</string>
+    <string name="sslErrorAdvancedCTA">Geavanceerd</string>
+    <string name="sslErrorExpandedHeadline">DuckDuckGo waarschuwt je wanneer een website een ongeldig certificaat heeft.</string>
+    <string name="sslErrorExpandedCTA"><![CDATA[<u>Risico accepteren en site bezoeken</u>]]></string>
+    <string name="sslErrorExpiredMessage" instruction="Placeholder is domain with certificate issues">Het beveiligingscertificaat voor %1$s is verlopen. Mogelijk is de website verkeerd geconfigureerd, heeft een aanvaller je verbinding gecompromitteerd of staat de klok van je systeem niet goed.</string>
+    <string name="sslErrorWrongHostMessage" instruction="Placeholder is domain with certificate issues">Het beveiligingscertificaat voor %1$s komt niet overeen met *.%2$s. Mogelijk is de website verkeerd geconfigureerd, heeft een aanvaller je verbinding gecompromitteerd of staat de klok van je systeem niet goed.</string>
+    <string name="sslErrorUntrustedMessage" instruction="Placeholder is domain with certificate issues">Het besturingssysteem van je apparaat vertrouwt het beveiligingscertificaat voor %1$s niet. Mogelijk is de website verkeerd geconfigureerd, heeft een aanvaller je verbinding gecompromitteerd of staat de klok van je systeem niet goed.</string>
+
+    <!-- Extended Onboarding-->
+    <string name="preOnboardingDaxDialog1Title"><![CDATA[Hoi.<br/><br/>Klaar voor een snellere browser die je beschermt?]]></string>
+    <string name="preOnboardingDaxDialog1TitleDuckAi" translatable="false"><![CDATA[Hi there.<br/><br/>Ready for a faster browser that protects you and lets you decide when and how to use AI?]]></string>
+    <string name="preOnboardingDaxDialog1Button">Laten we het doen!</string>
+    <string name="preOnboardingDaxDialog1ButtonDuckAi" translatable="false">Let\&apos;s get started!</string>
+    <string name="preOnboardingDaxDialog1ButtonBrandDesign">Laten we beginnen!</string>
+    <string name="preOnboardingDaxDialog1SecondaryButton">Overslaan</string>
+    <string name="preOnboardingDaxDialog2Title">Bescherming geactiveerd!</string>
+    <string name="preOnboardingDaxDialog2Button">Kies je browser</string>
+    <string name="preOnboardingDaxDialog3Title"><![CDATA[Ik snap het! Ik sla de andere tips over.]]></string>
+    <string name="preOnboardingDaxDialog3Text"><![CDATA[Onthoud: je kunt al je tabbladen, geschiedenis en browsegegevens in twee tikken wissen met de <b>Fire Button</b> 🔥.]]></string>
+    <string name="preOnboardingDaxDialog3SecondaryButton">Tutorial weergeven</string>
+    <string name="preOnboardingComparisonChartItem1">Standaard privé zoeken</string>
+    <string name="preOnboardingComparisonChartItem2">Blokkeer trackers van derden</string>
+    <string name="preOnboardingComparisonChartItem3">Blokkeer cookiepop-ups</string>
+    <string name="preOnboardingComparisonChartItem4">Blokkeer gerichte advertenties</string>
+    <string name="preOnboardingComparisonChartItem5">Verwijder browsegegevens met één knop</string>
+    <string name="preOnboardingComparisonChartDuckAi">Gebruik ChatGPT privé met Duck.ai ingebouwd</string>
+    <string name="preOnboardingComparisonChartAdAndCookiePopupBlocker">Gerichte advertenties en cookiepop-ups blokkeren</string>
+    <string name="preOnboardingComparisonChartYoutubeAdBlocker">YouTube-video\'s afspelen zonder advertenties</string>
+    <string name="preOnboardingDaxDialog3Button">Beginnen met browsen</string>
+    <string name="preOnboardingAddressBarTitle">Waar moet ik je adresbalk plaatsen?</string>
+    <string name="preOnboardingAddressBarOkButton">Volgende</string>
+    <string name="preOnboardingAddressBarPositionTop">Boven</string>
+    <string name="preOnboardingAddressBarPositionBottom">Onderkant</string>
+    <string name="preOnboardingAddressBarPositionSplit">Splitsen</string>
+    <string name="highlightsPreOnboardingAddressBarOption1Title">Bovenaan (standaard)</string>
+    <string name="highlightsPreOnboardingAddressBarOption1Description">Gemakkelijk te zien</string>
+    <string name="highlightsPreOnboardingAddressBarOption2Title">Onderkant</string>
+    <string name="highlightsPreOnboardingAddressBarOption2Description">Gemakkelijk te bereiken</string>
+    <string name="onboardingSearchDaxDialogTitle">Probeer een zoekopdracht!</string>
+    <string name="onboardingSearchDaxDialogDescription">Je DuckDuckGo-zoekopdrachten zijn altijd privé.</string>
+    <string name="onboardingSearchDaxDialogOption1" instruction="translate &apos;duck&apos; too.">"hoe zeg je 'eend' in het Engels?"</string>
+    <string name="onboardingSearchDaxDialogOption1English" instruction="translate &apos;duck&apos; too. Don&apos;t add question mark">"hoe zeg je 'eend' in het Spaans?"</string>
+    <string name="onboardingSearchQueryOption1">hoe zeg je \'eend\' in het Engels?</string>
+    <string name="onboardingSearchQueryOption1English">hoe zeg je \'eend\' in het Spaans?</string>
+    <string name="onboardingSearchDaxDialogOption2">cast van avatar</string>
+    <string name="onboardingSearchDaxDialogOption2US">cast van Mighty Ducks</string>
+    <string name="onboardingSearchDaxDialogOption3">lokaal weer</string>
+    <string name="onboardingSearchDaxDialogOption4">Verras me!</string>
+    <string name="onboardingSearchQueryOption4">baby-eendjes</string>
+    <string name="onboardingSitesDaxDialogTitle">Bezoek eens een site!</string>
+    <string name="onboardingSitesDaxDialogDescription">Ik blokkeer trackers zodat ze je niet kunnen bespioneren.</string>
+    <string name="onboardingSitesDaxDialogOption1">espn.com</string>
+    <string name="onboardingSitesDaxDialogOption2">yahoo.com</string>
+    <string name="onboardingSitesDaxDialogOption3">ebay.com</string>
+    <string name="onboardingSitesDaxDialogOption4">Verras me!</string>
+    <string name="onboardingSerpDaxDialogDescription"><![CDATA[Dat is <b>DuckDuckGo Search</b>! Privé. Snel. Minder advertenties.]]></string>
+    <string name="onboardingSerpDaxDialogBrandDesignTitle">Dat is DuckDuckGo Search!</string>
+    <string name="onboardingSerpDaxDialogBrandDesignDescription">Privé. Snel. Minder advertenties.</string>
+    <string name="onboardingSerpDaxDialogButton">Ik snap het!</string>
+    <string name="onboardingSitesSuggestionsDaxDialogTitle">Probeer nu een site te bezoeken!</string>
+    <plurals name="onboardingTrackersBlockedDialogDescription">
+        <item quantity="one" instruction="Placeholder is a number. This sentence is preceded by the name of a company, i.e. Facebook and 1 other..."><![CDATA[ en nog <b>%1$d ander</b> probeerden je hier te volgen. Ik heb ze geblokkeerd!<br/><br/>☝️ Tik op het schild voor meer informatie.️]]></item>
+        <item quantity="other" instruction="Placeholder is a number. This sentence is preceded by the name of a company, i.e. Facebook and 3 others..."><![CDATA[ en nog <b>%1$d anderen</b> probeerden je hier te volgen. Ik heb ze geblokkeerd!<br/><br/>☝️ Tik op het schild voor meer informatie.️]]></item>
+    </plurals>
+    <plurals name="onboardingTrackersBlockedZeroDialogDescription" tools:ignore="ImpliedQuantity">
+        <item quantity="one" instruction="This sentence is preceded by the name of a company, i.e. Facebook was trying to track..."><![CDATA[ probeerde je hier te volgen. Ik heb ze geblokkeerd!<br/><br/>☝️ Tik op het schild voor meer info.️]]></item>
+        <item quantity="other" instruction="This sentence is preceded by the name of several companies, i.e. Facebook and Google were trying to track..."><![CDATA[ probeerden je hier te volgen. Ik heb ze geblokkeerd!<br/><br/>☝️ Tik op het schild voor meer info.️]]></item>
+    </plurals>
+    <string name="onboardingTrackersBlockedDaxDialogButton">Ik snap het!</string>
+    <string name="onboardingFireButtonDaxDialogDescription"><![CDATA[Wis je browse-activiteit direct met de <b>Fire Button</b>.<br/><br/>Probeer het maar! 🔥]]></string>
+    <string name="onboardingFireButtonDaxDialogOkButton">Probeer het zelf</string>
+    <string name="onboardingFireButtonDaxDialogCancelButton">Overslaan</string>
+    <string name="onboardingEndDaxDialogTitle">"Je kunt het!"</string>
+    <string name="onboardingEndDaxDialogDescription">Denk eraan: elke keer als je met mij browset, verliest een enge advertentie zijn vleugels.</string>
+    <string name="onboardingInContextEndDaxDialogDescription">Denk eraan: elke keer als je met mij browset, verliest een enge advertentie zijn vleugels. 👌</string>
+    <string name="onboardingEndDaxDialogButton">High five!</string>
+    <string name="onboardingPrivacyProDaxDialogTitle">Oh, voordat ik het vergeet...</string>
+    <string name="onboardingPrivacyProDaxDialogDescription"><![CDATA[DuckDuckGo heeft ook een <b>optioneel betaald abonnement</b>, met een veilig <b>VPN</b> en <b>geavanceerde, privé-AI</b>.]]></string>
+    <string name="onboardingPrivacyProDaxDialogOkButton">Meer informatie</string>
+    <string name="onboardingPrivacyProDaxDialogFreeTrialOkButton">Probeer het gratis!</string>
+    <string name="onboardingPrivacyProDaxDialogFreeTrialOkButtonBrandDesign">Probeer het gratis!</string>
+    <string name="onboardingPrivacyProDaxDialogCancelButton">Overslaan</string>
+    <string name="onboardingSkippedPrivacyProDaxDialogTitle">Wist je dat?</string>
+
+    <!-- Input Screen Onboarding step -->
+    <string name="preOnboardingInputScreenTitle">Wil je eenvoudig toegang tot privé AI-chat?</string>
+    <string name="preOnboardingInputScreenTitleUpdated">Wil je eenvoudig toegang tot privé AI-chat in de adresbalk?</string>
+    <string name="preOnboardingInputScreenButton">Volgende</string>
+    <string name="preOnboardingInputScreenDescription"><![CDATA[AI-functies zijn privé en optioneel. Je kunt wijzigingen aanbrengen in <b>Instellingen > AI-functies</b>.]]></string>
+
+    <!--Onboarding Reinstall Quick Setup-->
+    <string name="preOnboardingReinstallQuickSetupTitle">Welkom terug!&lt;br/&gt;Wil je iets aanpassen?</string>
+    <string name="preOnboardingReinstallSetDefaultLabel">DuckDuckGo instellen als standaard</string>
+    <string name="preOnboardingReinstallAddHomeScreenWidgetLabel">Widget toevoegen aan het startscherm</string>
+    <string name="preOnboardingReinstallAddressBarLabel">Positie van adresbalk</string>
+    <string name="preOnboardingReinstallAddressBarSearchOptionsLabel">Opties voor zoeken in de adresbalk</string>
+    <string name="preOnboardingReinstallStartBrowsing">Beginnen met browsen</string>
+
+    <!-- Quick setup bottom sheets -->
+    <string name="quickSetupAddressBarPositionTitle">Waar wil je je adresbalk hebben?</string>
+    <string name="quickSetupAddressBarPositionCaption"><![CDATA[Je kunt wijzigingen aanbrengen in <b>Instellingen > Uiterlijk</b>.]]></string>
+    <string name="quickSetupSearchOptionsTitle">Wil je de zoek- en AI-chatfunctie in de adresbalk?</string>
+    <string name="quickSetupBottomSheetDone">Klaar</string>
+    <string name="quickSetupInputScreenSearchOnly">Alleen zoeken</string>
+    <string name="quickSetupInputScreenSearchAndDuckAi">Zoeken en Duck.ai</string>
+    <string name="quickSetupRemoveHomeScreenWidgetTitle">Zo verwijder je de widget van het startscherm</string>
+    <string name="quickSetupRemoveHomeScreenWidgetStep1">Ga naar je beginscherm</string>
+    <string name="quickSetupRemoveHomeScreenWidgetStep2">Raak de widget aan en houd hem vast</string>
+    <string name="quickSetupRemoveHomeScreenWidgetStep3">Tik of sleep om hem te verwijderen</string>
+
+    <!-- Appearance settings -->
+    <string name="settingsAddressBarPositionTitle">Adresbalk</string>
+    <string name="settingsAddressBarPositionHeaderTitle">Positie van adresbalk</string>
+    <string name="settingsAddressBarPositionTop">Boven</string>
+    <string name="settingsAddressBarPositionBottom">Onderkant</string>
+    <string name="settingsAddressBarPositionSplit">Splitsen</string>
+
+    <!-- Show on App Launch Option -->
+    <string name="showOnAppLaunchOptionTitle">Weergeven bij het starten van de app</string>
+    <string name="showOnAppLaunchOptionLastOpenedTab">Laatst geopende tabblad</string>
+    <string name="showOnAppLaunchOptionNewTabPage">Nieuwe tabbladpagina</string>
+    <string name="showOnAppLaunchOptionSpecificPage">Specifieke pagina</string>
+
+    <!-- Privacy Dashboard -->
+    <string name="brokenSiteSubmittedReportMessage">Bedankt! Jouw melding helpt DuckDuckGo beter te maken voor iedereen!</string>
+
+    <!--    Default Browser Bottom Sheet Dialog -->
+    <string name="defaultBrowserBottomSheetDialogTitle">Laat DuckDuckGo meer beschermen van wat je online doet</string>
+    <string name="defaultBrowserBottomSheetDialogSubTitle">Stel je standaardbrowser in, zodat links in DuckDuckGo worden geopend.</string>
+    <string name="defaultBrowserBottomSheetDialogGhostButton" instruction="This text appears on a button">Niet nu</string>
+
+    <!-- Default Browser message -->
+    <string name="newTabPageDefaultBrowserMessageHeading">DuckDuckGo is niet je standaardbrowser. Krijg meer bescherming.</string>
+    <string name="newTabPageDefaultBrowserMessagePrimaryCta" instruction="This text appears on a button">Als standaard instellen</string>
+    <string name="newTabPageDefaultBrowserMessageSecondaryCta" instruction="This text appears on a button">Niet opnieuw vragen</string>
+
+    <!-- Threat protection -->
+    <string name="maliciousSiteTitle">Waarschuwing: Deze website vormt mogelijk een veiligheidsrisico</string>
+    <string name="maliciousSiteMalwareHeadline"><![CDATA[DuckDuckGo heeft deze pagina geblokkeerd omdat deze mogelijk malware verspreidt om je apparaat te beschadigen of je persoonlijke gegevens te stelen.\n<a href=\"\">Meer informatie</a>]]></string>
+    <string name="maliciousSitePhishingHeadline"><![CDATA[Deze website kan zich voordoen als een legitieme site om je te verleiden tot het verstrekken van persoonlijke informatie, zoals wachtwoorden of creditcardnummers.\n<a href=\"\">Meer informatie</a>]]></string>
+    <string name="maliciousSiteScamHeadline"><![CDATA[DuckDuckGo heeft deze pagina geblokkeerd omdat hij je mogelijk probeert te misleiden of manipuleren om onder valse voorwendselen geld over te maken, namaakproducten te kopen of malware te installeren.\n<a href=\"\">Meer informatie</a>]]></string>
+    <string name="maliciousSiteLeaveCTA">Deze website verlaten</string>
+    <string name="maliciousSiteAdvancedCTA">Geavanceerd</string>
+    <string name="maliciousSiteExpandedHeadline"><![CDATA[Je kunt <a href=\"\">een fout melden</a> als je denkt dat deze website veilig is. Je kunt de website nog steeds bezoeken op eigen risico.]]></string>
+    <string name="maliciousSiteExpandedCTA"><![CDATA[<u>Risico accepteren en site bezoeken</u>]]></string>
+    <string name="maliciousSiteReportErrorTitle">Meld een website die ten onrechte als schadelijk is aangeduid</string>
+    <string name="maliciousSiteLearnMoreTitle">Meer informatie</string>
+    <string name="maliciousSiteSettingTitle">Waarschuwingen over de veiligheid van de website</string>
+    <string name="maliciousSiteToggleHint">Waarschuw me op websites die zijn aangeduid als phishing of malware</string>
+    <string name="maliciousSiteSettingLearnMore"><annotation type="learn_more_link">Meer informatie</annotation></string>
+    <string name="maliciousSiteSettingDisabled">Als je deze functie uitschakelt, kunnen je gegevens in gevaar komen.</string>
+    <string name="threatProtectionTitle">Bescherming tegen bedreigingen</string>
+    <string name="threatProtectionDescription">De verbeterde beveiligingen van DuckDuckGo stoppen veelvoorkomende bedreigingen en houden je verbinding veilig.</string>
+    <string name="smarterEncryptionTitle">Smarter Encryption</string>
+    <string name="smarterEncryptionDescription"><![CDATA[Links worden waar mogelijk automatisch naar HTTPS geüpgraded.<br><a href=\"\">Meer informatie</a>]]></string>
+    <string name="scamBlockerTitle">Scamblocker</string>
+    <string name="scamBlockerDescription">Waarschuwing geven over sites die zijn aangeduid als oplichting, phishing en malware.</string>
+    <string name="threatProtectionLearnMoreTitle">Meer informatie</string>
+
+    <!-- Experiment: Improve prompts for "homescreen widget" -->
+    <string name="experimentHomeScreenWidgetBottomSheetDialogTitle">Probeer onze widget op het startscherm!</string>
+    <string name="experimentHomeScreenWidgetBottomSheetDialogSubTitle">Voeg onze zoekwidget toe aan je startscherm voor snelle en gemakkelijke toegang.</string>
+    <string name="experimentHomeScreenWidgetBottomSheetDialogPrimaryButton">Widget toevoegen</string>
+    <string name="experimentHomeScreenWidgetBottomSheetDialogGhostButton">Niet nu</string>
+    <string name="experimentHomeScreenWidgetBottomSheetDialogSearchText">Zoek in DuckDuckGo</string>
+
+    <!-- Change under remote feature flag: Widget as a Protection -->
+    <string name="settingsAddHomeWidgetTitle">Startschermwidget</string>
+
+    <!-- Section in main app settings -->
+    <string name="settingsHeadingCompleteSetup">Je instelling voltooien</string>
+
+    <!--TabSwitcher Trackers Animation-->
+    <string name="trackerBlockedInTheLast7days" instruction="Placeholder is 1 tracker blocked">&lt;b&gt;%1$s tracker geblokkeerd &lt;/b&gt; in de afgelopen 7 dagen</string>
+    <string name="tabSwitcherAnimationTileRemovalDialogTitle" instruction="A title for a dialog that shows when a user clicks a tile that shows them their current blocked tracker count">Trackertelling verbergen?</string>
+    <string name="tabSwitcherAnimationTileRemovalDialogBody" instruction="A message for a dialog that shows when a user clicks a tile that shows them their current blocked tracker count">Je kunt dit weer inschakelen in Instellingen &gt; Weergave.</string>
+    <string name="tabSwitcherAnimationTileRemovalDialogPositiveButton">Verbergen</string>
+    <string name="tabSwitcherAnimationTileRemovalDialogNegativeButton">Bewaren</string>
+
+    <!-- Trackers blocked animation-->
+    <string name="settingsTrackersBlockedAnimationHeaderTitle">Animatie voor geblokkeerde trackers</string>
+    <string name="showTrackerCountInAddressBar">In adresbalk weergeven</string>
+    <string name="showWeeklyTrackerCountInTabSwitcher">Weergeven in Tabbladbeheer</string>
+
+    <!-- Widgets -->
+    <string name="searchOnlyWidgetLabel" instruction="Label for the search-only widget">Alleen zoeken</string>
+    <string name="searchOnlyWidgetDescription" instruction="Description for the search-only widget">Voer snel een privézoekopdracht uit in DuckDuckGo.</string>
+    <string name="searchWidgetDescription" instruction="Description for the search widget, which may include Duck.ai and voice search">Zoek privé met DuckDuckGo of vraag het aan Duck.ai. Voice Search en Duck.ai zijn beschikbaar indien ingeschakeld.</string>
+    <string name="searchAndFavoritesWidgetDescription" instruction="Description for the search and favorites widget">Zoek of bezoek je favoriete sites in de privémodus met één tik. Zoeken via spraak en Duck.ai zijn beschikbaar indien ingeschakeld.</string>
+    <string name="duckAiOnlyPinShortcutLabel" instruction="Label for the Duck.ai pinned shortcut. Should be Duck.ai in all languages">Duck.ai</string>
+
+    <!-- Sync Restore (onboarding) -->
+    <string name="syncRestoreDialogTitle">Laten we verdergaan waar je gebleven was</string>
+    <string name="syncRestoreDialogDescription">Wil je je bladwijzers, wachtwoorden en meer van je vorige DuckDuckGo-synchronisatie herstellen?</string>
+    <string name="syncRestoreDialogPrimaryCta">Herstel mijn gegevens</string>
+    <string name="syncRestoreDialogSecondaryCta">Overslaan</string>
+
+    <!-- Sync Restore (brand-design onboarding) -->
+    <string name="syncRestoreDialogBrandDesignTitle">Laten we verdergaan waar je gebleven was op DuckDuckGo.</string>
+    <string name="syncRestoreDialogBrandDesignBody1">Je opgeslagen bladwijzers, wachtwoorden en meer staan klaar.</string>
+
+    <!-- PDF download tooltip -->
+    <string name="pdfDownloadTooltipText">PDF downloaden</string>
+
+    <!-- Sharing options -->
+    <string name="copyLinkText">Linktekst kopiëren</string>
+    <string name="linkTextCopied">Linktekst gekopieerd</string>
+    <string name="linkTextCopyFailed">Linktekst kon niet worden gekopieerd.</string>
+
+    <string name="preOnboardingWelcomeDialogTitle">Hoi.</string>
+    <string name="preOnboardingWelcomeDialogBody1">Ben je klaar voor een snellere browser waarmee jij de controle hebt?</string>
+    <string name="preOnboardingWelcomeDialogBody2">AI is altijd optioneel en privacybescherming staat altijd aan.</string>
+
+    <string name="onboardingStepIndicatorText" instruction="a counter above our instructions in onboarding that tells a user what step they are on, for example, 1 of 5">%1$d van %2$d</string>
+    <string name="onboardingSearchDaxDialogOption1Quoted" instruction="translate &apos;duck&apos; too.">hoe zeg je \'eend\' in het Engels?</string>
+    <string name="onboardingSearchDaxDialogOption1EnglishQuoted" instruction="translate &apos;duck&apos; too. Don&apos;t add question mark">hoe zeg je \'eend\' in het Nederlands</string>
+
+    <string name="onboardingDuckAiFireButtonDaxDialogTitle">Dat is Duck.ai!</string>
+    <string name="onboardingDuckAiFireButtonDaxDialogDescription"><![CDATA[Privé AI-chats die je op elk moment kunt verwijderen met de <b>Fire Button</b>. Probeer het maar! 🔥]]></string>
+    <string name="onboardingDuckAiEndCtaTitle">Je kunt het!</string>
+    <string name="onboardingDuckAiEndCtaDescription"><![CDATA[Gebruik de adresbalk om websites te zoeken en te bezoeken, of schakel over naar Duck.ai voor een privé-chat met AI.<br/><br/>Je kunt Duck.ai gebruiken vanaf elke plek waar je het chatpictogram ziet.]]></string>
+    <string name="onboardingDuckAiEndCtaButton">High five!</string>
+
+    <!-- Input Mode Demo Onboarding step -->
+    <string name="preOnboardingInputModeDemoTitle">Klaar om te beginnen?&lt;br/&gt;Probeer een zoekopdracht of AI-chat!</string>
+    <string name="preOnboardingInputModeDemoSearchHint">Privé zoeken</string>
+    <string name="preOnboardingInputModeDemoChatHint">Vraag iets privé</string>
+    <string name="preOnboardingInputModeDemoChatSuggestion1">Leg de aandelenmarkt uit alsof ik 10 jaar ben</string>
+    <string name="preOnboardingInputModeDemoChatSuggestion2">Plan een perfecte dag in Londen</string>
+    <string name="preOnboardingInputModeDemoChatSuggestion3">Verras me!</string>
+    <string name="preOnboardingInputModeDemoChatSuggestion3Prompt">Wat zijn 10 fascinerende feiten over wetenschap, natuur en geschiedenis?</string>
+
+    <!-- Custom AI onboarding flow -->
+    <!-- Pre-onboarding: initial screens -->
+    <string name="preOnboardingWelcomeDialogBodyCustomAi">Klaar om gratis privé te chatten met ChatGPT, Claude en andere AI\'s, in een browser die je actief beschermt?</string>
+    <string name="preOnboardingDaxDialog3ButtonCustomAi">AI-chat starten</string>
+    <!-- Pre-onboarding: AI comparison chart screen. -->
+    <string name="preOnboardingDaxDialogAiTitle">AI-bescherming geactiveerd!</string>
+    <string name="preOnboardingAiComparisonChartPopularAis">Populaire AI\'s</string>
+    <string name="preOnboardingAiComparisonChartItem1">Alle chats zijn geanonimiseerd</string>
+    <string name="preOnboardingAiComparisonChartItem2">Geen account nodig om toegang te krijgen tot alle AI-functies</string>
+    <string name="preOnboardingAiComparisonChartItem3">Gebruikt nooit je chats om AI te trainen</string>
+    <string name="preOnboardingAiComparisonChartItem4">Toegang tot ChatGPT, Claude en meer, allemaal op één plek</string>
+    <string name="preOnboardingAiComparisonChartButton">Probeer Duck.ai eens!</string>
+    <!-- Pre-onboarding: input demo screen -->
+    <string name="preOnboardingInputModeDemoTitleCustomAi">Probeer eens een privé AI-chat!</string>
+    <!-- Pre-onboarding: browser comparison screen -->
+    <string name="preOnboardingDaxDialog2TitleCustomAi">Wil je DuckDuckGo als standaardbrowser gebruiken?</string>
+
+    <!-- Pre-onboarding: widget prompt -->
+    <string name="preOnboardingWidgetPromptTitle">Probeer onze widget op het startscherm.</string>
+    <string name="preOnboardingWidgetPromptBody">Voeg onze zoekwidget toe aan je startscherm voor snelle en gemakkelijke toegang.</string>
+    <string name="preOnboardingWidgetPromptPrimaryCta">Widget toevoegen</string>
+    <string name="preOnboardingWidgetPromptSecondaryCta">Overslaan</string>
+
+    <!-- Pre-onboarding: import passwords -->
+    <string name="preOnboardingImportPasswordsTitle">Wachtwoorden importeren van Google</string>
+    <string name="preOnboardingImportPasswordsBody">Google kan je vragen om in te loggen of je wachtwoord in te voeren ter bevestiging.</string>
+    <string name="preOnboardingImportPasswordsPrimaryCta">Importeren van Google</string>
+    <string name="preOnboardingImportCompleteTitle">Importeren voltooid</string>
+    <string name="preOnboardingImportCompleteCta">Doorgaan</string>
+    <string name="preOnboardingImportCompleteParsingTitle">Wachtwoorden importeren...</string>
+    <string name="preOnboardingImportCompleteParsingBody">Dit duurt maar even.</string>
+    <string name="preOnboardingImportCompleteFailedTitle">Importeren mislukt</string>
+    <string name="preOnboardingImportCompleteFailed">Wachtwoord importeren mislukt</string>
+    <string name="preOnboardingImportCompleteImported" instruction="Placeholder is the number of passwords that were imported.">Wachtwoorden geïmporteerd: %1$s</string>
+    <string name="preOnboardingImportCompleteSkipped" instruction="Placeholder is the number of passwords that were not imported.">Overgeslagen (duplicaat of ongeldig): %1$s</string>
+    <string name="preOnboardingImportErrorTitle">Er is iets misgegaan</string>
+    <string name="preOnboardingImportErrorBody">Probeer het opnieuw.</string>
+    <string name="preOnboardingImportErrorRetry">Probeer het opnieuw</string>
+
+    <!-- Pre-onboarding: add to home screen -->
+
+    <!-- In-context onboarding. -->
+    <string name="onboardingEndCustomAiFlowDaxDialogDescription"><![CDATA[Start een privé AI-chat met Duck.ai of schakel over naar Zoeken voor beschermd browsen.<br/><br/>Je kunt Duck.ai gebruiken vanaf elke plek waar je het chatpictogram ziet.]]></string>
+    <string name="onboardingPrivacyProCustomAiFlowDaxDialogDescription">We bieden ook een betaald abonnement aan met geavanceerde AI-modellen – met hogere chatlimieten van GPT en Claude, een veilige VPN en meer.</string>
+
+    <string name="input_screen_user_pref_without_ai_updated">Alleen zoeken</string>
+    <string name="input_screen_user_pref_with_ai_updated">Schakelen tussen\nzoeken en Duck.ai</string>
+
+    <!-- New Address Bar Picker -->
+    <string name="newAddressBarPickerDuckDuckGo" translatable="false">DuckDuckGo</string>
+    <string name="newAddressBarPickerConfirm">Bevestigen</string>
+
+    <!-- App feedback -->
+    <string name="thanksForTheFeedback">Bedankt voor de feedback!</string>
+
+    <!-- Fire mode -->
+    <string name="openInFireTab">Openen in Fire-tabblad</string>
+    <string name="openInBackgroundTab">Openen op de achtergrond</string>
+    <string name="browserModeToggleFireDescription">Overschakelen naar Fire-tabbladen</string>
+    <string name="browserModeToggleRegularDescription">Overschakelen naar normale tabbladen</string>
+    <string name="browserModeToggleTabCountInfinite">∞</string>
+    <string name="fireTabMenuItem">Fire-tabblad</string>
+    <string name="fireTabNewTabPageTitle">Fire-tabblad</string>
+    <string name="fireTabsEmptyStateTitle">Fire-tabbladen</string>
+    <string name="fireTabsFeatureNoHistory">Bladeren zonder lokale geschiedenis op te slaan</string>
+    <string name="fireTabsFeatureDifferentAccount">Meld je aan bij een website met een ander account</string>
+    <string name="fireTabsFeatureTroubleshoot">Problemen met websites oplossen</string>
+    <string name="fireTabsExplainer">Fire-tabbladen zijn geïsoleerd van andere browsergegevens. Hun gegevens worden verwijderd als je ze allemaal afsluit. Ze geven je dezelfde trackingbeveiliging als andere tabbladen.</string>
+    <string name="fireTabsNewTabButton">Nieuw Fire-tabblad</string>
+    <string name="fireTabsPromoTabSwitcherText"><![CDATA[<b>NIEUW!</b> Probeer Fire Tabs om te browsen zonder de lokale geschiedenis op te slaan.]]></string>
+    <string name="singleTabFireDialogTitleFireMode">Fire-tabbladen en hun gegevens verwijderen?</string>
+
+    <string name="downloadsCannotOpenFileErrorMessage">Kan bestand niet openen. Kijk of er een compatibele app is.</string>
+
+    <!-- Error pages -->
+    <string name="webViewErrorTitle" instruction="Title shown on the error pages">DuckDuckGo kan deze pagina niet laden</string>
+    <string name="webViewErrorNoConnection" instruction="Message shown when the page fails to load because the device has no internet connection">De internetverbinding lijkt offline te zijn.</string>
+    <string name="webViewErrorBadUrl" instruction="Message shown when the hostname of the website could not be resolved">Er kon geen server met de opgegeven hostnaam worden gevonden.</string>
+    <string name="webViewErrorSslProtocol" instruction="Message shown when the website&apos;s SSL certificate is invalid. Placeholder is the website&apos;s address"><![CDATA[Het certificaat voor deze server is ongeldig. Je maakt mogelijk verbinding met een server die zich voordoet als <b>%1$s</b>, waardoor je vertrouwelijke informatie in gevaar kan komen.]]></string>
+    <string name="webViewErrorRedirectSuggestionMessage" instruction="Shown when a domain fails to load, offering a link to the www. version of the address. Placeholder is a tappable link to the suggested address.">Bedoelde je <annotation type="redirect_link">^1</annotation>?</string>
+</resources>

@@ -1,0 +1,203 @@
+/*
+ * Copyright (c) 2025 DuckDuckGo
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.duckduckgo.pir.impl.dashboard
+
+import android.annotation.SuppressLint
+import android.os.Bundle
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import androidx.core.view.isVisible
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.flowWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.duckduckgo.anvil.annotations.ContributeToActivityStarter
+import com.duckduckgo.anvil.annotations.InjectWith
+import com.duckduckgo.common.ui.DuckDuckGoActivity
+import com.duckduckgo.common.ui.view.getColorFromAttr
+import com.duckduckgo.common.ui.viewbinding.viewBinding
+import com.duckduckgo.common.utils.edgetoedge.EdgeToEdgeHandler
+import com.duckduckgo.di.scopes.ActivityScope
+import com.duckduckgo.js.messaging.api.JsCallbackData
+import com.duckduckgo.js.messaging.api.JsMessageCallback
+import com.duckduckgo.js.messaging.api.JsMessaging
+import com.duckduckgo.js.messaging.api.SubscriptionEventData
+import com.duckduckgo.pir.api.PirScreens.PirDashboardWebViewScreen
+import com.duckduckgo.pir.impl.dashboard.PirDashboardWebViewViewModel.Command
+import com.duckduckgo.pir.impl.dashboard.PirDashboardWebViewViewModel.Command.SendJsEvent
+import com.duckduckgo.pir.impl.dashboard.PirDashboardWebViewViewModel.Command.SendResponseToJs
+import com.duckduckgo.pir.impl.dashboard.messaging.PirDashboardWebConstants
+import com.duckduckgo.pir.impl.dashboard.messaging.PirDashboardWebViewClient
+import com.duckduckgo.pir.impl.databinding.ActivityPirDashboardWebviewBinding
+import com.duckduckgo.pir.impl.notifications.PirNotificationManager
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import org.json.JSONObject
+import javax.inject.Inject
+import javax.inject.Named
+
+@InjectWith(ActivityScope::class)
+@ContributeToActivityStarter(PirDashboardWebViewScreen::class)
+class PirDashboardWebViewActivity : DuckDuckGoActivity() {
+
+    @Inject
+    lateinit var webViewClient: PirDashboardWebViewClient
+
+    @Named("PirDashboardWebMessaging")
+    @Inject
+    lateinit var pirWebJsMessaging: JsMessaging
+
+    @Inject
+    lateinit var pirNotificationManager: PirNotificationManager
+
+    @Inject
+    lateinit var pirDashboardUrlProvider: PirDashboardUrlProvider
+
+    @Inject
+    lateinit var edgeToEdgeHandler: EdgeToEdgeHandler
+
+    private val viewModel: PirDashboardWebViewViewModel by bindViewModel()
+
+    private val binding: ActivityPirDashboardWebviewBinding by viewBinding()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableTransparentEdgeToEdge()
+        setContentView(binding.root)
+        setupCloseToolbarIfNeeded()
+        configureEdgeToEdgeInsets()
+
+        setupWebView()
+        observeCommands()
+
+        pirNotificationManager.createNotificationChannel()
+        lifecycle.addObserver(viewModel)
+    }
+
+    override fun onDestroy() {
+        cleanupWebView()
+        super.onDestroy()
+    }
+
+    private fun setupCloseToolbarIfNeeded() {
+        if (!intent.getBooleanExtra(EXTRA_SHOW_CLOSE_BUTTON, false)) return
+
+        binding.includeToolbar.appBarLayout.isVisible = true
+        setupToolbar(binding.includeToolbar.toolbar)
+        binding.includeToolbar.toolbar.setNavigationIcon(com.duckduckgo.mobile.android.R.drawable.ic_close_24)
+        supportActionBar?.title = ""
+
+        val toolbarColor = getColorFromAttr(com.duckduckgo.mobile.android.R.attr.daxColorToolbar)
+        binding.includeToolbar.appBarLayout.setBackgroundColor(toolbarColor)
+        binding.includeToolbar.toolbar.setBackgroundColor(toolbarColor)
+    }
+
+    private fun configureEdgeToEdgeInsets() {
+        edgeToEdgeHandler.applyStatusBarAndHorizontalInsets(binding.root)
+        edgeToEdgeHandler.applyNavigationBarInsets(binding.webViewContainer, drawBehindGestureNav = true)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        pirWebJsMessaging.register(
+            binding.pirWebView,
+            object : JsMessageCallback() {
+
+                override fun process(
+                    featureName: String,
+                    method: String,
+                    id: String?,
+                    data: JSONObject?,
+                ) {
+                    viewModel.handleJsMessage(
+                        featureName = featureName,
+                        method = method,
+                        id = id,
+                        data = data,
+                    )
+                }
+            },
+        )
+
+        binding.pirWebView.webViewClient = webViewClient
+        binding.pirWebView.webChromeClient = object : WebChromeClient() {
+
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                message: android.os.Message,
+            ): Boolean {
+                val transport = message.obj as WebView.WebViewTransport
+                transport.webView = binding.pirWebView
+                message.sendToTarget()
+                return true
+            }
+        }
+
+        binding.pirWebView.settings.apply {
+            userAgentString = PirDashboardWebConstants.CUSTOM_UA
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            loadWithOverviewMode = true
+            useWideViewPort = true
+            builtInZoomControls = true
+            displayZoomControls = false
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            setSupportMultipleWindows(false)
+            setSupportZoom(true)
+        }
+
+        binding.pirWebView.loadUrl(pirDashboardUrlProvider.getUrl())
+    }
+
+    private fun cleanupWebView() {
+        binding.pirWebView.stopLoading()
+        binding.pirWebView.removeJavascriptInterface(pirWebJsMessaging.context)
+        binding.webViewContainer.removeView(binding.pirWebView)
+        binding.pirWebView.destroy()
+    }
+
+    private fun observeCommands() {
+        viewModel.commands()
+            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+            .onEach { processCommand(it) }
+            .launchIn(lifecycleScope)
+    }
+
+    private fun processCommand(command: Command) {
+        when (command) {
+            is SendJsEvent -> sendJsEvent(command.event)
+            is SendResponseToJs -> sendResponseToJs(command.data)
+            is Command.ShowManualConfigWarning -> {
+                binding.manualConfigWarning.isVisible = command.show
+            }
+        }
+    }
+
+    private fun sendJsEvent(event: SubscriptionEventData) {
+        pirWebJsMessaging.sendSubscriptionEvent(event)
+    }
+
+    private fun sendResponseToJs(data: JsCallbackData) {
+        pirWebJsMessaging.onResponse(data)
+    }
+
+    companion object {
+        const val EXTRA_SHOW_CLOSE_BUTTON = "extra_show_close_button"
+    }
+}

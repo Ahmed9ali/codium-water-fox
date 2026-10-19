@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2018 DuckDuckGo
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.duckduckgo.app.di
+
+import com.duckduckgo.app.fire.UnsentForgetAllPixelStore
+import com.duckduckgo.app.fire.UnsentForgetAllPixelStoreSharedPreferences
+import com.duckduckgo.app.global.events.db.AppUserEventsStore
+import com.duckduckgo.app.global.events.db.UserEventsStore
+import com.duckduckgo.app.global.install.AppInstallSharedPreferences
+import com.duckduckgo.app.global.install.AppInstallStore
+import com.duckduckgo.app.lifecycle.MainProcessLifecycleObserver
+import com.duckduckgo.app.onboarding.store.AppUserStageStore
+import com.duckduckgo.app.onboarding.store.OnboardingStore
+import com.duckduckgo.app.onboarding.store.OnboardingStoreImpl
+import com.duckduckgo.app.onboarding.store.UserStageStore
+import com.duckduckgo.app.statistics.store.StatisticsDataStore
+import com.duckduckgo.app.statistics.store.StatisticsSharedPreferences
+import com.duckduckgo.app.tabs.db.TabsDbSanitizer
+import com.duckduckgo.app.widget.FavoritesObserver
+import com.duckduckgo.common.ui.store.ThemingDataStore
+import com.duckduckgo.common.ui.store.ThemingSharedPreferences
+import com.duckduckgo.di.scopes.AppScope
+import com.duckduckgo.widget.AppWidgetThemePreferences
+import com.duckduckgo.widget.WidgetPreferences
+import com.squareup.anvil.annotations.ContributesTo
+import dagger.Binds
+import dagger.Module
+import dagger.multibindings.IntoSet
+
+@Module
+@ContributesTo(AppScope::class)
+abstract class StoreModule {
+
+    @Binds
+    abstract fun bindStatisticsStore(statisticsStore: StatisticsSharedPreferences): StatisticsDataStore
+
+    @Binds
+    abstract fun bindThemingStore(themeDataStore: ThemingSharedPreferences): ThemingDataStore
+
+    @Binds
+    abstract fun bindOnboardingStore(onboardingStore: OnboardingStoreImpl): OnboardingStore
+
+    @Binds
+    abstract fun bindAppInstallStore(store: AppInstallSharedPreferences): AppInstallStore
+
+    @Binds
+    @IntoSet
+    abstract fun bindAppInstallStoreObserver(appInstallStore: AppInstallStore): MainProcessLifecycleObserver
+
+    @Binds
+    abstract fun bindDataClearingStore(store: UnsentForgetAllPixelStoreSharedPreferences): UnsentForgetAllPixelStore
+
+    @Binds
+    abstract fun bindUserStageStore(userStageStore: AppUserStageStore): UserStageStore
+
+    @Binds
+    abstract fun bindUserEventsStore(userEventsStore: AppUserEventsStore): UserEventsStore
+
+    @Binds
+    @IntoSet
+    abstract fun bindTabsDbSanitizerObserver(tabsDbSanitizer: TabsDbSanitizer): MainProcessLifecycleObserver
+
+    @Binds
+    @IntoSet
+    abstract fun bindFavoritesObserver(favoritesObserver: FavoritesObserver): MainProcessLifecycleObserver
+
+    @Binds
+    abstract fun bindWidgetPreferences(store: AppWidgetThemePreferences): WidgetPreferences
+}

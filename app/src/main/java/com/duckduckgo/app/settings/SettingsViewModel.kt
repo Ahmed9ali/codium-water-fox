@@ -1,0 +1,490 @@
+/*
+ * Copyright (c) 2024 DuckDuckGo
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.duckduckgo.app.settings
+
+import android.annotation.SuppressLint
+import androidx.annotation.VisibleForTesting
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.duckduckgo.anvil.annotations.ContributesViewModel
+import com.duckduckgo.app.browser.defaultbrowsing.DefaultBrowserDetector
+import com.duckduckgo.app.browser.omnibar.OmnibarType
+import com.duckduckgo.app.global.install.AppInstallStore
+import com.duckduckgo.app.global.install.daysInstalled
+import com.duckduckgo.app.pixels.AppPixelName
+import com.duckduckgo.app.pixels.AppPixelName.PRODUCT_TELEMETRY_SURFACE_SETTINGS_OPENED
+import com.duckduckgo.app.pixels.AppPixelName.PRODUCT_TELEMETRY_SURFACE_SETTINGS_OPENED_DAILY
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_ABOUT_DDG_SHARE_FEEDBACK_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_ABOUT_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_ACCESSIBILITY_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_APPEARANCE_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_APPTP_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_COOKIE_POPUP_PROTECTION_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_DEFAULT_BROWSER_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_FIRE_BUTTON_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_GENERAL_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_NEXT_STEPS_ADDRESS_BAR
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_NEXT_STEPS_VOICE_SEARCH
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_OPENED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_PASSWORDS_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_PERMISSIONS_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_PRIVATE_SEARCH_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_WEB_TRACKING_PROTECTION_PRESSED
+import com.duckduckgo.app.pixels.AppPixelName.SETTINGS_WHATS_NEW_PRESSED
+import com.duckduckgo.app.settings.GetDesktopBrowserCompleteSetupSettings.Companion.GET_DESKTOP_BROWSER_SOURCE_PIXEL_PARAM
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAboutScreen
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAccessibilitySettings
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAddHomeScreenWidget
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAppTPOnboarding
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAppTPTrackersScreen
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAppearanceScreen
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAutofillPasswordsManagement
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchAutofillSettings
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchCookiePopupProtectionScreen
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchDefaultBrowser
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchDuckChatScreen
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchEmailProtection
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchEmailProtectionNotSupported
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchFeedback
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchGeneralSettingsScreen
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchOtherPlatforms
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchPermissionsScreen
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchPrivateSearchWebPage
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchSubscriptionUnifiedFeedback
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchSyncSettings
+import com.duckduckgo.app.settings.SettingsViewModel.Command.LaunchWebTrackingProtectionScreen
+import com.duckduckgo.app.settings.db.SettingsDataStore
+import com.duckduckgo.app.statistics.pixels.Pixel
+import com.duckduckgo.app.widget.ui.WidgetCapabilities
+import com.duckduckgo.autoconsent.api.Autoconsent
+import com.duckduckgo.autofill.api.AutofillCapabilityChecker
+import com.duckduckgo.autofill.api.AutofillFeature
+import com.duckduckgo.autofill.api.email.EmailManager
+import com.duckduckgo.browser.feature.toggles.AndroidBrowserConfigFeature
+import com.duckduckgo.common.utils.ConflatedJob
+import com.duckduckgo.common.utils.DispatcherProvider
+import com.duckduckgo.di.scopes.ActivityScope
+import com.duckduckgo.duckchat.api.DuckAiFeatureState
+import com.duckduckgo.duckchat.api.DuckChat
+import com.duckduckgo.mobile.android.app.tracking.AppTrackingProtection
+import com.duckduckgo.remote.messaging.api.Content
+import com.duckduckgo.remote.messaging.impl.store.ModalSurfaceStore
+import com.duckduckgo.settings.api.SettingsPageFeature
+import com.duckduckgo.subscriptions.api.SubscriptionUnifiedFeedback
+import com.duckduckgo.subscriptions.api.SubscriptionUnifiedFeedback.SubscriptionFeedbackSource.DDG_SETTINGS
+import com.duckduckgo.subscriptions.api.Subscriptions
+import com.duckduckgo.sync.api.DeviceSyncState
+import com.duckduckgo.voice.api.VoiceSearchAvailability
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import logcat.logcat
+import javax.inject.Inject
+
+@SuppressLint("NoLifecycleObserver")
+@ContributesViewModel(ActivityScope::class)
+class SettingsViewModel @Inject constructor(
+    private val defaultWebBrowserCapability: DefaultBrowserDetector,
+    private val appTrackingProtection: AppTrackingProtection,
+    private val pixel: Pixel,
+    private val emailManager: EmailManager,
+    private val autofillCapabilityChecker: AutofillCapabilityChecker,
+    private val deviceSyncState: DeviceSyncState,
+    private val dispatcherProvider: DispatcherProvider,
+    private val autoconsent: Autoconsent,
+    private val subscriptions: Subscriptions,
+    private val duckChat: DuckChat,
+    private val duckAiFeatureState: DuckAiFeatureState,
+    private val voiceSearchAvailability: VoiceSearchAvailability,
+    private val modalSurfaceStore: ModalSurfaceStore,
+    private val subscriptionUnifiedFeedback: SubscriptionUnifiedFeedback,
+    private val settingsPixelDispatcher: SettingsPixelDispatcher,
+    private val autofillFeature: AutofillFeature,
+    private val androidBrowserConfigFeature: AndroidBrowserConfigFeature,
+    private val settingsPageFeature: SettingsPageFeature,
+    private val widgetCapabilities: WidgetCapabilities,
+    private val settingsDataStore: SettingsDataStore,
+    private val appInstallStore: AppInstallStore,
+) : ViewModel(), DefaultLifecycleObserver {
+
+    data class ViewState(
+        val showDefaultBrowserSetting: Boolean = false,
+        val isAppDefaultBrowser: Boolean = false,
+        val appTrackingProtectionEnabled: Boolean = false,
+        val emailAddress: String? = null,
+        val showAutofill: Boolean = false,
+        val showSyncSetting: Boolean = false,
+        val isAutoconsentEnabled: Boolean = false,
+        val isSubscriptionEnabled: Boolean = false,
+        val isNewThreatProtectionSettingsEnabled: Boolean = false,
+        val isDuckChatEnabled: Boolean = false,
+        val isVoiceSearchVisible: Boolean = false,
+        val isAddWidgetInProtectionsVisible: Boolean = false,
+        val widgetsInstalled: Boolean = false,
+        val showWhatsNew: Boolean = false,
+        val showGetDesktopBrowser: Boolean = false,
+        val nextStepsAddressBarDismissed: Boolean = false,
+        val nextStepsVoiceSearchDismissed: Boolean = false,
+        val nextStepsSectionHidden: Boolean = false,
+        val showNextStepsHideButton: Boolean = false,
+    )
+
+    sealed class Command {
+        data object LaunchDefaultBrowser : Command()
+        data class LaunchEmailProtection(val url: String) : Command()
+        data object LaunchEmailProtectionNotSupported : Command()
+        data object LaunchAutofillPasswordsManagement : Command()
+        data object LaunchAutofillSettings : Command()
+        data object LaunchAccessibilitySettings : Command()
+        data object LaunchAddHomeScreenWidget : Command()
+        data object LaunchAppTPTrackersScreen : Command()
+        data object LaunchAppTPOnboarding : Command()
+        data object LaunchSyncSettings : Command()
+        data object LaunchPrivateSearchWebPage : Command()
+        data object LaunchWebTrackingProtectionScreen : Command()
+        data object LaunchCookiePopupProtectionScreen : Command()
+        data object LaunchDataClearingSettingsScreen : Command()
+        data object LaunchPermissionsScreen : Command()
+        data object LaunchDuckChatScreen : Command()
+        data object LaunchAppearanceScreen : Command()
+        data object LaunchAboutScreen : Command()
+        data object LaunchGeneralSettingsScreen : Command()
+        data object LaunchFeedback : Command()
+        data object LaunchSubscriptionUnifiedFeedback : Command()
+        data object LaunchOtherPlatforms : Command()
+        data object LaunchGetDesktopBrowser : Command()
+        data class LaunchWhatsNew(
+            val messageId: String,
+            val messageType: Content.MessageType,
+        ) : Command()
+    }
+
+    private val viewState = MutableStateFlow(ViewState())
+
+    private val command = Channel<Command>(1, BufferOverflow.DROP_OLDEST)
+    private val appTPPollJob = ConflatedJob()
+
+    private var widgetPromptShown = false
+    private var omnibarTypeBeforeNavigation: OmnibarType? = null
+    private var voiceSearchAvailableBeforeNavigation: Boolean? = null
+
+    init {
+        pixel.fire(SETTINGS_OPENED)
+        pixel.fire(PRODUCT_TELEMETRY_SURFACE_SETTINGS_OPENED)
+        pixel.fire(PRODUCT_TELEMETRY_SURFACE_SETTINGS_OPENED_DAILY, type = Pixel.PixelType.Daily())
+        settingsPixelDispatcher.fireSettingsOpenedWithSubscriptionPurchaseAvailable()
+
+        duckAiFeatureState.showSettings.onEach { showDuckAiSettings ->
+            viewState.update { it.copy(isDuckChatEnabled = showDuckAiSettings) }
+        }.launchIn(viewModelScope)
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        super.onStart(owner)
+        refreshNextStepsDismissals()
+        start()
+        startPollingAppTPState()
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        super.onStop(owner)
+        appTPPollJob.cancel()
+    }
+
+    @VisibleForTesting
+    internal fun start() {
+        val defaultBrowserAlready = defaultWebBrowserCapability.isDefaultBrowser()
+
+        viewModelScope.launch {
+            viewState.emit(
+                currentViewState().copy(
+                    isAppDefaultBrowser = defaultBrowserAlready,
+                    showDefaultBrowserSetting = defaultWebBrowserCapability.deviceSupportsDefaultBrowserConfiguration(),
+                    appTrackingProtectionEnabled = appTrackingProtection.isRunning(),
+                    emailAddress = emailManager.getEmailAddress(),
+                    showAutofill = autofillCapabilityChecker.canAccessCredentialManagementScreen(),
+                    showSyncSetting = deviceSyncState.isFeatureEnabled(),
+                    isAutoconsentEnabled = autoconsent.isSettingEnabled(),
+                    isSubscriptionEnabled = subscriptions.isEligible(),
+                    isNewThreatProtectionSettingsEnabled = androidBrowserConfigFeature.newThreatProtectionSettings().isEnabled(),
+                    isVoiceSearchVisible = voiceSearchAvailability.isVoiceSearchSupported,
+                    isAddWidgetInProtectionsVisible = withContext(dispatcherProvider.io()) {
+                        settingsPageFeature.self().isEnabled() && settingsPageFeature.widgetAsProtection().isEnabled()
+                    },
+                    widgetsInstalled = withContext(dispatcherProvider.io()) {
+                        widgetCapabilities.hasInstalledWidgets
+                    },
+                    showWhatsNew = withContext(dispatcherProvider.io()) {
+                        settingsPageFeature.whatsNewEnabled().isEnabled() && modalSurfaceStore.getLastShownRemoteMessageId() != null
+                    },
+                    showGetDesktopBrowser = withContext(dispatcherProvider.io()) {
+                        settingsPageFeature.newDesktopBrowserSettingEnabled().isEnabled()
+                    },
+                    nextStepsAddressBarDismissed = withContext(dispatcherProvider.io()) {
+                        settingsDataStore.nextStepsAddressBarDismissed
+                    },
+                    nextStepsVoiceSearchDismissed = withContext(dispatcherProvider.io()) {
+                        settingsDataStore.nextStepsVoiceSearchDismissed
+                    },
+                    nextStepsSectionHidden = withContext(dispatcherProvider.io()) {
+                        settingsDataStore.nextStepsSectionHidden
+                    },
+                    showNextStepsHideButton = withContext(dispatcherProvider.io()) {
+                        appInstallStore.hasInstallTimestampRecorded() && appInstallStore.daysInstalled() >= NEXT_STEPS_HIDE_BUTTON_DAYS_THRESHOLD
+                    },
+                ),
+            )
+        }
+    }
+
+    // FIXME
+    // We need to fix this. This logic as inside the start method but it messes with the unit tests
+    // because when doing runningBlockingTest {} there is no delay and the tests crashes because this
+    // becomes a while(true) without any delay
+    private fun startPollingAppTPState() {
+        appTPPollJob += viewModelScope.launch(dispatcherProvider.io()) {
+            while (isActive) {
+                val isDeviceShieldEnabled = appTrackingProtection.isRunning()
+                val currentState = currentViewState()
+                viewState.value = currentState.copy(
+                    appTrackingProtectionEnabled = isDeviceShieldEnabled,
+                    isSubscriptionEnabled = subscriptions.isEligible(),
+                )
+                delay(1_000)
+            }
+        }
+    }
+
+    fun viewState(): StateFlow<ViewState> {
+        return viewState
+    }
+
+    fun commands(): Flow<Command> {
+        return command.receiveAsFlow()
+    }
+
+    fun onWhatsNewClicked() {
+        viewModelScope.launch(dispatcherProvider.io()) {
+            val messageId = modalSurfaceStore.getLastShownRemoteMessageId()
+            val messageType = modalSurfaceStore.getLastShownRemoteMessageType()
+            if (messageId != null && messageType != null) {
+                pixel.fire(SETTINGS_WHATS_NEW_PRESSED)
+                command.send(Command.LaunchWhatsNew(messageId, messageType))
+            }
+        }
+    }
+
+    fun userRequestedToAddHomeScreenWidget() {
+        viewModelScope.launch(dispatcherProvider.io()) {
+            command.send(LaunchAddHomeScreenWidget)
+            if (!currentViewState().widgetsInstalled) {
+                widgetPromptShown = true
+            }
+        }
+    }
+
+    fun onChangeAddressBarPositionClicked() {
+        omnibarTypeBeforeNavigation = settingsDataStore.omnibarType
+        viewModelScope.launch { command.send(LaunchAppearanceScreen) }
+        pixel.fire(SETTINGS_NEXT_STEPS_ADDRESS_BAR)
+    }
+
+    fun onEnableVoiceSearchClicked() {
+        voiceSearchAvailableBeforeNavigation = voiceSearchAvailability.isVoiceSearchAvailable
+        viewModelScope.launch { command.send(LaunchAccessibilitySettings) }
+        pixel.fire(SETTINGS_NEXT_STEPS_VOICE_SEARCH)
+    }
+
+    fun onNextStepsHideClicked() {
+        viewModelScope.launch(dispatcherProvider.io()) {
+            settingsDataStore.nextStepsSectionHidden = true
+            viewState.update { it.copy(nextStepsSectionHidden = true) }
+        }
+    }
+
+    fun refreshNextStepsDismissals() {
+        omnibarTypeBeforeNavigation?.let { before ->
+            if (settingsDataStore.omnibarType != before) {
+                settingsDataStore.nextStepsAddressBarDismissed = true
+            }
+            omnibarTypeBeforeNavigation = null
+        }
+        voiceSearchAvailableBeforeNavigation?.let { before ->
+            if (voiceSearchAvailability.isVoiceSearchAvailable != before) {
+                settingsDataStore.nextStepsVoiceSearchDismissed = true
+            }
+            voiceSearchAvailableBeforeNavigation = null
+        }
+    }
+
+    fun onDefaultBrowserSettingClicked() {
+        val defaultBrowserSelected = defaultWebBrowserCapability.isDefaultBrowser()
+        viewModelScope.launch {
+            viewState.emit(currentViewState().copy(isAppDefaultBrowser = defaultBrowserSelected))
+            command.send(LaunchDefaultBrowser)
+        }
+        pixel.fire(SETTINGS_DEFAULT_BROWSER_PRESSED)
+    }
+
+    fun onPrivateSearchSettingClicked() {
+        viewModelScope.launch { command.send(LaunchPrivateSearchWebPage) }
+        pixel.fire(SETTINGS_PRIVATE_SEARCH_PRESSED)
+    }
+
+    fun onWebTrackingProtectionSettingClicked() {
+        viewModelScope.launch { command.send(LaunchWebTrackingProtectionScreen) }
+        pixel.fire(SETTINGS_WEB_TRACKING_PROTECTION_PRESSED)
+    }
+
+    fun onCookiePopupProtectionSettingClicked() {
+        viewModelScope.launch { command.send(LaunchCookiePopupProtectionScreen) }
+        pixel.fire(SETTINGS_COOKIE_POPUP_PROTECTION_PRESSED)
+    }
+
+    fun onAutofillSettingsClick() {
+        viewModelScope.launch {
+            if (autofillFeature.settingsScreen().isEnabled()) {
+                command.send(LaunchAutofillSettings)
+            } else {
+                command.send(LaunchAutofillPasswordsManagement)
+            }
+        }
+        pixel.fire(SETTINGS_PASSWORDS_PRESSED)
+    }
+
+    fun onAccessibilitySettingClicked() {
+        viewModelScope.launch { command.send(LaunchAccessibilitySettings) }
+        pixel.fire(SETTINGS_ACCESSIBILITY_PRESSED)
+    }
+
+    fun onAboutSettingClicked() {
+        viewModelScope.launch { command.send(LaunchAboutScreen) }
+        pixel.fire(SETTINGS_ABOUT_PRESSED)
+    }
+
+    fun onGeneralSettingClicked() {
+        viewModelScope.launch { command.send(LaunchGeneralSettingsScreen) }
+        pixel.fire(SETTINGS_GENERAL_PRESSED)
+    }
+
+    fun onEmailProtectionSettingClicked() {
+        viewModelScope.launch {
+            val command = if (emailManager.isEmailFeatureSupported()) {
+                LaunchEmailProtection(EMAIL_PROTECTION_URL)
+            } else {
+                LaunchEmailProtectionNotSupported
+            }
+            this@SettingsViewModel.command.send(command)
+        }
+        settingsPixelDispatcher.fireEmailPressed()
+    }
+
+    fun onAppTPSettingClicked() {
+        viewModelScope.launch {
+            if (appTrackingProtection.isOnboarded()) {
+                command.send(LaunchAppTPTrackersScreen)
+            } else {
+                command.send(LaunchAppTPOnboarding)
+            }
+            pixel.fire(SETTINGS_APPTP_PRESSED)
+        }
+    }
+
+    fun refreshWidgetsInstalledState() {
+        viewModelScope.launch(dispatcherProvider.io()) {
+            val widgetsInstalled = widgetCapabilities.hasInstalledWidgets
+            viewState.update { it.copy(widgetsInstalled = widgetsInstalled) }
+            if (widgetPromptShown) {
+                widgetPromptShown = false
+                if (!widgetsInstalled) {
+                    logcat { "Widget bottom sheet was dismissed." }
+                }
+            }
+        }
+    }
+
+    private fun currentViewState(): ViewState {
+        return viewState.value
+    }
+
+    fun onSyncSettingClicked() {
+        viewModelScope.launch { command.send(LaunchSyncSettings) }
+        settingsPixelDispatcher.fireSyncPressed()
+    }
+
+    fun onFireButtonSettingClicked() {
+        viewModelScope.launch { command.send(Command.LaunchDataClearingSettingsScreen) }
+        pixel.fire(SETTINGS_FIRE_BUTTON_PRESSED)
+    }
+
+    fun onPermissionsSettingClicked() {
+        viewModelScope.launch { command.send(LaunchPermissionsScreen) }
+        pixel.fire(SETTINGS_PERMISSIONS_PRESSED)
+    }
+
+    fun onDuckChatSettingClicked() {
+        viewModelScope.launch { command.send(LaunchDuckChatScreen) }
+        settingsPixelDispatcher.fireDuckChatPressed()
+    }
+
+    fun onAppearanceSettingClicked() {
+        viewModelScope.launch { command.send(LaunchAppearanceScreen) }
+        pixel.fire(SETTINGS_APPEARANCE_PRESSED)
+    }
+
+    fun onShareFeedbackClicked() {
+        viewModelScope.launch {
+            if (subscriptionUnifiedFeedback.shouldUseUnifiedFeedback(source = DDG_SETTINGS)) {
+                command.send(LaunchSubscriptionUnifiedFeedback)
+            } else {
+                command.send(LaunchFeedback)
+            }
+        }
+        pixel.fire(SETTINGS_ABOUT_DDG_SHARE_FEEDBACK_PRESSED)
+    }
+
+    fun onDdgOnOtherPlatformsClicked() {
+        viewModelScope.launch { command.send(LaunchOtherPlatforms) }
+    }
+
+    fun onGetDesktopBrowserClicked() {
+        pixel.fire(
+            AppPixelName.GET_DESKTOP_BROWSER_CLICKED,
+            mapOf(GET_DESKTOP_BROWSER_SOURCE_PIXEL_PARAM to GET_DESKTOP_BROWSER_SOURCE_SETTINGS),
+        )
+        viewModelScope.launch { command.send(Command.LaunchGetDesktopBrowser) }
+    }
+
+    companion object {
+        const val EMAIL_PROTECTION_URL = "https://duckduckgo.com/email"
+
+        private const val GET_DESKTOP_BROWSER_SOURCE_SETTINGS = "settings"
+        private const val NEXT_STEPS_HIDE_BUTTON_DAYS_THRESHOLD = 14L
+    }
+}
