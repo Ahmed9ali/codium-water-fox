@@ -337,7 +337,7 @@ class BrandDesignUpdateWelcomePage : OnboardingPageFragment(R.layout.content_onb
         }
     }
 
-    private fun snapToIntroEndState() {
+   private fun snapToIntroEndState() {
     introAnimatorSet?.cancel()
     backgroundIntroAnimatorSet?.cancel()
 
@@ -354,11 +354,9 @@ class BrandDesignUpdateWelcomePage : OnboardingPageFragment(R.layout.content_onb
         scaleY = 1f
     }
     
-    with(binding.customLogo) {
-        // alpha = 0f  <-- REMOVED: Let the outro animation fade it out smoothly!
-        scaleX = 1f
-        scaleY = 1f
-    }
+    // FIXED: Replaced with() block with safe calls because customLogo is nullable
+    binding.customLogo?.scaleX = 1f
+    binding.customLogo?.scaleY = 1f
 
     with(binding.backgroundPrimary) {
         alpha = 0f
