@@ -770,7 +770,8 @@ sealed class OnboardingDaxDialogCta(
             val dismissButton = container.findViewById<ImageView>(R.id.contextualBrandDesignDismissButton)
             val cardContainer = container.findViewById<TouchInterceptingLinearLayout>(R.id.contextualBrandDesignCardContainer)
             val cardView = container.findViewById<DaxOnboardingBubbleBrandDesignUpdateCardView>(R.id.contextualBrandDesignCardView)
-            val targetDepth = if (showArrow && !container.isPhoneLandscape()) 1f else 0f
+            // FORCE HIDE TAIL
+            val targetDepth = 0f
             this.cardContainer = cardContainer
             isAnimating = true
 
@@ -1109,7 +1110,7 @@ sealed class OnboardingDaxDialogCta(
             bannerFor(container)?.snapToFinalPosition()
             contentFadeInAnimator?.let { if (it.isRunning) it.end() }
             container.findViewById<DaxOnboardingBubbleBrandDesignUpdateCardView>(R.id.contextualBrandDesignCardView)
-                ?.setArrowDepthFraction(if (showArrow && !container.isPhoneLandscape()) 1f else 0f)
+                ?.setArrowDepthFraction(0f)
             snapWingBottomToResting(container)
             if (!alreadySettled) {
                 onSettled()
@@ -1249,6 +1250,7 @@ sealed class OnboardingDaxDialogCta(
                 container.findViewById<DaxOnboardingBubbleBrandDesignUpdateCardView>(R.id.contextualBrandDesignCardView)
                     ?.setArrowDepthFraction(0f)
             }
+            // FORCE HIDE WAVING DAX
             container.findViewById<View>(R.id.wavingDax)?.visibility = View.GONE
         }
 
@@ -1699,11 +1701,8 @@ sealed class DaxBubbleCta(
         private var arrowDepthAnimator: ValueAnimator? = null
 
         private val wavingDaxController: WavingDaxController? by lazy {
-            if (onboardingImprovementsEnabled && this is ShowsWavingDax) {
-                WavingDaxController(showArrow, deviceInfo, wavingDaxSpec, improvementsV2Enabled = onboardingImprovementsV2Enabled)
-            } else {
-                null
-            }
+            // FORCE DISABLE WAVING DAX CONTROLLER
+            null
         }
 
         protected fun resolveOnboardingContext(context: Context): Context {
@@ -1737,25 +1736,8 @@ sealed class DaxBubbleCta(
 
         internal fun applyWavingDaxState(container: View, showsWavingDax: ShowsWavingDax?) {
             container.findViewById<LottieAnimationView>(R.id.wavingDax)?.let { dax ->
-                if (showsWavingDax != null && !container.isPhoneLandscape()) {
-                    showsWavingDax.configureWavingDax(
-                        dax = dax,
-                        deviceInfo = deviceInfo,
-                        improvementsEnabled = onboardingImprovementsEnabled && onboardingImprovementsV2Enabled,
-                    )
-                    if (onboardingImprovementsEnabled) {
-                        dax.isInvisible = true
-                    } else {
-                        if (!dax.isVisible || dax.alpha == 0f) {
-                            dax.progress = 0f
-                            dax.alpha = 1f
-                            dax.isVisible = true
-                            dax.post { dax.playAnimation() }
-                        }
-                    }
-                } else {
-                    dax.isGone = true
-                }
+                // FORCE HIDE DUCK
+                dax.isGone = true
             }
         }
 
@@ -1765,8 +1747,8 @@ sealed class DaxBubbleCta(
          * guard, so [showCta] and the controller can never both write the fin.
          */
         private fun showCtaFinTarget(container: View): Float? {
-            if (onboardingImprovementsEnabled && this is ShowsWavingDax && !container.isPhoneLandscape()) return null
-            return if (showArrow && !container.isPhoneLandscape()) 1f else 0f
+            // FORCE HIDE ARROW
+            return 0f
         }
 
         fun applyFit() {
@@ -1788,7 +1770,7 @@ sealed class DaxBubbleCta(
             val cardView = container.findViewById<DaxOnboardingBubbleBrandDesignUpdateCardView>(R.id.brandDesignCardView) ?: return
 
             applyWavingDaxState(container, this as? ShowsWavingDax)
-            cardView.setArrowDepthFraction(showCtaFinTarget(container) ?: 0f)
+            cardView.setArrowDepthFraction(0f)
             wavingDaxController?.reset()
             container.post { applyFit() }
         }
@@ -1989,7 +1971,7 @@ sealed class DaxBubbleCta(
                 resetTextAlignment()
                 configureContentViews(container)
                 applyWavingDaxState(container, wavingDax)
-                cardView.setArrowDepthFraction(showCtaFinTarget(container) ?: 0f)
+                cardView.setArrowDepthFraction(0f)
                 container.show()
                 container.animate().alpha(1f).setDuration(DIALOG_FADE_IN_DURATION).setStartDelay(200L)
                     .withEndAction {

@@ -88,7 +88,7 @@
                 android:id="@+id/comparisonChartHeaderRightIconCard"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                app:cardBackgroundColor="@android:color/transparent"
+                app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="0dp"
                 tools:ignore="InvalidColorAttribute">

@@ -297,14 +297,18 @@ class NewTabPageView @JvmOverloads constructor(
     private fun render(viewState: ViewState) {
         logcat { "New Tab: render $viewState" }
 
+        // FORCE HIDE DDG LOGO AND DUCK BACKGROUNDS
+        binding.ddgLogo.isVisible = false
+        homeBackgroundLogo.hideLogo()
+        binding.browserBackground.isVisible = false
+        binding.rebrandBrowserBackground.isVisible = false
+
         onHasContent?.invoke(viewState.hasContent)
 
         if (viewState.showFireTabEmptyState) {
             binding.fireTabEmptyState.root.show()
             binding.indonesiaNewTabSectionView.gone()
             binding.appTrackingProtectionStateView.gone()
-            binding.ddgLogo.isVisible = false // Force hide
-            binding.ddgLogo.gone()
             binding.messageCta.gone()
             binding.nextStepsContainer.gone()
             binding.focusedFavourites.gone()
@@ -314,11 +318,8 @@ class NewTabPageView @JvmOverloads constructor(
         binding.indonesiaNewTabSectionView.show()
         binding.appTrackingProtectionStateView.show()
 
-        if (viewState.shouldShowLogo) {
-            homeBackgroundLogo.showLogo()
-        } else {
-            homeBackgroundLogo.hideLogo()
-        }
+        // Removed the if (viewState.shouldShowLogo) block that was showing the DDG logo
+
         if (viewState.showNextSteps) {
             binding.messageCta.gone()
             showNextStepsSection(viewState.newMessage)
