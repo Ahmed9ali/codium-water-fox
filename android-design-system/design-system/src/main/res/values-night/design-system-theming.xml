@@ -23,6 +23,10 @@
         <item name="android:navigationBarColor">@color/black</item>
 
         <item name="windowSplashScreenBackground">@color/black</item>
+        
+        <!-- ADDED: Override the icon with your custom logo -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/my_custom_logo</item>
+        
         <item name="postSplashScreenTheme">@style/Theme.DuckDuckGo.Dark</item>
     </style>
 </resources>

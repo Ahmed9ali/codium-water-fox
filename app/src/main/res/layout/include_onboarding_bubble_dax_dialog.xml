@@ -25,11 +25,13 @@
     android:paddingBottom="@dimen/keyline_4"
     tools:alpha="1">
 
+    <!-- CHANGED: Added visibility="gone" to hide the duck icon -->
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/logo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/keyline_5"
+        android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:srcCompat="@drawable/ic_dax_icon" />
@@ -49,6 +51,7 @@
         app:srcCompat="@drawable/ic_close_24"
         app:tint="?attr/daxColorPrimaryIcon" />
 
+    <!-- CHANGED: Added app:showArrow="false" to remove the speech bubble tail -->
     <com.duckduckgo.common.ui.view.shape.DaxOnboardingBubbleCardView
         android:id="@+id/cardView"
         android:layout_width="match_parent"
@@ -59,6 +62,7 @@
         android:layout_marginBottom="@dimen/keyline_4"
         app:arrowOffsetStart="6dp"
         app:edgePosition="top"
+        app:showArrow="false"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/logo"

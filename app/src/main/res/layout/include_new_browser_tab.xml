@@ -26,13 +26,16 @@
     tools:context="com.duckduckgo.app.browser.BrowserActivity"
     tools:showIn="@layout/fragment_browser_tab">
 
+    <!-- CHANGED: Added visibility="gone" to hide the duck and pond background -->
     <ImageView
         android:id="@+id/browserBackground"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:visibility="gone"
         android:scaleType="centerCrop"
         tools:srcCompat="@drawable/onboarding_background_bitmap_light" />
 
+    <!-- CHANGED: Added visibility="gone" to hide the duck and pond background -->
     <com.duckduckgo.app.onboarding.ui.view.OnboardingFillImageView
         android:id="@+id/rebrandBrowserBackground"
         android:layout_width="match_parent"

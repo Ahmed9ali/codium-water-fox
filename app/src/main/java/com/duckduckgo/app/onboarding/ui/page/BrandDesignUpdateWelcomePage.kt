@@ -271,24 +271,31 @@ class BrandDesignUpdateWelcomePage : OnboardingPageFragment(R.layout.content_onb
     }
 }
 
-    private fun playIntroAnimation(isDuckAiIntroAnimationEnabled: Boolean) {
+   private fun playIntroAnimation(isDuckAiIntroAnimationEnabled: Boolean) {
     // Keep grass hidden during intro:
     binding.backgroundPrimary.isVisible = false
     binding.backgroundSecondary.isVisible = false
 
-    // 1. Show your custom logo and title
-    binding.customLogo?.alpha = 1f
-    binding.customLogo?.scaleX = 1f
-    binding.customLogo?.scaleY = 1f
-    binding.welcomeTitle.alpha = 1f
-    binding.welcomeTitle.scaleX = 1f
-    binding.welcomeTitle.scaleY = 1f
+    // SMOOTH ANIMATION FOR CUSTOM LOGO
+    binding.customLogo?.apply {
+        alpha = 0f
+        scaleX = 1.5f
+        scaleY = 1.5f
+        animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(600L).start()
+    }
+
+    // SMOOTH ANIMATION FOR TITLE
+    binding.welcomeTitle.apply {
+        alpha = 0f
+        scaleX = 1.2f
+        scaleY = 1.2f
+        animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(600L).start()
+    }
     binding.textGuideline.setGuidelinePercent(GUIDELINE_END_PERCENT)
 
-    // 2. Wait 1.5 seconds, then snap to the end state (hides logo, shows dialog)
-    binding.root.postDelayed(1500L) {
+    // Wait 2 seconds before moving to the next step (showing notification dialog / bubble)
+    binding.root.postDelayed(2000L) {
         if (view != null) {
-            snapToIntroEndState()
             introInProgress.value = false
             viewModel.onIntroAnimationFinished()
         }
@@ -331,40 +338,42 @@ class BrandDesignUpdateWelcomePage : OnboardingPageFragment(R.layout.content_onb
     }
 
     private fun snapToIntroEndState() {
-        introAnimatorSet?.cancel()
-        backgroundIntroAnimatorSet?.cancel()
+    introAnimatorSet?.cancel()
+    backgroundIntroAnimatorSet?.cancel()
 
-        with(binding.welcomeTitle) {
-            alpha = 1f
-            scaleX = 1f
-            scaleY = 1f
-        }
-        binding.textGuideline.setGuidelinePercent(GUIDELINE_END_PERCENT)
+    with(binding.welcomeTitle) {
+        alpha = 1f
+        scaleX = 1f
+        scaleY = 1f
+    }
+    binding.textGuideline.setGuidelinePercent(GUIDELINE_END_PERCENT)
 
-        with(binding.logoAnimation) {
-            alpha = 0f
-            scaleX = 1f
-            scaleY = 1f
-        }
-        
-        binding.customLogo?.alpha = 0f
-        binding.customLogo?.scaleX = 1f
-        binding.customLogo?.scaleY = 1f
+    with(binding.logoAnimation) {
+        alpha = 0f
+        scaleX = 1f
+        scaleY = 1f
+    }
+    
+    with(binding.customLogo) {
+        // alpha = 0f  <-- REMOVED: Let the outro animation fade it out smoothly!
+        scaleX = 1f
+        scaleY = 1f
+    }
 
-        with(binding.backgroundPrimary) {
-            alpha = 0f
-            translationY = 0f
-            scaleX = 1f
-            scaleY = 1f
-        }
-        if (viewModel.viewState.value.isCustomAiOnboardingFlow) {
-            prepareDuckAiIntroAnimation()
-            with(binding.duckAiIntroAnimation) {
-                isVisible = true
-                progress = 1f
-            }
+    with(binding.backgroundPrimary) {
+        alpha = 0f
+        translationY = 0f
+        scaleX = 1f
+        scaleY = 1f
+    }
+    if (viewModel.viewState.value.isCustomAiOnboardingFlow) {
+        prepareDuckAiIntroAnimation()
+        with(binding.duckAiIntroAnimation) {
+            isVisible = true
+            progress = 1f
         }
     }
+}
 
     private fun playOutroAnimation(
         nextBackground: OnboardingBackground,

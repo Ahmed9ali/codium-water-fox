@@ -83,22 +83,24 @@
                 android:layout_width="8dp"
                 android:layout_height="0dp" />
 
+            <!-- CHANGED: Background color to transparent so your logo fits nicely -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/comparisonChartHeaderRightIconCard"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                app:cardBackgroundColor="#DE5833"
+                app:cardBackgroundColor="@android:color/transparent"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="0dp"
                 tools:ignore="InvalidColorAttribute">
 
+                <!-- CHANGED: Replaced ddg_logo_full_bleed with my_custom_logo -->
                 <ImageView
                     android:id="@+id/comparisonChartHeaderRightIcon"
                     android:layout_width="31.5dp"
                     android:layout_height="31.5dp"
                     android:layout_gravity="center"
                     android:importantForAccessibility="no"
-                    app:srcCompat="@drawable/ddg_logo_full_bleed" />
+                    app:srcCompat="@drawable/my_custom_logo" />
 
             </com.google.android.material.card.MaterialCardView>
 

@@ -303,6 +303,7 @@ class NewTabPageView @JvmOverloads constructor(
             binding.fireTabEmptyState.root.show()
             binding.indonesiaNewTabSectionView.gone()
             binding.appTrackingProtectionStateView.gone()
+            binding.ddgLogo.isVisible = false // Force hide
             binding.ddgLogo.gone()
             binding.messageCta.gone()
             binding.nextStepsContainer.gone()

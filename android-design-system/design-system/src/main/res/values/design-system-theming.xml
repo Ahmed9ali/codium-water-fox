@@ -31,7 +31,10 @@
 
     <!--  Our base theme, Base.Theme.DuckDuckGo,
     is where we override or define default styles for views and text appearance attributes. -->
-    <style name="Base.Theme.DuckDuckGo" parent="Platform.Theme.DuckDuckGo">
+   <style name="Base.Theme.DuckDuckGo" parent="Platform.Theme.DuckDuckGo">
+    <!-- ADD THIS LINE -->
+    <item name="android:fontFamily">@font/varela_round</item>
+    
 
         <item name="textAppearanceTitle">@style/Typography.DuckDuckGo.Title</item>
         <item name="textAppearanceH1">@style/Typography.DuckDuckGo.H1</item>
@@ -578,7 +581,7 @@
     <style name="Theme.DuckDuckGo.SplashScreen.EdgeToEdge" parent="Theme.DuckDuckGo.SplashScreen" />
 
     <style name="Theme.DuckDuckGo.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_dax_splash_screen_icon</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/@drawable/my_custom_logo</item>
     </style>
 
     <style name="Theme.AppCompat.Transparent.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">

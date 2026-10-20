@@ -104,7 +104,7 @@ class ConfigurableNewTabPageView @JvmOverloads constructor(
                 this.show()
                 onHasContent?.invoke(true)
                 if (viewState.showDax) {
-                    binding.ddgLogo.show()
+                    binding.ddgLogo.gone()
                 } else {
                     binding.ddgLogo.gone()
                 }
