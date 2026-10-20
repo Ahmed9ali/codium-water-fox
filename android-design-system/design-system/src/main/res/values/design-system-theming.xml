@@ -581,7 +581,7 @@
     <style name="Theme.DuckDuckGo.SplashScreen.EdgeToEdge" parent="Theme.DuckDuckGo.SplashScreen" />
 
     <style name="Theme.DuckDuckGo.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenAnimatedIcon">@drawable/@drawable/my_custom_logo</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/my_custom_logo</item>
     </style>
 
     <style name="Theme.AppCompat.Transparent.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
