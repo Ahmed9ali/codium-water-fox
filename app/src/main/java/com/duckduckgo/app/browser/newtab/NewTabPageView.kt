@@ -300,8 +300,8 @@ class NewTabPageView @JvmOverloads constructor(
         // FORCE HIDE DDG LOGO AND DUCK BACKGROUNDS
         binding.ddgLogo.isVisible = false
         homeBackgroundLogo.hideLogo()
-        binding.browserBackground.isVisible = false
-        binding.rebrandBrowserBackground.isVisible = false
+       // binding.browserBackground.isVisible = false
+        //binding.rebrandBrowserBackground.isVisible = false
 
         onHasContent?.invoke(viewState.hasContent)
 
