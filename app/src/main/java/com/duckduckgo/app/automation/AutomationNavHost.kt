@@ -66,8 +66,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
 import com.duckduckgo.app.browser.BrowserActivity
 import com.duckduckgo.app.browser.R
+import com.duckduckgo.app.browser.mode.InAppNavigation
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import com.duckduckgo.mobile.android.R.drawable
 
@@ -185,12 +187,13 @@ fun AutomationNavHost(
                         AutomationEngine.queueAutomationInBrowserTab(config.copy(targetUrl = formattedUrl))
 
                         // 2. Open the target URL directly inside DuckDuckGo BrowserActivity tabs
-                        val browserIntent = BrowserActivity.intent(
-                            context = context,
-                            queryExtra = formattedUrl,
-                        ).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        }
+                       val browserIntent = BrowserActivity.intent(
+    context = context,
+    launchSource = InAppNavigation,
+    queryExtra = formattedUrl,
+).apply {
+    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+}
                         context.startActivity(browserIntent)
 
                         // 3. Close AutomationActivity so the user sees the real DDG Browser Tab immediately
