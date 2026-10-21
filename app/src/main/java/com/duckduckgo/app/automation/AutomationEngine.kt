@@ -18,7 +18,6 @@ package com.duckduckgo.app.automation
 
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -28,7 +27,6 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,9 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -133,7 +131,6 @@ object AutomationEngine {
     private val _dataExhaustedState = MutableLiveData(false)
     val dataExhaustedState: LiveData<Boolean> get() = _dataExhaustedState
 
-    // Compose-observable state for the in-browser floating HUD
     var hudVisible by mutableStateOf(false)
         private set
     var hudState by mutableStateOf(AutomationState.IDLE)
@@ -179,10 +176,6 @@ object AutomationEngine {
         hudTotal = total
     }
 
-    /**
-     * Called from CreateAutomationScreen when the user presses "Start Automation".
-     * Stores the config so the active DuckDuckGo BrowserTabFragment executes it immediately.
-     */
     fun queueAutomationInBrowserTab(config: AutomationConfig) {
         currentConfig = config
         pendingBrowserConfig = config
@@ -191,7 +184,6 @@ object AutomationEngine {
         updateState(AutomationState.NAVIGATING)
         updateStatus("Opening ${config.targetUrl} in browser tab...")
 
-        // If a WebView is already attached, start the loop right away
         val existingWebView = currentWebView?.get()
         if (existingWebView != null) {
             mountHudOverlayIfNeeded(existingWebView)
@@ -216,7 +208,6 @@ object AutomationEngine {
 
         mountHudOverlayIfNeeded(webView)
 
-        // If an automation was queued from CreateAutomationScreen, launch it now on this browser tab!
         val queued = pendingBrowserConfig
         if (queued != null) {
             pendingBrowserConfig = null
@@ -260,9 +251,6 @@ object AutomationEngine {
         }
     }
 
-    /**
-     * Quick-fill helper if triggered directly for a single page.
-     */
     fun fillCurrentPage() {
         val group = VaultRepository.groups.value.firstOrNull() ?: return
         val webView = currentWebView?.get() ?: return
@@ -338,6 +326,7 @@ object AutomationEngine {
         _dataExhaustedState.postValue(false)
         if (choice == "repeat_same") {
             VaultRepository.resetUsed(config.groupName)
+            updateState(AutomationState.NAVIGATING)
             automationJob?.cancel()
             automationJob = scope.launch {
                 runAutomationLoop(config, navigateFirstCycle = true)
@@ -365,7 +354,6 @@ object AutomationEngine {
         var isFirstIteration = true
 
         while (hudCompleted < config.targetRepeatCount && scope.isActive) {
-            // 1. Check if dataset has unused records
             if (!VaultRepository.hasUnusedData(config.groupName)) {
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
@@ -373,16 +361,15 @@ object AutomationEngine {
                 return
             }
 
-            // 2. Lease 1-by-1 profile
             val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode)
             if (profile == null) {
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
+                updateStatus("Dataset profile allocation failed. Choose action.")
                 return
             }
             currentProfile = profile
 
-            // 3. Clear Tab Data & Cookies between runs if enabled
             if (config.clearTabBetweenRuns && hudCompleted > 0) {
                 updateState(AutomationState.CLEARING_DATA)
                 updateStatus("Clearing tab cookies, storage & cache...")
@@ -390,7 +377,6 @@ object AutomationEngine {
                 delay(500)
             }
 
-            // 4. Navigate to Target URL (or wait for BrowserActivity's initial load on cycle #1)
             updateState(AutomationState.NAVIGATING)
             if (!isFirstIteration || navigateFirstCycle) {
                 updateStatus("Loading ${config.targetUrl}...")
@@ -399,7 +385,6 @@ object AutomationEngine {
                 }
             } else {
                 updateStatus("Waiting for page ${config.targetUrl} to ready...")
-                // If WebView hasn't started loading the target URL yet, trigger it
                 val currentUrl = withContext(Dispatchers.Main) { webView.url.orEmpty() }
                 if (currentUrl.isBlank() || currentUrl == "about:blank") {
                     withContext(Dispatchers.Main) {
@@ -413,7 +398,6 @@ object AutomationEngine {
             injectScanner()
             delay(600)
 
-            // 5. Multi-Step Form Execution (Step 1 -> Next -> Step 2 -> Submit)
             var stepSuccess = false
             var multiStepCounter = 0
 
@@ -437,18 +421,21 @@ object AutomationEngine {
 
                 currentActionRef = scanObj.optString("actionButtonRef").takeIf { it.isNotBlank() }
 
-                // Match fields against leased 1-by-1 profile
                 val fillArray = JSONArray()
+                val singleFallbackValue = if (profile.fields.size == 1) profile.fields.values.firstOrNull() else null
+
                 for (i in 0 until fieldsArr.length()) {
                     val fieldObj = fieldsArr.getJSONObject(i)
                     val ref = fieldObj.optString("ref")
                     val looksLike = fieldObj.optString("looksLike")
                     val name = fieldObj.optString("name")
+                    val tag = fieldObj.optString("tag")
 
                     val matchedValue = if (looksLike == "termsCheckbox") {
                         "true"
                     } else {
-                        profile.resolveForField(looksLike, name)
+                        profile.resolveForField(looksLike, name, tag)
+                            ?: if (fieldsArr.length() == 1) singleFallbackValue else null
                     }
 
                     if (!matchedValue.isNullOrBlank()) {
@@ -463,7 +450,6 @@ object AutomationEngine {
 
                 if (fillArray.length() == 0) {
                     if (multiStepCounter == 1) {
-                        // Retry scan once if SPA form rendered slightly late
                         delay(1200)
                         injectScanner()
                         val retryScanJson = evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")
@@ -491,7 +477,6 @@ object AutomationEngine {
                 evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill($fillArg, $optArg));")
                 delay(500)
 
-                // Click Next / Submit & Settle
                 updateState(AutomationState.CLICKING_NEXT)
                 val btnName = scanObj.optString("actionButtonName").ifBlank { "Next / Submit" }
                 updateStatus("Clicking '$btnName' & checking next step...")
@@ -516,7 +501,6 @@ object AutomationEngine {
                     return
                 }
 
-                // Wait for any full-page navigation triggered by clicking Next/Submit
                 delay(600)
                 waitForPageReady(webView)
                 injectScanner()
@@ -543,7 +527,6 @@ object AutomationEngine {
                 }
 
                 if (unfilledNextStepCount > 0 && verdict != "validation_error" && verdict != "no_button_found") {
-                    // Page moved to Step 2 of the form! Loop continues with the SAME profile.
                     updateStatus("Moved to Step ${multiStepCounter + 1} — continuing with same profile...")
                     delay(400)
                 } else {
@@ -558,7 +541,7 @@ object AutomationEngine {
                 updateProgress(nextDone, config.targetRepeatCount)
                 updateStatus("Completed cycle $nextDone of ${config.targetRepeatCount}")
             } else {
-                updateStatus("No fillable form found on page.")
+                updateStatus("No matching fields found for '${config.groupName}' on this page.")
                 break
             }
 
@@ -624,9 +607,6 @@ object AutomationEngine {
     private fun handleFillCompleted(json: String) {}
     private fun handleStepSettled(json: String) {}
 
-    // ============================================================================
-    // FLOATING IN-BROWSER DUCKDUCKGO HUD OVERLAY MOUNTED ON BROWSERTABFRAGMENT
-    // ============================================================================
     private fun mountHudOverlayIfNeeded(webView: WebView) {
         val parent = webView.parent as? ViewGroup ?: return
         if (parent.findViewWithTag<ComposeView>(HUD_VIEW_TAG) != null) return
@@ -635,7 +615,7 @@ object AutomationEngine {
             tag = HUD_VIEW_TAG
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
-                val isLight = isLightThemeEnabled(context)
+                val isLight = resolveDuckDuckGoIsLight(context)
                 AutomationThemeWrapper(isLightMode = isLight) {
                     BrowserTabAutomationHud()
                 }
@@ -649,24 +629,6 @@ object AutomationEngine {
             gravity = Gravity.BOTTOM
         }
         parent.addView(composeView, params)
-    }
-
-    private fun isLightThemeEnabled(context: Context): Boolean {
-        val prefs = context.getSharedPreferences("com.duckduckgo.app.settings_activity.settings", Context.MODE_PRIVATE)
-        return when (prefs.getString("GLOBAL_THEME", "SYSTEM_DEFAULT")?.uppercase()) {
-            "LIGHT" -> true
-            "DARK" -> false
-            else -> {
-                when (AppCompatDelegate.getDefaultNightMode()) {
-                    AppCompatDelegate.MODE_NIGHT_NO -> true
-                    AppCompatDelegate.MODE_NIGHT_YES -> false
-                    else -> {
-                        val uiMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-                        uiMode != Configuration.UI_MODE_NIGHT_YES
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -705,6 +667,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = if (groupName.isNotBlank()) "Automation · $groupName" else "Browser Automation",
                         color = DuckDuckGoTheme.colors.text.primary,
+                        fontFamily = FontFamily.SansSerif,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -712,6 +675,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = status.ifBlank { "Running..." },
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = FontFamily.SansSerif,
                         fontSize = 12.sp,
                     )
                 }
@@ -742,6 +706,7 @@ private fun BrowserTabAutomationHud() {
             Text(
                 text = "$unusedLeft unused profile(s) remaining in group",
                 color = DuckDuckGoTheme.colors.text.secondary,
+                fontFamily = FontFamily.SansSerif,
                 fontSize = 11.sp,
             )
 
@@ -764,6 +729,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = "Group data finished! Repeat with same data or add new data?",
                         color = DuckDuckGoTheme.colors.text.primary,
+                        fontFamily = FontFamily.SansSerif,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -787,6 +753,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = "Dismiss & Finish",
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = FontFamily.SansSerif,
                         fontSize = 12.sp,
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)

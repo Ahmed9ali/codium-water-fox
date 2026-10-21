@@ -23,24 +23,29 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.core.view.WindowCompat
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 
 class AutomationActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        applyDuckDuckGoNightMode()
         super.onCreate(savedInstanceState)
 
         VaultRepository.init(applicationContext)
         AutomationEngine.init(applicationContext)
 
-        val isLight = isDuckDuckGoLightMode()
+        val isLight = resolveDuckDuckGoIsLight(applicationContext)
 
         setContent {
             AutomationThemeWrapper(isLightMode = isLight) {
@@ -67,42 +72,35 @@ class AutomationActivity : ComponentActivity() {
             }
         }
     }
+}
 
-    /**
-     * Reads DuckDuckGo's internal theme setting ("LIGHT", "DARK", or "SYSTEM_DEFAULT")
-     * from SharedPreferences so AutomationActivity never mismatches the browser's theme.
-     */
-    private fun isDuckDuckGoLightMode(): Boolean {
-        val prefs = getSharedPreferences("com.duckduckgo.app.settings_activity.settings", Context.MODE_PRIVATE)
-        val savedTheme = prefs.getString("GLOBAL_THEME", null) ?: "SYSTEM_DEFAULT"
-        return when (savedTheme.uppercase()) {
-            "LIGHT" -> true
-            "DARK" -> false
-            else -> {
-                when (AppCompatDelegate.getDefaultNightMode()) {
-                    AppCompatDelegate.MODE_NIGHT_NO -> true
-                    AppCompatDelegate.MODE_NIGHT_YES -> false
-                    else -> {
-                        val uiMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-                        uiMode != Configuration.UI_MODE_NIGHT_YES
-                    }
-                }
-            }
-        }
+fun resolveDuckDuckGoIsLight(context: Context): Boolean {
+    // 1. DuckDuckGo sets AppCompatDelegate.setDefaultNightMode on startup based on its internal theme
+    when (AppCompatDelegate.getDefaultNightMode()) {
+        AppCompatDelegate.MODE_NIGHT_NO -> return true
+        AppCompatDelegate.MODE_NIGHT_YES -> return false
     }
 
-    private fun applyDuckDuckGoNightMode() {
-        val prefs = getSharedPreferences("com.duckduckgo.app.settings_activity.settings", Context.MODE_PRIVATE)
-        when (prefs.getString("GLOBAL_THEME", "SYSTEM_DEFAULT")?.uppercase()) {
-            "LIGHT" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-            "DARK" -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-        }
+    // 2. Check DuckDuckGo's SharedPreferences files for GLOBAL_THEME
+    val prefNames = listOf(
+        "com.duckduckgo.app.settings_activity.settings",
+        "${context.packageName}_preferences",
+    )
+    for (name in prefNames) {
+        val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
+        val theme = prefs.getString("GLOBAL_THEME", null)?.uppercase()
+        if (theme == "LIGHT") return true
+        if (theme == "DARK") return false
     }
+
+    // 3. Fallback to current configuration
+    val uiMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+    return uiMode != Configuration.UI_MODE_NIGHT_YES
 }
 
 /**
- * Forces [LocalConfiguration] uiMode to match DuckDuckGo's chosen theme before calling [DuckDuckGoTheme],
- * because [DuckDuckGoTheme] internally reads `isSystemInDarkTheme()` from `LocalConfiguration.current`.
+ * Forces [LocalConfiguration] to match DuckDuckGo's Light/Dark setting and overrides
+ * DuckDuckGoTheme's debug cursive/magenta Material3 defaults with clean SansSerif typography and DDG colors.
  */
 @Composable
 fun AutomationThemeWrapper(
@@ -114,9 +112,52 @@ fun AutomationThemeWrapper(
         val nightBits = if (isLightMode) Configuration.UI_MODE_NIGHT_NO else Configuration.UI_MODE_NIGHT_YES
         uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightBits
     }
+
+    val cleanTypography = Typography(
+        displayLarge = TextStyle(fontFamily = FontFamily.SansSerif),
+        displayMedium = TextStyle(fontFamily = FontFamily.SansSerif),
+        displaySmall = TextStyle(fontFamily = FontFamily.SansSerif),
+        headlineLarge = TextStyle(fontFamily = FontFamily.SansSerif),
+        headlineMedium = TextStyle(fontFamily = FontFamily.SansSerif),
+        headlineSmall = TextStyle(fontFamily = FontFamily.SansSerif),
+        titleLarge = TextStyle(fontFamily = FontFamily.SansSerif),
+        titleMedium = TextStyle(fontFamily = FontFamily.SansSerif),
+        titleSmall = TextStyle(fontFamily = FontFamily.SansSerif),
+        bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif),
+        bodyMedium = TextStyle(fontFamily = FontFamily.SansSerif),
+        bodySmall = TextStyle(fontFamily = FontFamily.SansSerif),
+        labelLarge = TextStyle(fontFamily = FontFamily.SansSerif),
+        labelMedium = TextStyle(fontFamily = FontFamily.SansSerif),
+        labelSmall = TextStyle(fontFamily = FontFamily.SansSerif),
+    )
+
     CompositionLocalProvider(LocalConfiguration provides patchedConfig) {
         DuckDuckGoTheme {
-            content()
+            MaterialTheme(
+                typography = cleanTypography,
+                colorScheme = MaterialTheme.colorScheme.copy(
+                    primary = DuckDuckGoTheme.colors.brand.accentBlue,
+                    onPrimary = Color.White,
+                    secondary = DuckDuckGoTheme.colors.brand.accentBlue,
+                    onSecondary = Color.White,
+                    background = DuckDuckGoTheme.colors.backgrounds.background,
+                    onBackground = DuckDuckGoTheme.colors.text.primary,
+                    surface = DuckDuckGoTheme.colors.backgrounds.surface,
+                    onSurface = DuckDuckGoTheme.colors.text.primary,
+                    surfaceVariant = DuckDuckGoTheme.colors.backgrounds.surface,
+                    onSurfaceVariant = DuckDuckGoTheme.colors.text.secondary,
+                    outline = DuckDuckGoTheme.colors.text.secondary,
+                ),
+            ) {
+                ProvideTextStyle(
+                    value = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        color = DuckDuckGoTheme.colors.text.primary,
+                    ),
+                ) {
+                    content()
+                }
+            }
         }
     }
 }

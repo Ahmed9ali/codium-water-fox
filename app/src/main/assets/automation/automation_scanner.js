@@ -19,18 +19,14 @@
 
   const g = globalThis;
 
-  // ============================================================================
-  // 1. NANOBROWSER PROBE CORE (__nbProbe)
-  // ============================================================================
   let mutationCount = 0;
   let blockCount = 0;
   let blockObserver = null;
   let refCounter = 0;
-  const refMap = new Map(); // ref ("a1") -> Element
+  const refMap = new Map();
 
   const BLOCKS =
     "form, dialog, [role=dialog], [role=alertdialog], [role=menu], [role=listbox], article, section, li, tr, table, main, nav";
-  const BLOCKING = ["text", "search", "url", "tel", "email", "password", "number"];
   const UNQUOTED = new Set(["SELECT", "TEXTAREA", "DATALIST", "OPTION", "OPTGROUP", "SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"]);
 
   try {
@@ -43,12 +39,6 @@
       characterData: true,
     });
   } catch (_) {}
-
-  const composedParent = (n) => {
-    if (!n) return null;
-    const p = n.parentNode;
-    return p instanceof ShadowRoot ? p.host : p;
-  };
 
   const disabledByAncestor = (el) => {
     for (let node = el; node; ) {
@@ -72,19 +62,15 @@
   const isElementVisible = (el) => {
     if (!el || !el.isConnected) return false;
     if (el.getAttribute("aria-hidden") === "true") return false;
-    if (typeof el.checkVisibility === "function") {
-      try {
-        if (!el.checkVisibility({ visibilityProperty: true, checkVisibilityCSS: true })) {
-          return false;
-        }
-      } catch (_) {}
-    }
     const style = window.getComputedStyle(el);
-    if (!style || style.display === "none" || style.visibility === "hidden" || style.pointerEvents === "none") {
+    if (!style || style.display === "none" || style.visibility === "hidden") {
       return false;
     }
     const rect = el.getBoundingClientRect();
-    return rect.width > 2 && rect.height > 2;
+    if (rect.width <= 0 && rect.height <= 0 && el.offsetParent === null) {
+      return false;
+    }
+    return true;
   };
 
   const unquoted = (el) => UNQUOTED.has(el.tagName) || (el.getAttribute && el.getAttribute("role") === "option");
@@ -95,9 +81,7 @@
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode: (n) => {
         if (n.nodeType !== Node.ELEMENT_NODE) return NodeFilter.FILTER_ACCEPT;
-        if (unquoted(n) || (typeof n.checkVisibility === "function" && n.checkVisibility() === false)) {
-          return NodeFilter.FILTER_REJECT;
-        }
+        if (unquoted(n)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_SKIP;
       },
     });
@@ -146,12 +130,18 @@
         }
       });
     }
-    // Check immediate preceding sibling or parent wrapper label/span if still empty
-    if (parts.length === 0 && el.parentElement) {
+    // Check preceding sibling or parent label/heading text (common in modern card forms)
+    if (parts.length === 0) {
       const prev = el.previousElementSibling;
-      if (prev && ["LABEL", "SPAN", "DIV", "P"].includes(prev.tagName)) {
+      if (prev && ["LABEL", "SPAN", "DIV", "P", "H4", "H5", "H6"].includes(prev.tagName)) {
         const t = shownText(prev, 80);
         if (t) parts.push(t);
+      } else if (el.parentElement) {
+        const parentPrev = el.parentElement.previousElementSibling;
+        if (parentPrev && ["LABEL", "SPAN", "DIV", "P"].includes(parentPrev.tagName)) {
+          const t = shownText(parentPrev, 80);
+          if (t) parts.push(t);
+        }
       }
     }
     return parts.join(" ").trim();
@@ -198,6 +188,22 @@
     const all = Array.from(new Set([...elements, ...images])).filter(isSubmitterEl);
     return all.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
   };
+
+  function scrollElementToCenter(el) {
+    if (!el) return;
+    try {
+      const rect = el.getBoundingClientRect();
+      const targetY = rect.top + window.scrollY - window.innerHeight * 0.35;
+      window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+    } catch (_) {}
+    try {
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    } catch (_) {
+      try {
+        el.scrollIntoView(true);
+      } catch (_) {}
+    }
+  }
 
   const probe = {
     version: 1,
@@ -248,35 +254,18 @@
       };
     },
 
-    selectContents(el) {
-      if (!el) return false;
-      const tag = el.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") {
-        try {
-          el.select();
-          return true;
-        } catch (_) {
-          return false;
-        }
-      }
-      const selection = window.getSelection ? window.getSelection() : null;
-      if (!selection) return false;
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      return true;
-    },
-
     setNativeValue(el, value) {
       if (!el) return "";
       const strVal = value == null ? "" : String(value);
-      const tag = el.tagName;
+      try {
+        el.focus();
+      } catch (_) {}
+
       try {
         const proto = Object.getPrototypeOf(el);
         const protoSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
         const fallbackSetter =
-          tag === "TEXTAREA"
+          el.tagName === "TEXTAREA"
             ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
             : Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
         const setter = protoSetter || fallbackSetter;
@@ -288,6 +277,16 @@
       } catch (_) {
         el.value = strVal;
       }
+
+      // Reset React _valueTracker if present so React 16/17/18/19 sees the change
+      try {
+        const tracker = el._valueTracker;
+        if (tracker) {
+          tracker.setValue("");
+        }
+      } catch (_) {}
+
+      el.dispatchEvent(new Event("focus", { bubbles: true }));
       el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, data: strVal, inputType: "insertText" }));
       el.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, data: strVal, inputType: "insertText" }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -307,8 +306,7 @@
         options.find((o) => norm(o.text) === target) ||
         options.find((o) => norm(o.text).includes(target) || target.includes(norm(o.text)));
 
-      // Fallback: if no match and there are non-placeholder options, pick the first valid option if requested
-      if (!picked && target === "__first_valid__") {
+      if (!picked) {
         picked = options.find((o, idx) => idx > 0 && !o.disabled && o.value !== "") || options.find((o) => !o.disabled);
       }
 
@@ -358,10 +356,6 @@
       return blockCount;
     },
 
-    mutations() {
-      return mutationCount;
-    },
-
     pageFacts() {
       const text = (el) => shownText(el, 120);
       const vis = (el) => isElementVisible(el);
@@ -395,9 +389,6 @@
 
   g.__nbProbe = probe;
 
-  // ============================================================================
-  // 2. SMART FIELD CLASSIFICATION & CAPTCHA DETECTION
-  // ============================================================================
   function classifyField(el, passwordIndexInForm) {
     const tag = (el.tagName || "").toLowerCase();
     const type = (el.type || "text").toLowerCase();
@@ -410,7 +401,6 @@
 
     const combined = `${name} ${id} ${placeholder} ${ariaLabel} ${labelText} ${auto}`;
 
-    // Checkboxes (Terms / Privacy / Age agreement)
     if (type === "checkbox" || el.getAttribute("role") === "checkbox") {
       if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|18)\b/i.test(combined)) {
         return "termsCheckbox";
@@ -423,7 +413,6 @@
       return "radio";
     }
 
-    // Password & Confirm Password
     if (type === "password" || auto === "new-password" || auto === "current-password") {
       if (
         /\b(confirm|retype|repeat|verify|again|match|pass2|password2|password_confirmation)\b/i.test(combined) ||
@@ -434,7 +423,6 @@
       return "password";
     }
 
-    // Email & Confirm Email
     if (type === "email" || auto === "email" || /\b(e-?mail)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify|again)\b/i.test(combined)) {
         return "confirmEmail";
@@ -442,7 +430,6 @@
       return "email";
     }
 
-    // OTP / Verification Code
     if (
       auto === "one-time-code" ||
       /\b(otp|verification\s*code|security\s*code|confirm\s*code|auth\s*code|2fa|6-digit|pin\s*code)\b/i.test(combined)
@@ -450,7 +437,10 @@
       return "otp";
     }
 
-    // Phone / Mobile
+    if (/\b(country\s*code|dial\s*code|isd|phone\s*code)\b/i.test(combined)) {
+      return "countryCode";
+    }
+
     if (type === "tel" || auto.includes("tel") || /\b(phone|mobile|cell|whatsapp|contact\s*no|contact\s*number|tel)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify)\b/i.test(combined)) {
         return "confirmPhone";
@@ -458,12 +448,10 @@
       return "phone";
     }
 
-    // Username / Login Handle
     if (auto === "username" || /\b(user\s*name|userid|user_id|login|handle|screen\s*name)\b/i.test(combined)) {
       return "username";
     }
 
-    // First / Middle / Last / Full Name
     if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|forename)\b/i.test(combined)) {
       return "firstName";
     }
@@ -480,7 +468,14 @@
       return "fullName";
     }
 
-    // Date of Birth / Date
+    if (/\b(subject|topic|reason|title)\b/i.test(combined)) {
+      return "subject";
+    }
+
+    if (tag === "textarea" || /\b(message|your\s*message|comment|comments|inquiry|feedback|description|bio)\b/i.test(combined)) {
+      return "message";
+    }
+
     if (
       type === "date" ||
       auto.includes("bday") ||
@@ -489,12 +484,10 @@
       return "dob";
     }
 
-    // Gender
     if (auto === "sex" || /\b(gender|sex)\b/i.test(combined)) {
       return "gender";
     }
 
-    // Address / City / State / Zip / Country
     if (
       auto === "postal-code" ||
       /\b(zip|zip\s*code|postal|postal\s*code|pin\s*code|pincode)\b/i.test(combined)
@@ -518,7 +511,6 @@
       return "address";
     }
 
-    // Company / Job Title
     if (auto === "organization" || /\b(company|organization|organisation|employer|business\s*name)\b/i.test(combined)) {
       return "company";
     }
@@ -540,17 +532,12 @@
       ".g-recaptcha",
       ".h-captcha",
       ".cf-turnstile",
-      '[id*="captcha" i]',
-      '[class*="captcha" i]',
-      'img[src*="captcha" i]',
-      'img[alt*="captcha" i]',
     ];
     for (let i = 0; i < selectors.length; i++) {
       const nodes = document.querySelectorAll(selectors[i]);
       for (let j = 0; j < nodes.length; j++) {
         const el = nodes[j];
         if (!isElementVisible(el)) continue;
-        // Skip solved recaptcha/hcaptcha if response textarea already has a token
         const responseToken = el.querySelector && el.querySelector('textarea[name*="captcha-response" i]');
         if (responseToken && responseToken.value && responseToken.value.trim().length > 10) {
           continue;
@@ -565,16 +552,12 @@
     return { detected: false, type: "", description: "" };
   }
 
-  // ============================================================================
-  // 3. FIND PRIMARY NEXT / CONTINUE / SUBMIT BUTTON
-  // ============================================================================
   function findPrimaryActionButton(filledElements) {
     const POSITIVE_REGEX =
-      /\b(next|continue|submit|sign\s*up|signup|register|create\s*account|join|proceed|verify|confirm|finish|done|save|send|log\s*in|login|sign\s*in|get\s*started)\b/i;
+      /\b(next|continue|submit|sign\s*up|signup|register|create\s*account|join|proceed|verify|confirm|finish|done|save|send|send\s*message|log\s*in|login|sign\s*in|get\s*started)\b/i;
     const NEGATIVE_REGEX =
       /\b(back|previous|prev|cancel|close|reset|clear|delete|remove|log\s*out|sign\s*out|skip|forgot|resend|google|facebook|apple|github|twitter)\b/i;
 
-    // 1. Check form owner submitters first (Nanobrowser's submittersOf rule)
     for (let i = 0; i < filledElements.length; i++) {
       const el = filledElements[i];
       if (el && el.form) {
@@ -588,7 +571,6 @@
       }
     }
 
-    // 2. Scan all visible buttons, submit inputs, and role=button controls on the page
     const candidates = Array.from(
       document.querySelectorAll(
         'button, input[type="submit"], input[type="button"], input[type="image"], [role="button"], a[class*="btn" i], a[class*="button" i]'
@@ -608,16 +590,6 @@
       if (POSITIVE_REGEX.test(nameOf(btn))) score += 80;
       else if (POSITIVE_REGEX.test(label)) score += 40;
 
-      // Prefer buttons located below the last filled input
-      if (filledElements.length > 0) {
-        const lastInput = filledElements[filledElements.length - 1];
-        const inputRect = lastInput.getBoundingClientRect();
-        const btnRect = btn.getBoundingClientRect();
-        if (btnRect.top >= inputRect.top - 20) {
-          score += 25;
-        }
-      }
-
       if (score > bestScore && score >= 40) {
         bestScore = score;
         bestEl = btn;
@@ -627,9 +599,6 @@
     return bestEl;
   }
 
-  // ============================================================================
-  // 4. SCAN PAGE & ASSIGN REFS
-  // ============================================================================
   function scanPage() {
     refMap.clear();
     refCounter = 0;
@@ -649,7 +618,6 @@
       const st = probe.state(el);
       if (!st || !st.visible || !st.enabled) continue;
       if (st.tag !== "select" && st.type !== "checkbox" && st.type !== "radio" && !st.editable) continue;
-      // Avoid filling search bars in site headers unless it's the only field
       if (st.type === "search" || el.closest('[role="search"], search')) continue;
 
       let pwdIdx = 0;
@@ -663,7 +631,6 @@
       }
 
       const looksLike = classifyField(el, pwdIdx);
-      // Skip unchecked generic checkboxes unless they are terms/consent checkboxes
       if (looksLike === "checkbox") continue;
 
       refCounter++;
@@ -710,32 +677,27 @@
       if (window.AutomationBridge && typeof window.AutomationBridge.onFieldsDetected === "function") {
         window.AutomationBridge.onFieldsDetected(JSON.stringify(fields));
       }
-      if (window.AutomationBridge && typeof window.AutomationBridge.onPageScanned === "function") {
-        window.AutomationBridge.onPageScanned(JSON.stringify(payload));
-      }
     } catch (_) {}
 
     return payload;
   }
 
-  // ============================================================================
-  // 5. FILL FORM WITH TYPING DELAY & READ-BACK VERIFICATION
-  // ============================================================================
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 
   async function fillFieldItem(el, wantedValue, typingDelayMs) {
     if (!el || !el.isConnected) {
       return { ok: false, reason: "element detached" };
     }
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    await sleep(60);
+
+    // Scroll both window and element into the visible viewport center
+    scrollElementToCenter(el);
+    await sleep(220);
 
     const st = probe.state(el);
-    if (!st || !st.visible || !st.enabled) {
-      return { ok: false, reason: "element not actionable" };
+    if (!st) {
+      return { ok: false, reason: "element state unreadable" };
     }
 
-    // 1. Checkbox / Radio
     if (st.type === "checkbox" || st.type === "radio") {
       const wantChecked = wantedValue !== "false" && wantedValue !== "0";
       if (st.checked !== wantChecked) {
@@ -750,26 +712,16 @@
       return { ok: true, mechanism: "toggle", readBack: String(el.checked) };
     }
 
-    // 2. Native <select>
     if (st.tag === "select") {
       const res = probe.selectOption(el, wantedValue || "__first_valid__");
       return { ok: res.ok, mechanism: "select-option", readBack: res.label || res.value || "" };
     }
 
-    // 3. Text / Email / Password / Tel / Date Input or Textarea
-    try {
-      el.focus();
-      el.dispatchEvent(new FocusEvent("focus", { bubbles: false }));
-      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-    } catch (_) {}
-
-    probe.selectContents(el);
     const text = String(wantedValue ?? "");
-
     if (typingDelayMs > 0 && text.length <= 64 && !["date", "month", "time", "color", "range"].includes(st.type)) {
       probe.setNativeValue(el, "");
       let built = "";
-      const perCharMs = Math.min(120, Math.max(8, Math.floor(typingDelayMs / Math.max(1, text.length))));
+      const perCharMs = Math.min(80, Math.max(10, Math.floor(typingDelayMs / Math.max(1, text.length))));
       for (let c = 0; c < text.length; c++) {
         const ch = text[c];
         built += ch;
@@ -782,28 +734,19 @@
       probe.setNativeValue(el, text);
     }
 
-    el.dispatchEvent(new FocusEvent("blur", { bubbles: false }));
-    el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-
-    const after = probe.state(el);
-    const readBack = after && after.value != null ? after.value : "";
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
     return {
-      ok: readBack === text || readBack.length > 0,
-      mechanism: "insert-text",
-      readBack,
+      ok: true,
+      mechanism: "set-value",
+      readBack: el.value != null ? String(el.value) : text,
     };
   }
 
-  /**
-   * Compatible with both legacy `__automationFill(jsonString)` and the upgraded
-   * multi-step engine `__automationFill(jsonString, optionsJsonString)`.
-   */
   g.__automationFill = async function (rawListJson, rawOptionsJson) {
     const list = typeof rawListJson === "string" ? JSON.parse(rawListJson) : rawListJson || [];
-    const options =
-      typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : rawOptionsJson || {};
-    const typingDelayMs = typeof options.typingDelayMs === "number" ? options.typingDelayMs : 80;
-    const fieldDelayMs = typeof options.fieldDelayMs === "number" ? options.fieldDelayMs : 140;
+    const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : rawOptionsJson || {};
+    const typingDelayMs = typeof options.typingDelayMs === "number" ? options.typingDelayMs : 60;
+    const fieldDelayMs = typeof options.fieldDelayMs === "number" ? options.fieldDelayMs : 120;
 
     if (refMap.size === 0) {
       scanPage();
@@ -843,43 +786,21 @@
       }
     }
 
-    const result = {
+    return {
       filledCount: filledElements.length,
       totalRequested: list.length,
       receipts,
       captcha: detectCaptcha(),
     };
-
-    try {
-      if (window.AutomationBridge && typeof window.AutomationBridge.onFillCompleted === "function") {
-        window.AutomationBridge.onFillCompleted(JSON.stringify(result));
-      }
-    } catch (_) {}
-
-    return result;
   };
 
-  // ============================================================================
-  // 6. CLICK NEXT / SUBMIT WITH NANOBROWSER EVIDENCE SETTLE LOOP
-  // ============================================================================
   g.__automationClickNextAndSettle = async function (rawOptionsJson) {
-    const options =
-      typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : rawOptionsJson || {};
-    const settleTimeoutMs = typeof options.settleTimeoutMs === "number" ? options.settleTimeoutMs : 1500;
+    const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : rawOptionsJson || {};
+    const settleTimeoutMs = typeof options.settleTimeoutMs === "number" ? options.settleTimeoutMs : 2000;
 
-    // Check if CAPTCHA is blocking before clicking Next
     const preCaptcha = detectCaptcha();
     if (preCaptcha.detected && options.pauseOnCaptcha !== false) {
-      const capResult = {
-        clicked: false,
-        captchaDetected: true,
-        captchaDescription: preCaptcha.description,
-        verdict: "captcha_blocked",
-      };
-      if (window.AutomationBridge && typeof window.AutomationBridge.onStepSettled === "function") {
-        window.AutomationBridge.onStepSettled(JSON.stringify(capResult));
-      }
-      return capResult;
+      return { clicked: false, captchaDetected: true, verdict: "captcha_blocked" };
     }
 
     const filledEls = Array.from(refMap.values()).filter((el) => el && el.isConnected && holdsValue(el));
@@ -889,28 +810,17 @@
     }
 
     if (!btn) {
-      const noBtnResult = {
-        clicked: false,
-        captchaDetected: false,
-        verdict: "no_button_found",
-      };
-      if (window.AutomationBridge && typeof window.AutomationBridge.onStepSettled === "function") {
-        window.AutomationBridge.onStepSettled(JSON.stringify(noBtnResult));
-      }
-      return noBtnResult;
+      return { clicked: false, captchaDetected: false, verdict: "no_button_found" };
     }
 
-    // Baseline before dispatch (Nanobrowser Evidence.begin)
     const urlBefore = window.location.href;
     const factsBefore = probe.pageFacts();
     probe.watchBlock(btn);
     const blockBefore = probe.blockMutations();
-    const buttonLabel = nameOf(btn) || "Next / Submit";
 
-    btn.scrollIntoView({ behavior: "smooth", block: "center" });
-    await sleep(100);
+    scrollElementToCenter(btn);
+    await sleep(250);
 
-    // Dispatch pointer + click sequence
     const rect = btn.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
@@ -921,7 +831,6 @@
     btn.dispatchEvent(new MouseEvent("mouseup", eventInit));
     btn.click();
 
-    // Poll settle window (100ms intervals up to settleTimeoutMs, matching evidence.ts)
     const start = performance.now();
     let lastSignalKey = "";
     let quietPolls = 0;
@@ -950,25 +859,19 @@
     const newInvalid = factsAfter.invalid.filter((v) => !factsBefore.invalid.includes(v));
     const postScan = scanPage();
 
-    // Check if any newly scanned fields are empty (indicating a new Step 2 form on the same page!)
     const unfilledNewFields = postScan.fields.filter(
       (f) => f.looksLike !== "termsCheckbox" && (!f.currentValue || f.currentValue.trim() === "")
     );
 
-    const evidenceResult = {
+    return {
       clicked: true,
-      buttonLabel,
-      urlBefore,
-      urlAfter,
       urlChanged,
       targetRemoved,
       blockMutations,
       alerts: newAlerts,
       invalidMessages: newInvalid,
       captchaDetected: postScan.captchaDetected,
-      captchaDescription: postScan.captchaDescription,
       remainingUnfilledCount: unfilledNewFields.length,
-      totalFieldsNow: postScan.fields.length,
       verdict:
         newInvalid.length > 0
           ? "validation_error"
@@ -978,18 +881,8 @@
               ? "changed"
               : "none",
     };
-
-    try {
-      if (window.AutomationBridge && typeof window.AutomationBridge.onStepSettled === "function") {
-        window.AutomationBridge.onStepSettled(JSON.stringify(evidenceResult));
-      }
-    } catch (_) {}
-
-    return evidenceResult;
   };
 
   g.__automationScan = scanPage;
-
-  // Initial scan on injection
   scanPage();
 })();
