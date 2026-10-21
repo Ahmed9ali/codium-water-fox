@@ -762,8 +762,8 @@ private fun BrowserTabAutomationHud() {
                 }
 
                 AutomationState.COMPLETED -> {
-                    DdkPrimaryButton(
-                        text = "Done — Dismiss Banner",
+                    DdgPrimaryButton(
+                        text = "Automation Finished",
                         onClick = { AutomationEngine.stopAutomation() },
                     )
                 }
