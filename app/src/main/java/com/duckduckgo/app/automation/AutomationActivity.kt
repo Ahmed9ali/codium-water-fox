@@ -33,16 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.core.view.WindowCompat
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
-import com.duckduckgo.mobile.android.R
-
-// ADDED: Custom Font Family
-val VarelaRound = FontFamily(
-    Font(R.font.varela_round)
-)
 
 class AutomationActivity : ComponentActivity() {
 
