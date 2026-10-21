@@ -16,49 +16,40 @@
 
 package com.duckduckgo.app.automation
 
-import android.webkit.JavascriptInterface
-import android.widget.Toast
 import android.os.Handler
 import android.os.Looper
+import android.webkit.JavascriptInterface
+import android.util.Log
 
-/**
- * JS bridge exposed to every page as `window.AutomationBridge`.
- *
- * Anything annotated with @JavascriptInterface is callable from JavaScript running inside the
- * WebView. This is how the scanner tells the app "I found N fields on this page".
- */
-class AutomationBridge {
+class AutomationBridge(
+    private val onFieldsDetectedCallback: (String) -> Unit,
+    private val onPageScannedCallback: (String) -> Unit,
+    private val onFillCompletedCallback: (String) -> Unit,
+    private val onStepSettledCallback: (String) -> Unit,
+) {
+    private val handler = Handler(Looper.getMainLooper())
 
-    /**
-     * Called from automation_scanner.js when it finishes scanning the page.
-     * The payload is a JSON array of detected fields — see DetectedField in AutomationEngine.
-     */
     @JavascriptInterface
     fun onFieldsDetected(json: String) {
-        // Show a diagnostic toast so we can see in real time whether the JS actually reached us.
-        Handler(Looper.getMainLooper()).post {
-            try {
-                Toast.makeText(
-                    AutomationEngineContextHolder.context,
-                    "Bridge received: ${json.take(80)}",
-                    Toast.LENGTH_LONG,
-                ).show()
-            } catch (_: Exception) {}
-        }
-
-        // Forward to the engine, which parses JSON and updates the LiveData the omnibar observes.
-        AutomationEngine.onFieldsDetected(json)
+        Log.d("AutomationBridge", "onFieldsDetected: $json")
+        handler.post { onFieldsDetectedCallback(json) }
     }
-}
 
-/**
- * Holds the Application context so the bridge (which has no context of its own) can show toasts.
- * AutomationEngine calls this from init(); it is a no-op if init hasn't been called yet.
- */
-internal object AutomationEngineContextHolder {
-    var context: android.content.Context? = null
+    @JavascriptInterface
+    fun onPageScanned(json: String) {
+        Log.d("AutomationBridge", "onPageScanned: $json")
+        handler.post { onPageScannedCallback(json) }
+    }
 
-    init {
-        // Nothing to do at object init; context is set from AutomationEngine.init()
+    @JavascriptInterface
+    fun onFillCompleted(json: String) {
+        Log.d("AutomationBridge", "onFillCompleted: $json")
+        handler.post { onFillCompletedCallback(json) }
+    }
+
+    @JavascriptInterface
+    fun onStepSettled(json: String) {
+        Log.d("AutomationBridge", "onStepSettled: $json")
+        handler.post { onStepSettledCallback(json) }
     }
 }

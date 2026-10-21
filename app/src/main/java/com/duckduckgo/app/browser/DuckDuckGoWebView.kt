@@ -99,17 +99,26 @@ class DuckDuckGoWebView :
     lateinit var duckAiTextSelectionDecorator: DuckAiTextSelectionDecorator
 
     constructor(context: Context) : this(context, null)
+
     constructor(
         context: Context,
         attrs: AttributeSet?,
     ) : super(context, attrs) {
         isNestedScrollingEnabled = true
         try {
-            addJavascriptInterface(AutomationBridge(), "AutomationBridge")
+            addJavascriptInterface(createAutomationBridge(), "AutomationBridge")
         } catch (e: Exception) {
             logcat(ERROR) { "AutomationBridge: failed to add JS interface: ${e.asLog()}" }
         }
     }
+
+    private fun createAutomationBridge(): AutomationBridge =
+        AutomationBridge(
+            onFieldsDetectedCallback = { json -> AutomationEngine.onFieldsDetected(json) },
+            onPageScannedCallback = { _ -> },
+            onFillCompletedCallback = { _ -> },
+            onStepSettledCallback = { _ -> },
+        )
 
     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
         super.startActionMode(decorate(callback))
@@ -240,10 +249,9 @@ class DuckDuckGoWebView :
                 object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                         client.onPageStarted(view, url, favicon)
-                        // Re-register the JS bridge on every page load. Safe to call repeatedly.
                         try {
                             this@DuckDuckGoWebView.addJavascriptInterface(
-                                AutomationBridge(),
+                                createAutomationBridge(),
                                 "AutomationBridge",
                             )
                         } catch (e: Exception) {
@@ -353,9 +361,7 @@ class DuckDuckGoWebView :
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
         val inputConnection = super.onCreateInputConnection(outAttrs) ?: return null
-
         addNoPersonalisedFlag(outAttrs)
-
         return inputConnection
     }
 
@@ -386,7 +392,6 @@ class DuckDuckGoWebView :
 
             MotionEvent.ACTION_MOVE -> {
                 var deltaY = lastY - eventY
-
                 lastClampedTopY = deltaY <= 0
 
                 if (dispatchNestedPreScroll(0, deltaY, scrollConsumed, scrollOffset)) {

@@ -1163,7 +1163,6 @@ class BrowserTabFragment :
 
     private fun resumeWebView() {
         logcat { "Resuming webview: $tabId" }
-
         if (omnibar.viewMode == ViewMode.DuckAI) {
             logcat { "Duck.ai: resume in Duck.ai mode" }
             appCoroutineScope.launch(dispatchers.main()) {
@@ -1174,6 +1173,11 @@ class BrowserTabFragment :
         }
 
         webView?.let { webView ->
+            // --- HOOK: Attach AutomationEngine and mount HUD overlay on active tab ---
+            com.duckduckgo.app.automation.AutomationEngine.init(requireContext())
+            com.duckduckgo.app.automation.AutomationEngine.attachWebView(webView)
+            // ------------------------------------------------------------------------
+
             if (webView.isShown) {
                 webView.onResume()
             } else if (swipingTabsFeature.isEnabled) {
@@ -1190,6 +1194,7 @@ class BrowserTabFragment :
             }
         }
     }
+
 
     // This is a hack to make sure the WebView content is always rendered when the fragment is resumed
     private fun DuckDuckGoWebView.ensureVisible() =
@@ -4362,6 +4367,9 @@ class BrowserTabFragment :
             configureWebViewForAutofill(it)
             printInjector.addJsInterface(it) { viewModel.printFromWebView() }
             autoconsent.addJsInterface(it, autoconsentCallback)
+            com.duckduckgo.app.automation.AutomationEngine.init(requireContext())
+            com.duckduckgo.app.automation.AutomationEngine.attachWebView(it)
+
             contentScopeScripts.register(
                 it,
                 object : JsMessageCallback() {
