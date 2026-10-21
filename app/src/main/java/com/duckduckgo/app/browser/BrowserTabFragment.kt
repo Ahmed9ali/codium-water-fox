@@ -1173,10 +1173,11 @@ class BrowserTabFragment :
         }
 
         webView?.let { webView ->
-            // --- HOOK: Attach AutomationEngine and mount HUD overlay on active tab ---
+              // --- HOOK: Attach AutomationEngine (tab-scoped) ---
             com.duckduckgo.app.automation.AutomationEngine.init(requireContext())
-            com.duckduckgo.app.automation.AutomationEngine.attachWebView(webView)
-            // ------------------------------------------------------------------------
+            webView.automationTabId = tabId
+            com.duckduckgo.app.automation.AutomationEngine.attachWebView(webView, tabId)
+            // -------------------------------------------------
 
             if (webView.isShown) {
                 webView.onResume()
@@ -4368,7 +4369,8 @@ class BrowserTabFragment :
             printInjector.addJsInterface(it) { viewModel.printFromWebView() }
             autoconsent.addJsInterface(it, autoconsentCallback)
             com.duckduckgo.app.automation.AutomationEngine.init(requireContext())
-            com.duckduckgo.app.automation.AutomationEngine.attachWebView(it)
+            it.automationTabId = tabId
+            com.duckduckgo.app.automation.AutomationEngine.attachWebView(it, tabId)
 
             contentScopeScripts.register(
                 it,
@@ -5237,14 +5239,18 @@ class BrowserTabFragment :
         }
     }
 
-    private fun onTabHidden() {
+        private fun onTabHidden() {
         if (!isAdded) return
         viewModel.onViewHidden()
         downloadMessagesJob.cancel()
         webView?.onPause()
+
+        // Automation: clear active-tab scope so this tab's field count doesn't
+        // drive the newly-active tab's bot icon.
+        com.duckduckgo.app.automation.AutomationEngine.clearActiveTab(tabId)
     }
 
-    private fun onTabVisible() {
+        private fun onTabVisible() {
         if (!isAdded) return
         webView?.onResume()
         // ViewPager2 can keep neighbors STARTED/RESUMED; expand so a bottom omnibar that was scrolled
@@ -5252,6 +5258,10 @@ class BrowserTabFragment :
         omnibar.setExpanded(true)
         launchDownloadMessagesJob()
         viewModel.onViewVisible(reportLandingFocus = false)
+
+        // Automation: this tab is now the active tab. Re-scan so the bot icon reflects its current page.
+        com.duckduckgo.app.automation.AutomationEngine.setActiveTab(tabId)
+        com.duckduckgo.app.automation.AutomationEngine.injectScanner()
     }
 
     private fun launchDownloadMessagesJob() {
@@ -5320,7 +5330,7 @@ class BrowserTabFragment :
         configureWebView()
     }
 
-    override fun onDestroy() {
+        override fun onDestroy() {
         logcat { "Duck.ai: onDestroy" }
         dismissAppLinkSnackBar()
         supervisorJob.cancel()
@@ -5330,6 +5340,7 @@ class BrowserTabFragment :
         automaticFireproofDialog?.dismiss()
         privacyProSkippedOnboardingBottomSheet?.dismiss()
         browserAutofill.removeJsInterface()
+        com.duckduckgo.app.automation.AutomationEngine.detachWebView()
         destroyWebView()
         super.onDestroy()
     }

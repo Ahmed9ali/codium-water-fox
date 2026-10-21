@@ -18,38 +18,43 @@ package com.duckduckgo.app.automation
 
 import android.os.Handler
 import android.os.Looper
-import android.webkit.JavascriptInterface
 import android.util.Log
+import android.webkit.JavascriptInterface
 
+/**
+ * JS ⇄ Kotlin bridge. Every callback carries the originating [tabId] so
+ * the engine can scope state to the correct tab (multi-tab safety, spec §18).
+ */
 class AutomationBridge(
-    private val onFieldsDetectedCallback: (String) -> Unit,
-    private val onPageScannedCallback: (String) -> Unit,
-    private val onFillCompletedCallback: (String) -> Unit,
-    private val onStepSettledCallback: (String) -> Unit,
+    private val tabId: String?,
+    private val onFieldsDetectedCallback: (String, String?) -> Unit,
+    private val onPageScannedCallback: (String, String?) -> Unit,
+    private val onFillCompletedCallback: (String, String?) -> Unit,
+    private val onStepSettledCallback: (String, String?) -> Unit,
 ) {
     private val handler = Handler(Looper.getMainLooper())
 
     @JavascriptInterface
     fun onFieldsDetected(json: String) {
-        Log.d("AutomationBridge", "onFieldsDetected: $json")
-        handler.post { onFieldsDetectedCallback(json) }
+        Log.d("AutomationBridge", "onFieldsDetected[$tabId]: $json")
+        handler.post { onFieldsDetectedCallback(json, tabId) }
     }
 
     @JavascriptInterface
     fun onPageScanned(json: String) {
-        Log.d("AutomationBridge", "onPageScanned: $json")
-        handler.post { onPageScannedCallback(json) }
+        Log.d("AutomationBridge", "onPageScanned[$tabId]: $json")
+        handler.post { onPageScannedCallback(json, tabId) }
     }
 
     @JavascriptInterface
     fun onFillCompleted(json: String) {
-        Log.d("AutomationBridge", "onFillCompleted: $json")
-        handler.post { onFillCompletedCallback(json) }
+        Log.d("AutomationBridge", "onFillCompleted[$tabId]: $json")
+        handler.post { onFillCompletedCallback(json, tabId) }
     }
 
     @JavascriptInterface
     fun onStepSettled(json: String) {
-        Log.d("AutomationBridge", "onStepSettled: $json")
-        handler.post { onStepSettledCallback(json) }
+        Log.d("AutomationBridge", "onStepSettled[$tabId]: $json")
+        handler.post { onStepSettledCallback(json, tabId) }
     }
 }

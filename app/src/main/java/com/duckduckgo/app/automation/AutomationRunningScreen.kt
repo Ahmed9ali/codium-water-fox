@@ -131,7 +131,7 @@ fun AutomationRunningScreen(
         AutomationEngine.attachWebView(liveWebView)
         AutomationEngine.startAutomation(config)
 
-        onDispose {
+                onDispose {
             AutomationEngine.state.removeObserver(stateObserver)
             AutomationEngine.completedCount.removeObserver(completedObserver)
             AutomationEngine.totalTargetCount.removeObserver(totalObserver)
@@ -140,6 +140,7 @@ fun AutomationRunningScreen(
             AutomationEngine.dataExhaustedState.removeObserver(exhaustedObserver)
             AutomationEngine.onAutomationFinished = null
             AutomationEngine.onDataExhaustedAction = null
+            AutomationEngine.stopAutomation()
             liveWebView.stopLoading()
             liveWebView.destroy()
         }

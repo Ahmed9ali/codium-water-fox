@@ -628,9 +628,9 @@ class OmnibarLayout @JvmOverloads constructor(
         browserMenu.setOnClickListener {
             omnibarItemPressedListener?.onBrowserMenuPressed()
         }
-       aiChatMenu?.setOnClickListener {
-    AutomationEngine.fillCurrentPage()
-}
+               aiChatMenu?.setOnClickListener {
+            AutomationEngine.onOmnibarBotIconClicked()
+        }
         shieldIcon.setOnClickListener {
             if (isAttachedToWindow) {
                 viewModel.onPrivacyShieldButtonPressed()
@@ -965,7 +965,7 @@ class OmnibarLayout @JvmOverloads constructor(
        // Icon visibility is driven by AutomationEngine.detectedFieldCount observer
 browserMenuHighlight.isVisible = newTransitionState.showBrowserMenuHighlight
 applyAiChatMenuStyling(viewState.showContextualSheetIcon)
-        aiChatDivider.isVisible = (viewState.showVoiceSearch || viewState.showClearButton) && viewState.showChatMenu
+               aiChatDivider.isVisible = (viewState.showVoiceSearch || viewState.showClearButton) && (aiChatMenu?.isVisible == true)
         duckAISidebar.isVisible = newTransitionState.showDuckSidebar
         duckAIBack.isVisible = newTransitionState.showDuckBack
 

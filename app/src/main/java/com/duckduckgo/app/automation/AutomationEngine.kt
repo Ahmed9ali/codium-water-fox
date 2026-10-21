@@ -27,37 +27,14 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -109,6 +86,7 @@ object AutomationEngine {
     private var automationJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    // ---------------- Observed state (LiveData, for legacy observers) ----------------
     private val _detectedFieldCount = MutableLiveData(0)
     val detectedFieldCount: LiveData<Int> get() = _detectedFieldCount
 
@@ -130,8 +108,13 @@ object AutomationEngine {
     private val _dataExhaustedState = MutableLiveData(false)
     val dataExhaustedState: LiveData<Boolean> get() = _dataExhaustedState
 
+    // ---------------- Compose-observed state (for the overlay HUD) ----------------
     var hudVisible by mutableStateOf(false)
         private set
+    var hudMode by mutableStateOf(HudMode.Hidden)
+        private set
+    private var activeTabId: String? = null
+
     var hudState by mutableStateOf(AutomationState.IDLE)
         private set
     var hudCompleted by mutableIntStateOf(0)
@@ -143,6 +126,7 @@ object AutomationEngine {
     var hudGroupName by mutableStateOf("")
         private set
 
+    // ---------------- Internal run state ----------------
     private var currentConfig: AutomationConfig? = null
     private var pendingBrowserConfig: AutomationConfig? = null
     private var currentFieldsJson: JSONArray = JSONArray()
@@ -152,15 +136,22 @@ object AutomationEngine {
     var onAutomationFinished: ((Int) -> Unit)? = null
     var onDataExhaustedAction: ((String) -> Unit)? = null
 
+    // ---------------- Lifecycle ----------------
+
     fun init(context: Context) {
         appContext = context.applicationContext
         VaultRepository.init(context)
+        AutomationScriptRepository.init(context)
     }
 
     private fun updateState(newState: AutomationState) {
         _state.postValue(newState)
         hudState = newState
-        hudVisible = newState != AutomationState.IDLE
+        // Only the runner coroutine calls this with a non-IDLE state. Keep HUD visible
+        // while the runner is active; IDLE transitions are handled explicitly by stopAutomation().
+        if (newState != AutomationState.IDLE) {
+            hudVisible = true
+        }
     }
 
     private fun updateStatus(msg: String) {
@@ -175,37 +166,25 @@ object AutomationEngine {
         hudTotal = total
     }
 
-    fun queueAutomationInBrowserTab(config: AutomationConfig) {
-        currentConfig = config
-        pendingBrowserConfig = config
-        hudGroupName = config.groupName
-        updateProgress(0, config.targetRepeatCount)
-        updateState(AutomationState.NAVIGATING)
-        updateStatus("Opening ${config.targetUrl} in browser tab...")
+    // ---------------- WebView attach / detach ----------------
 
-        val existingWebView = currentWebView?.get()
-        if (existingWebView != null) {
-            mountHudOverlayIfNeeded(existingWebView)
-            pendingBrowserConfig = null
-            startAutomation(config, navigateFirstCycle = false)
-        }
-    }
-
-    fun attachWebView(webView: WebView) {
+    fun attachWebView(webView: WebView, tabId: String? = null) {
         currentWebView = WeakReference(webView)
         try {
             val bridge = AutomationBridge(
-                onFieldsDetectedCallback = { json -> onFieldsDetected(json) },
-                onPageScannedCallback = { json -> handlePageScanned(json) },
-                onFillCompletedCallback = { json -> handleFillCompleted(json) },
-                onStepSettledCallback = { json -> handleStepSettled(json) },
+                tabId = tabId,
+                onFieldsDetectedCallback = { json, tid -> onFieldsDetected(json, tid) },
+                onPageScannedCallback = { _, _ -> handlePageScanned("") },
+                onFillCompletedCallback = { _, _ -> handleFillCompleted("") },
+                onStepSettledCallback = { _, _ -> handleStepSettled("") },
             )
             webView.addJavascriptInterface(bridge, "AutomationBridge")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add JavascriptInterface: ${e.message}")
         }
 
-        mountHudOverlayIfNeeded(webView)
+        // NOTE: HUD is now mounted lazily — from onOmnibarBotIconClicked() and startAutomation().
+        // The previous eager mountHudOverlayIfNeeded(webView) call here was removed (spec §3).
 
         val queued = pendingBrowserConfig
         if (queued != null) {
@@ -218,6 +197,8 @@ object AutomationEngine {
         currentWebView = null
         _detectedFieldCount.postValue(0)
     }
+
+    // ---------------- Scanner injection ----------------
 
     fun injectScanner() {
         val webView = currentWebView?.get() ?: return
@@ -239,7 +220,11 @@ object AutomationEngine {
         }
     }
 
-    fun onFieldsDetected(json: String) {
+    // ---------------- Field detection (tab-scoped) ----------------
+
+    fun onFieldsDetected(json: String, tabId: String?) {
+        // Multi-tab scope (spec §18): only the active tab drives icon visibility.
+        if (tabId == null || tabId != activeTabId) return
         try {
             if (json.contains("\"debug\"")) return
             val arr = JSONArray(json)
@@ -249,6 +234,8 @@ object AutomationEngine {
             _detectedFieldCount.postValue(0)
         }
     }
+
+    // ---------------- Ad-hoc fill (kept for Quick Fill menu item in Slice 3) ----------------
 
     fun fillCurrentPage() {
         val group = VaultRepository.groups.value.firstOrNull() ?: return
@@ -265,11 +252,31 @@ object AutomationEngine {
         )
     }
 
+    // ---------------- Start / pause / resume / stop ----------------
+
+    fun queueAutomationInBrowserTab(config: AutomationConfig) {
+        currentConfig = config
+        pendingBrowserConfig = config
+        hudGroupName = config.groupName
+        updateProgress(0, config.targetRepeatCount)
+        updateState(AutomationState.NAVIGATING)
+        updateStatus("Opening ${config.targetUrl} in browser tab...")
+
+        val existingWebView = currentWebView?.get()
+        if (existingWebView != null) {
+            mountHudOverlayIfNeeded(existingWebView)
+            pendingBrowserConfig = null
+            startAutomation(config, navigateFirstCycle = false)
+        }
+    }
+
     fun startAutomation(config: AutomationConfig, navigateFirstCycle: Boolean = true) {
         currentConfig = config
         hudGroupName = config.groupName
         updateProgress(0, config.targetRepeatCount)
         updateState(AutomationState.NAVIGATING)
+        hudMode = HudMode.Running
+        hudVisible = true
         _captchaState.postValue(false)
         _dataExhaustedState.postValue(false)
 
@@ -312,6 +319,7 @@ object AutomationEngine {
         _dataExhaustedState.postValue(false)
         updateState(AutomationState.IDLE)
         updateStatus("")
+        hudMode = HudMode.Hidden
         hudVisible = false
     }
 
@@ -341,6 +349,8 @@ object AutomationEngine {
             }
         }
     }
+
+    // ---------------- The run loop (unchanged logic from pre-Slice-1) ----------------
 
     private suspend fun runAutomationLoop(config: AutomationConfig, navigateFirstCycle: Boolean) {
         val webView = currentWebView?.get() ?: return
@@ -606,6 +616,64 @@ object AutomationEngine {
     private fun handleFillCompleted(json: String) {}
     private fun handleStepSettled(json: String) {}
 
+    // ------------------------------------------------------------------
+    //  HUD control + tab scoping (spec §2, §3, §18)
+    // ------------------------------------------------------------------
+
+    fun setActiveTab(tabId: String) {
+        if (activeTabId == tabId) return
+        // Menu is tab-scoped → close it. Running/Recording belong to the tab they started on.
+        if (hudMode == HudMode.Menu) {
+            hudMode = HudMode.Hidden
+            hudVisible = false
+        }
+        activeTabId = tabId
+        _detectedFieldCount.postValue(0)
+    }
+
+    fun clearActiveTab(tabId: String) {
+        if (activeTabId != tabId) return
+        activeTabId = null
+        _detectedFieldCount.postValue(0)
+    }
+
+    fun onOmnibarBotIconClicked() {
+        when (hudMode) {
+            HudMode.Recording -> return // Cannot dismiss; Stop is in the panel.
+            HudMode.Running -> {
+                val wv = currentWebView?.get() ?: return
+                mountHudOverlayIfNeeded(wv)
+                hudVisible = true
+            }
+            HudMode.Menu -> {
+                hudMode = HudMode.Hidden
+                hudVisible = false
+            }
+            HudMode.Hidden -> {
+                val wv = currentWebView?.get() ?: return
+                mountHudOverlayIfNeeded(wv)
+                hudMode = HudMode.Menu
+                hudVisible = true
+            }
+        }
+    }
+
+    fun closeHud() {
+        if (hudMode == HudMode.Running) return // Only Stop ends a run.
+        hudMode = HudMode.Hidden
+        hudVisible = false
+    }
+
+    /** Slice 1 scaffold — Slice 2 replaces this with startRecording(). */
+    fun startRecordingScaffold() {
+        hudMode = HudMode.Recording
+        hudVisible = true
+    }
+
+    // ------------------------------------------------------------------
+    //  Overlay mount
+    // ------------------------------------------------------------------
+
     private fun mountHudOverlayIfNeeded(webView: WebView) {
         val parent = webView.parent as? ViewGroup ?: return
         if (parent.findViewWithTag<ComposeView>(HUD_VIEW_TAG) != null) return
@@ -628,172 +696,5 @@ object AutomationEngine {
             gravity = Gravity.BOTTOM
         }
         parent.addView(composeView, params)
-    }
-}
-
-@Composable
-private fun BrowserTabAutomationHud() {
-    if (!AutomationEngine.hudVisible) return
-
-    val state = AutomationEngine.hudState
-    val completed = AutomationEngine.hudCompleted
-    val total = AutomationEngine.hudTotal
-    val status = AutomationEngine.hudStatus
-    val groupName = AutomationEngine.hudGroupName
-    val unusedLeft = if (groupName.isNotBlank()) VaultRepository.unusedProfileCount(groupName) else 0
-
-    val shape = RoundedCornerShape(16.dp)
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
-                .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
-                .padding(14.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (groupName.isNotBlank()) "Automation · $groupName" else "Browser Automation",
-                        color = DuckDuckGoTheme.colors.text.primary,
-                        fontFamily = VarelaRound, // CHANGED
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = status.ifBlank { "Running..." },
-                        color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = VarelaRound, // CHANGED
-                        fontSize = 12.sp,
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                DdgStatusBadge(
-                    text = "$completed / $total",
-                    isPositive = state != AutomationState.WAITING_CAPTCHA_HUMAN &&
-                        state != AutomationState.WAITING_DATA_EXHAUSTED,
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            LinearProgressIndicator(
-                progress = {
-                    if (total <= 0) 0f else (completed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = DuckDuckGoTheme.colors.brand.accentBlue,
-                trackColor = DuckDuckGoTheme.colors.backgrounds.background,
-            )
-
-            Spacer(Modifier.height(6.dp))
-
-            Text(
-                text = "$unusedLeft unused profile(s) remaining in group",
-                color = DuckDuckGoTheme.colors.text.secondary,
-                fontFamily = VarelaRound, // CHANGED
-                fontSize = 11.sp,
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            when (state) {
-                AutomationState.WAITING_CAPTCHA_HUMAN -> {
-                    DdgPrimaryButton(
-                        text = "I Solved the CAPTCHA — Continue",
-                        onClick = { AutomationEngine.continueAfterCaptchaResolution() },
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    DdgSecondaryButton(
-                        text = "Stop Automation",
-                        onClick = { AutomationEngine.stopAutomation() },
-                    )
-                }
-
-                AutomationState.WAITING_DATA_EXHAUSTED -> {
-                    Text(
-                        text = "Group data finished! Repeat with same data or add new data?",
-                        color = DuckDuckGoTheme.colors.text.primary,
-                        fontFamily = VarelaRound, // CHANGED
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        DdgPrimaryButton(
-                            text = "Repeat Data",
-                            modifier = Modifier.weight(1f),
-                            onClick = { AutomationEngine.handleDataExhaustedChoice("repeat_same") },
-                        )
-                        DdgSecondaryButton(
-                            text = "Add Data",
-                            modifier = Modifier.weight(1f),
-                            onClick = { AutomationEngine.handleDataExhaustedChoice("add_new") },
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Dismiss & Finish",
-                        color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = VarelaRound, // CHANGED
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .clickable { AutomationEngine.stopAutomation() }
-                            .padding(4.dp),
-                    )
-                }
-
-                AutomationState.COMPLETED -> {
-                    DdgPrimaryButton(
-                        text = "Automation Finished",
-                        onClick = { AutomationEngine.stopAutomation() },
-                    )
-                }
-
-                else -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        if (state == AutomationState.PAUSED) {
-                            DdgPrimaryButton(
-                                text = "Resume",
-                                modifier = Modifier.weight(1f),
-                                onClick = { AutomationEngine.resumeAutomation() },
-                            )
-                        } else {
-                            DdgSecondaryButton(
-                                text = "Pause",
-                                modifier = Modifier.weight(1f),
-                                onClick = { AutomationEngine.pauseAutomation() },
-                            )
-                        }
-                        DdgSecondaryButton(
-                            text = "Stop",
-                            modifier = Modifier.weight(1f),
-                            onClick = { AutomationEngine.stopAutomation() },
-                        )
-                    }
-                }
-            }
-        }
     }
 }

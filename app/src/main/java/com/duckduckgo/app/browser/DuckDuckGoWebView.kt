@@ -88,6 +88,7 @@ class DuckDuckGoWebView :
     private var isDestroyed: Boolean = false
     private var isSafeWebViewEnabled: Boolean = true
     private var stripImeInsetsEnabled: Boolean = false
+    var automationTabId: String? = null
 
     @Inject
     lateinit var dispatcherProvider: DispatcherProvider
@@ -112,12 +113,13 @@ class DuckDuckGoWebView :
         }
     }
 
-    private fun createAutomationBridge(): AutomationBridge =
+        private fun createAutomationBridge(): AutomationBridge =
         AutomationBridge(
-            onFieldsDetectedCallback = { json -> AutomationEngine.onFieldsDetected(json) },
-            onPageScannedCallback = { _ -> },
-            onFillCompletedCallback = { _ -> },
-            onStepSettledCallback = { _ -> },
+            tabId = automationTabId,
+            onFieldsDetectedCallback = { json, tabId -> AutomationEngine.onFieldsDetected(json, tabId) },
+            onPageScannedCallback = { _, _ -> },
+            onFillCompletedCallback = { _, _ -> },
+            onStepSettledCallback = { _, _ -> },
         )
 
     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
@@ -259,16 +261,15 @@ class DuckDuckGoWebView :
                         }
                     }
 
-                    override fun onPageFinished(view: WebView?, url: String?) {
+                                       override fun onPageFinished(view: WebView?, url: String?) {
                         client.onPageFinished(view, url)
                         try {
-                            AutomationEngine.attachWebView(this@DuckDuckGoWebView)
+                            AutomationEngine.attachWebView(this@DuckDuckGoWebView, automationTabId)
                             AutomationEngine.injectScanner()
                         } catch (e: Exception) {
                             logcat(ERROR) { "AutomationEngine: inject failed: ${e.asLog()}" }
                         }
                     }
-
                     override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                         return client.shouldOverrideUrlLoading(view, request)
                     }
