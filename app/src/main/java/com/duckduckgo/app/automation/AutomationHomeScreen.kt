@@ -65,7 +65,6 @@ fun AutomationHomeScreen(
     ) {
         AutomationTopBar(
             title = stringResource(R.string.automation_home_title),
-            subtitle = "Multi-Step Browser Form Engine",
             onBack = onBack,
         )
 
@@ -102,6 +101,7 @@ fun AutomationHomeScreen(
                         Text(
                             text = stringResource(R.string.automation_fill_forms_title),
                             color = DuckDuckGoTheme.colors.text.primary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -109,6 +109,7 @@ fun AutomationHomeScreen(
                         Text(
                             text = "Enter target website, pick a group, configure delays & run 1-by-1",
                             color = DuckDuckGoTheme.colors.text.secondary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 13.sp,
                         )
                     }
@@ -179,7 +180,7 @@ fun AutomationHomeScreen(
                     modifier = Modifier.weight(1f),
                     iconRes = drawable.ic_add_24,
                     title = stringResource(R.string.automation_add_data),
-                    subtitle = "Paste, upload or generate",
+                    subtitle = "Paste or upload",
                     onClick = onAddDataClick,
                 )
             }
@@ -213,12 +214,14 @@ fun AutomationHomeScreen(
                                 Text(
                                     text = group.name,
                                     color = DuckDuckGoTheme.colors.text.primary,
+                                    fontFamily = VarelaRound, // CHANGED
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
                                     text = "${group.unusedCount} available · ${group.usedCount} used",
                                     color = DuckDuckGoTheme.colors.text.secondary,
+                                    fontFamily = VarelaRound, // CHANGED
                                     fontSize = 12.sp,
                                 )
                             }
@@ -251,6 +254,7 @@ private fun SummaryStatCard(
             Text(
                 text = value,
                 color = DuckDuckGoTheme.colors.brand.accentBlue,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -258,6 +262,7 @@ private fun SummaryStatCard(
             Text(
                 text = label,
                 color = DuckDuckGoTheme.colors.text.secondary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -287,6 +292,7 @@ private fun QuickActionTile(
         Text(
             text = title,
             color = DuckDuckGoTheme.colors.text.primary,
+            fontFamily = VarelaRound, // CHANGED
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -294,6 +300,7 @@ private fun QuickActionTile(
         Text(
             text = subtitle,
             color = DuckDuckGoTheme.colors.text.secondary,
+            fontFamily = VarelaRound, // CHANGED
             fontSize = 11.sp,
         )
     }

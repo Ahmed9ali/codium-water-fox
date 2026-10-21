@@ -143,6 +143,7 @@ fun CreateAutomationScreen(
                 Text(
                     text = if (useInlineManual) "Select Saved Group" else "+ New / Manual",
                     color = DuckDuckGoTheme.colors.brand.accentBlue,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
@@ -158,6 +159,7 @@ fun CreateAutomationScreen(
                     Text(
                         text = "Quick Manual Group Entry",
                         color = DuckDuckGoTheme.colors.text.primary,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -165,6 +167,7 @@ fun CreateAutomationScreen(
                     Text(
                         text = "Enter 'key: value' lines (e.g. email: a@b.com, password: Pass123!) or paste raw lines.",
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 12.sp,
                     )
                     Spacer(Modifier.height(10.dp))
@@ -217,6 +220,7 @@ fun CreateAutomationScreen(
                                 Text(
                                     text = group.name,
                                     color = DuckDuckGoTheme.colors.text.primary,
+                                    fontFamily = VarelaRound, // CHANGED
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -224,6 +228,7 @@ fun CreateAutomationScreen(
                                 Text(
                                     text = "$groupUnused unused · $groupUsed used (${group.entries.size} total)",
                                     color = DuckDuckGoTheme.colors.text.secondary,
+                                    fontFamily = VarelaRound, // CHANGED
                                     fontSize = 12.sp,
                                 )
                             }
@@ -248,11 +253,13 @@ fun CreateAutomationScreen(
                         Text(
                             text = "${activeGroupObj.usedCount} entries marked as used",
                             color = DuckDuckGoTheme.colors.text.secondary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 12.sp,
                         )
                         Text(
                             text = "Reset Used Status",
                             color = DuckDuckGoTheme.colors.brand.accentBlue,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
@@ -318,6 +325,7 @@ fun CreateAutomationScreen(
                     Text(
                         text = "Tip: Selected group currently has $unusedProfilesInGroup unused profile(s). If target exceeds this, you'll be asked to repeat or add new data.",
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 11.sp,
                     )
                 }
@@ -450,33 +458,36 @@ fun CreateAutomationScreen(
                 Text(
                     text = "All Data in '$selectedGroup' Has Been Used",
                     color = DuckDuckGoTheme.colors.text.primary,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Every entry in this group is already marked as used. Would you like to reset and repeat with the same data, or add new data?",
+                    text = "Would you like to reset the used status to start from the beginning, or add new data?",
                     color = DuckDuckGoTheme.colors.text.secondary,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 14.sp,
                 )
                 Spacer(Modifier.height(20.dp))
                 DdgPrimaryButton(
-                    text = "Repeat With Same Data",
+                    text = "Reset Used & Start",
                     onClick = {
                         VaultRepository.resetUsed(selectedGroup)
                         showExhaustedPreDialog = false
-                        val config = AutomationConfig(
-                            targetUrl = targetUrl.trim(),
-                            groupName = selectedGroup,
-                            mode = mode,
-                            targetRepeatCount = (repeatCountText.toIntOrNull() ?: 1).coerceAtLeast(1),
-                            typingDelayMs = (typingDelayText.toLongOrNull() ?: 60L).coerceAtLeast(0L),
-                            fieldDelayMs = (fieldDelayText.toLongOrNull() ?: 120L).coerceAtLeast(0L),
-                            settleTimeoutMs = (settleTimeoutText.toLongOrNull() ?: 2000L).coerceAtLeast(500L),
-                            pauseOnCaptcha = pauseOnCaptcha,
-                            clearTabBetweenRuns = clearTabBetweenRuns,
+                        onStartConfig(
+                            AutomationConfig(
+                                targetUrl = targetUrl.trim(),
+                                groupName = selectedGroup,
+                                mode = mode,
+                                targetRepeatCount = (repeatCountText.toIntOrNull() ?: 1).coerceAtLeast(1),
+                                typingDelayMs = (typingDelayText.toLongOrNull() ?: 60L).coerceAtLeast(0L),
+                                fieldDelayMs = (fieldDelayText.toLongOrNull() ?: 120L).coerceAtLeast(0L),
+                                settleTimeoutMs = (settleTimeoutText.toLongOrNull() ?: 2000L).coerceAtLeast(500L),
+                                pauseOnCaptcha = pauseOnCaptcha,
+                                clearTabBetweenRuns = clearTabBetweenRuns,
+                            ),
                         )
-                        onStartConfig(config)
                     },
                 )
                 Spacer(Modifier.height(10.dp))
@@ -488,15 +499,9 @@ fun CreateAutomationScreen(
                     },
                 )
                 Spacer(Modifier.height(10.dp))
-                Text(
-                    text = stringResource(R.string.automation_cancel),
-                    color = DuckDuckGoTheme.colors.text.secondary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .clickable { showExhaustedPreDialog = false }
-                        .padding(8.dp),
+                DdgSecondaryButton(
+                    text = "Cancel",
+                    onClick = { showExhaustedPreDialog = false },
                 )
             }
         }
@@ -510,10 +515,7 @@ private fun OrderModeOption(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    DdgCard(
-        selected = selected,
-        onClick = onClick,
-    ) {
+    DdgCard(selected = selected, onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -531,13 +533,15 @@ private fun OrderModeOption(
                 Text(
                     text = title,
                     color = DuckDuckGoTheme.colors.text.primary,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = desc,
                     color = DuckDuckGoTheme.colors.text.secondary,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 12.sp,
                 )
             }

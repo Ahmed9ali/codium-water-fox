@@ -51,7 +51,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -109,41 +108,11 @@ fun GroupDetailScreen(
             .background(DuckDuckGoTheme.colors.backgrounds.background),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            
+            // CLEAN APP BAR: Only Title and Back button
             AutomationTopBar(
                 title = groupName,
-                subtitle = "$unusedCount unused · $usedCount used (${entries.size} total)",
                 onBack = onBack,
-                trailingContent = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (usedCount > 0) {
-                            Text(
-                                text = "Reset Used",
-                                color = DuckDuckGoTheme.colors.brand.accentBlue,
-                                fontSize = 13.sp,
-                                fontFamily = FontFamily.SansSerif,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clickable {
-                                        VaultRepository.resetUsed(groupName)
-                                        Toast.makeText(context, "All entries marked UNUSED", Toast.LENGTH_SHORT).show()
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                            )
-                        }
-                        IconButton(onClick = {
-                            selectedFieldType = "email"
-                            customFieldType = ""
-                            newEntryValuesText = ""
-                            showAddDialog = true
-                        }) {
-                            Icon(
-                                painter = painterResource(drawable.ic_add_24),
-                                contentDescription = "Add Specific Data",
-                                tint = DuckDuckGoTheme.colors.brand.accentBlue,
-                            )
-                        }
-                    }
-                },
             )
 
             Column(
@@ -153,9 +122,41 @@ fun GroupDetailScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
             ) {
-                // Top quick-add button inside the group
+                // MOVED DOWN: Stats and Reset Action
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "$unusedCount unused · $usedCount used (${entries.size} total)",
+                        color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = VarelaRound,
+                        fontSize = 13.sp,
+                    )
+
+                    if (usedCount > 0) {
+                        Text(
+                            text = "Reset Used",
+                            color = DuckDuckGoTheme.colors.brand.accentBlue,
+                            fontFamily = VarelaRound,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clickable {
+                                    VaultRepository.resetUsed(groupName)
+                                    Toast.makeText(context, "All entries marked UNUSED", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Add Data Button
                 DdgSecondaryButton(
-                    text = "+ Add Specific Field / Data to '$groupName'",
+                    text = "+ Add Data to '$groupName'",
                     onClick = {
                         selectedFieldType = "email"
                         customFieldType = ""
@@ -164,7 +165,7 @@ fun GroupDetailScreen(
                     },
                 )
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(20.dp))
 
                 if (entries.isEmpty()) {
                     Box(
@@ -176,7 +177,7 @@ fun GroupDetailScreen(
                         Text(
                             text = stringResource(R.string.automation_no_entries),
                             color = DuckDuckGoTheme.colors.text.secondary,
-                            fontFamily = FontFamily.SansSerif,
+                            fontFamily = VarelaRound,
                             fontSize = 15.sp,
                         )
                     }
@@ -198,7 +199,7 @@ fun GroupDetailScreen(
                                     Text(
                                         text = "#${index + 1} · ${entry.fieldType.uppercase()}",
                                         color = DuckDuckGoTheme.colors.text.secondary,
-                                        fontFamily = FontFamily.SansSerif,
+                                        fontFamily = VarelaRound,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
                                     )
@@ -210,7 +211,7 @@ fun GroupDetailScreen(
                                         } else {
                                             DuckDuckGoTheme.colors.text.primary
                                         },
-                                        fontFamily = FontFamily.SansSerif,
+                                        fontFamily = VarelaRound,
                                         fontSize = 15.sp,
                                         textDecoration = if (entry.used) TextDecoration.LineThrough else TextDecoration.None,
                                     )
@@ -265,7 +266,7 @@ fun GroupDetailScreen(
                     Text(
                         text = "Add Specific Data to '$groupName'",
                         color = DuckDuckGoTheme.colors.text.primary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -273,7 +274,7 @@ fun GroupDetailScreen(
                     Text(
                         text = "Select the field type (or type a custom one) and enter 1 or more values (1 per line).",
                         color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound,
                         fontSize = 12.sp,
                     )
 
@@ -318,7 +319,7 @@ fun GroupDetailScreen(
                                 Text(
                                     text = preset,
                                     color = if (isSelected) Color.White else DuckDuckGoTheme.colors.text.primary,
-                                    fontFamily = FontFamily.SansSerif,
+                                    fontFamily = VarelaRound,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -399,7 +400,7 @@ fun GroupDetailScreen(
                     Text(
                         text = "Edit Entry #${editingIndex + 1}",
                         color = DuckDuckGoTheme.colors.text.primary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                     )

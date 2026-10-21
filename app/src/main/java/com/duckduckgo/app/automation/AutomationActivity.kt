@@ -33,9 +33,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.core.view.WindowCompat
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
+import com.duckduckgo.mobile.android.R
+
+// ADDED: Custom Font Family
+val VarelaRound = FontFamily(
+    Font(R.font.varela_round)
+)
 
 class AutomationActivity : ComponentActivity() {
 
@@ -75,13 +82,11 @@ class AutomationActivity : ComponentActivity() {
 }
 
 fun resolveDuckDuckGoIsLight(context: Context): Boolean {
-    // 1. DuckDuckGo sets AppCompatDelegate.setDefaultNightMode on startup based on its internal theme
     when (AppCompatDelegate.getDefaultNightMode()) {
         AppCompatDelegate.MODE_NIGHT_NO -> return true
         AppCompatDelegate.MODE_NIGHT_YES -> return false
     }
 
-    // 2. Check DuckDuckGo's SharedPreferences files for GLOBAL_THEME
     val prefNames = listOf(
         "com.duckduckgo.app.settings_activity.settings",
         "${context.packageName}_preferences",
@@ -93,14 +98,13 @@ fun resolveDuckDuckGoIsLight(context: Context): Boolean {
         if (theme == "DARK") return false
     }
 
-    // 3. Fallback to current configuration
     val uiMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
     return uiMode != Configuration.UI_MODE_NIGHT_YES
 }
 
 /**
  * Forces [LocalConfiguration] to match DuckDuckGo's Light/Dark setting and overrides
- * DuckDuckGoTheme's debug cursive/magenta Material3 defaults with clean SansSerif typography and DDG colors.
+ * DuckDuckGoTheme's debug defaults with clean VarelaRound typography and DDG colors.
  */
 @Composable
 fun AutomationThemeWrapper(
@@ -113,26 +117,28 @@ fun AutomationThemeWrapper(
         uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightBits
     }
 
+    // CHANGED: Use VarelaRound instead of SansSerif
     val cleanTypography = Typography(
-        displayLarge = TextStyle(fontFamily = FontFamily.SansSerif),
-        displayMedium = TextStyle(fontFamily = FontFamily.SansSerif),
-        displaySmall = TextStyle(fontFamily = FontFamily.SansSerif),
-        headlineLarge = TextStyle(fontFamily = FontFamily.SansSerif),
-        headlineMedium = TextStyle(fontFamily = FontFamily.SansSerif),
-        headlineSmall = TextStyle(fontFamily = FontFamily.SansSerif),
-        titleLarge = TextStyle(fontFamily = FontFamily.SansSerif),
-        titleMedium = TextStyle(fontFamily = FontFamily.SansSerif),
-        titleSmall = TextStyle(fontFamily = FontFamily.SansSerif),
-        bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif),
-        bodyMedium = TextStyle(fontFamily = FontFamily.SansSerif),
-        bodySmall = TextStyle(fontFamily = FontFamily.SansSerif),
-        labelLarge = TextStyle(fontFamily = FontFamily.SansSerif),
-        labelMedium = TextStyle(fontFamily = FontFamily.SansSerif),
-        labelSmall = TextStyle(fontFamily = FontFamily.SansSerif),
+        displayLarge = TextStyle(fontFamily = VarelaRound),
+        displayMedium = TextStyle(fontFamily = VarelaRound),
+        displaySmall = TextStyle(fontFamily = VarelaRound),
+        headlineLarge = TextStyle(fontFamily = VarelaRound),
+        headlineMedium = TextStyle(fontFamily = VarelaRound),
+        headlineSmall = TextStyle(fontFamily = VarelaRound),
+        titleLarge = TextStyle(fontFamily = VarelaRound),
+        titleMedium = TextStyle(fontFamily = VarelaRound),
+        titleSmall = TextStyle(fontFamily = VarelaRound),
+        bodyLarge = TextStyle(fontFamily = VarelaRound),
+        bodyMedium = TextStyle(fontFamily = VarelaRound),
+        bodySmall = TextStyle(fontFamily = VarelaRound),
+        labelLarge = TextStyle(fontFamily = VarelaRound),
+        labelMedium = TextStyle(fontFamily = VarelaRound),
+        labelSmall = TextStyle(fontFamily = VarelaRound),
     )
 
     CompositionLocalProvider(LocalConfiguration provides patchedConfig) {
-        DuckDuckGoTheme {
+        // CHANGED: Pass isDarkTheme here so it doesn't use the system theme
+        DuckDuckGoTheme(isDarkTheme = !isLightMode) {
             MaterialTheme(
                 typography = cleanTypography,
                 colorScheme = MaterialTheme.colorScheme.copy(
@@ -151,7 +157,7 @@ fun AutomationThemeWrapper(
             ) {
                 ProvideTextStyle(
                     value = TextStyle(
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound, // CHANGED: Use VarelaRound here too
                         color = DuckDuckGoTheme.colors.text.primary,
                     ),
                 ) {

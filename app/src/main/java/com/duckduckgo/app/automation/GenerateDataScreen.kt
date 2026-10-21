@@ -112,6 +112,7 @@ fun GenerateDataScreen(
             Text(
                 text = stringResource(R.string.automation_generate_title),
                 color = DuckDuckGoTheme.colors.text.primary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -127,6 +128,7 @@ fun GenerateDataScreen(
             Text(
                 text = stringResource(R.string.automation_generate_desc),
                 color = DuckDuckGoTheme.colors.text.secondary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 14.sp,
             )
 
@@ -135,11 +137,17 @@ fun GenerateDataScreen(
             OutlinedTextField(
                 value = groupName,
                 onValueChange = { groupName = it },
-                label = { Text(stringResource(R.string.automation_field_name_label)) },
+                label = { 
+                    Text(
+                        text = stringResource(R.string.automation_field_name_label),
+                        fontFamily = VarelaRound, // CHANGED
+                    ) 
+                },
                 placeholder = {
                     Text(
                         text = stringResource(R.string.automation_generate_name_placeholder),
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = VarelaRound, // CHANGED
                     )
                 },
                 singleLine = true,
@@ -157,6 +165,7 @@ fun GenerateDataScreen(
             Text(
                 text = stringResource(R.string.automation_generate_preview),
                 color = DuckDuckGoTheme.colors.text.primary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -181,6 +190,7 @@ fun GenerateDataScreen(
                         Text(
                             text = key,
                             color = DuckDuckGoTheme.colors.text.secondary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(0.4f),
@@ -188,6 +198,7 @@ fun GenerateDataScreen(
                         Text(
                             text = value,
                             color = DuckDuckGoTheme.colors.text.primary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 12.sp,
                             modifier = Modifier.weight(0.6f),
                         )
@@ -215,6 +226,7 @@ fun GenerateDataScreen(
                 Text(
                     text = stringResource(R.string.automation_generate_save),
                     color = Color.White,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(vertical = 8.dp),

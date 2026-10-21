@@ -90,6 +90,7 @@ fun AddDataChoiceScreen(
             Text(
                 text = stringResource(R.string.automation_add_data_title),
                 color = DuckDuckGoTheme.colors.text.primary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -99,6 +100,7 @@ fun AddDataChoiceScreen(
             Text(
                 text = stringResource(R.string.automation_add_data_subtitle),
                 color = DuckDuckGoTheme.colors.text.secondary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 14.sp,
             )
             Spacer(Modifier.height(20.dp))
@@ -156,6 +158,7 @@ private fun ChoiceCard(
             Text(
                 text = title,
                 color = DuckDuckGoTheme.colors.text.primary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -163,6 +166,7 @@ private fun ChoiceCard(
             Text(
                 text = desc,
                 color = DuckDuckGoTheme.colors.text.secondary,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 13.sp,
             )
         }

@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,12 @@ import com.duckduckgo.app.browser.R
 import com.duckduckgo.app.browser.mode.InAppNavigation
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import com.duckduckgo.mobile.android.R.drawable
+import com.duckduckgo.mobile.android.R.font
+
+// ADDED: Custom Varela Round Font Family
+val VarelaRound = FontFamily(
+    Font(font.varela_round, FontWeight.Normal)
+)
 
 sealed interface AutomationScreen {
     object Home : AutomationScreen
@@ -240,7 +247,7 @@ fun AutomationTopBar(
                 Text(
                     text = title,
                     color = DuckDuckGoTheme.colors.text.primary,
-                    fontFamily = FontFamily.SansSerif,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -248,7 +255,7 @@ fun AutomationTopBar(
                     Text(
                         text = subtitle,
                         color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 12.sp,
                     )
                 }
@@ -321,7 +328,7 @@ fun DdgPrimaryButton(
         Text(
             text = text,
             color = Color.White,
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = VarelaRound, // CHANGED
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -361,7 +368,7 @@ fun DdgSecondaryButton(
         Text(
             text = text,
             color = DuckDuckGoTheme.colors.brand.accentBlue,
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = VarelaRound, // CHANGED
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -383,7 +390,7 @@ fun DdgTextField(
         onValueChange = onValueChange,
         textStyle = TextStyle(
             color = DuckDuckGoTheme.colors.text.primary,
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = VarelaRound, // CHANGED
             fontSize = 15.sp,
         ),
         label = if (label != null) {
@@ -391,7 +398,7 @@ fun DdgTextField(
                 Text(
                     text = label,
                     color = DuckDuckGoTheme.colors.text.secondary,
-                    fontFamily = FontFamily.SansSerif,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 12.sp,
                 )
             }
@@ -403,7 +410,7 @@ fun DdgTextField(
                 Text(
                     text = placeholder,
                     color = DuckDuckGoTheme.colors.text.secondary.copy(alpha = 0.7f),
-                    fontFamily = FontFamily.SansSerif,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 14.sp,
                 )
             }
@@ -437,7 +444,7 @@ fun DdgSectionHeader(
         Text(
             text = title,
             color = DuckDuckGoTheme.colors.text.primary,
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = VarelaRound, // CHANGED
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -446,7 +453,7 @@ fun DdgSectionHeader(
             Text(
                 text = subtitle,
                 color = DuckDuckGoTheme.colors.text.secondary,
-                fontFamily = FontFamily.SansSerif,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 12.sp,
             )
         }
@@ -470,7 +477,7 @@ fun DdgSwitchRow(
                 Text(
                     text = title,
                     color = DuckDuckGoTheme.colors.text.primary,
-                    fontFamily = FontFamily.SansSerif,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 )
@@ -478,7 +485,7 @@ fun DdgSwitchRow(
                 Text(
                     text = subtitle,
                     color = DuckDuckGoTheme.colors.text.secondary,
-                    fontFamily = FontFamily.SansSerif,
+                    fontFamily = VarelaRound, // CHANGED
                     fontSize = 12.sp,
                 )
             }
@@ -521,7 +528,7 @@ fun DdgStatusBadge(
         Text(
             text = text,
             color = textColor,
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = VarelaRound, // CHANGED
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
         )

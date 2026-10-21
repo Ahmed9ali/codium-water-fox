@@ -52,7 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -667,7 +666,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = if (groupName.isNotBlank()) "Automation · $groupName" else "Browser Automation",
                         color = DuckDuckGoTheme.colors.text.primary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -675,7 +674,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = status.ifBlank { "Running..." },
                         color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 12.sp,
                     )
                 }
@@ -706,7 +705,7 @@ private fun BrowserTabAutomationHud() {
             Text(
                 text = "$unusedLeft unused profile(s) remaining in group",
                 color = DuckDuckGoTheme.colors.text.secondary,
-                fontFamily = FontFamily.SansSerif,
+                fontFamily = VarelaRound, // CHANGED
                 fontSize = 11.sp,
             )
 
@@ -729,7 +728,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = "Group data finished! Repeat with same data or add new data?",
                         color = DuckDuckGoTheme.colors.text.primary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -753,7 +752,7 @@ private fun BrowserTabAutomationHud() {
                     Text(
                         text = "Dismiss & Finish",
                         color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = FontFamily.SansSerif,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 12.sp,
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
@@ -763,7 +762,7 @@ private fun BrowserTabAutomationHud() {
                 }
 
                 AutomationState.COMPLETED -> {
-                    DdgPrimaryButton(
+                    DdkPrimaryButton(
                         text = "Done — Dismiss Banner",
                         onClick = { AutomationEngine.stopAutomation() },
                     )

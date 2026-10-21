@@ -40,7 +40,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -179,6 +178,7 @@ fun AutomationRunningScreen(
                         Text(
                             text = statusText,
                             color = DuckDuckGoTheme.colors.text.primary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -186,6 +186,7 @@ fun AutomationRunningScreen(
                         Text(
                             text = "Cycle $completed / $totalTarget · $unusedRemaining unused left in group",
                             color = DuckDuckGoTheme.colors.text.secondary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 12.sp,
                         )
                     }
@@ -219,6 +220,7 @@ fun AutomationRunningScreen(
                         Text(
                             text = "Human Action Required: Solve CAPTCHA Below",
                             color = DuckDuckGoTheme.colors.text.primary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -226,6 +228,7 @@ fun AutomationRunningScreen(
                         Text(
                             text = "Complete the CAPTCHA verification inside the webpage below, then tap Continue to resume filling.",
                             color = DuckDuckGoTheme.colors.text.secondary,
+                            fontFamily = VarelaRound, // CHANGED
                             fontSize = 12.sp,
                         )
                         Spacer(Modifier.height(10.dp))
@@ -302,6 +305,7 @@ fun AutomationRunningScreen(
                     Text(
                         text = "Group Data Finished ($completed / $totalTarget Completed)",
                         color = DuckDuckGoTheme.colors.text.primary,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -309,6 +313,7 @@ fun AutomationRunningScreen(
                     Text(
                         text = "All entries in '${config.groupName}' have been used and marked. How would you like to finish the remaining ${totalTarget - completed} cycle(s)?",
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = VarelaRound, // CHANGED
                         fontSize = 14.sp,
                     )
                     Spacer(Modifier.height(20.dp))
