@@ -693,7 +693,19 @@ object AutomationEngine {
         currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
 
         val finalName = name.trim().ifBlank { "${hudRecordingHost} Script" }
-        val script = AutomationScript(UUID.randomUUID().toString(), hudRecordingUrl, hudRecordingHost, finalName, System.currentTimeMillis(), System.currentTimeMillis(), hudRecordedSteps)
+        
+        // FIX: Use named arguments to match the AutomationScript data class exactly
+        val script = AutomationScript(
+            id = UUID.randomUUID().toString(),
+            url = hudRecordingUrl,
+            host = hudRecordingHost,
+            name = finalName,
+            groupName = "", // Newly recorded script has no group assigned yet
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            steps = hudRecordedSteps
+        )
+        
         AutomationScriptRepository.saveScript(script)
         Toast.makeText(ctx, "Script saved: $finalName", Toast.LENGTH_SHORT).show()
 
