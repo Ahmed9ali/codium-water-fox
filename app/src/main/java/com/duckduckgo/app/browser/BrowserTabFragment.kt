@@ -1142,7 +1142,7 @@ class BrowserTabFragment :
         }
         viewModel.handleExternalLaunch(isLaunchedFromExternalApp)
         // --- ADD THIS BLOCK IN onCreate ---
-         com.duckduckgo.app.automation.AutomationEngine.onShowFireDialog = { deleteType ->
+        com.duckduckgo.app.automation.AutomationEngine.onShowFireDialog = { deleteType ->
             if (isAdded) {
                 viewLifecycleOwner.lifecycleScope.launch(dispatchers.main()) {
                     try {
@@ -1156,7 +1156,7 @@ class BrowserTabFragment :
                                     val method = dialog.javaClass.getMethod("show", androidx.fragment.app.FragmentManager::class.java, String::class.java)
                                     method.invoke(dialog, parentFragmentManager, "AUTOMATION_FIRE_DIALOG")
                                 } catch (e: Exception) {
-                                    Log.e("AutomationEngine", "Failed to show dialog manually", e)
+                                    logcat(ERROR) { "AutomationEngine: Failed to show dialog manually: ${e.asLog()}" }
                                 }
                             }
 
@@ -1183,12 +1183,12 @@ class BrowserTabFragment :
                             cookieManager.flush()
                         }
 
-                        // 4. Dismiss the dialog visually (using FragmentManager to avoid unresolved dismiss())
+                        // 4. Dismiss the dialog visually
                         parentFragmentManager.findFragmentByTag("AUTOMATION_FIRE_DIALOG")?.let { fragment ->
                             parentFragmentManager.beginTransaction().remove(fragment).commitAllowingStateLoss()
                         }
                     } catch (e: Exception) {
-                        Log.e("AutomationEngine", "Error during fire dialog automation", e)
+                        logcat(ERROR) { "AutomationEngine: Error during fire dialog automation: ${e.asLog()}" }
                     } finally {
                         // 5. Tell the engine to resume the automation loop regardless of any errors
                         com.duckduckgo.app.automation.AutomationEngine.resolveFireDialogResult()

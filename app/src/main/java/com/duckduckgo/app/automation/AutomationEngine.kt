@@ -413,6 +413,10 @@ object AutomationEngine {
                         evaluateJsSuspend(webView, "return JSON.stringify(${js});")
                         delay(1000)
                     }
+                    StepKind.Wait -> {
+                        updateStatus("Waiting ${step.waitMs}ms...")
+                        delay(step.waitMs)
+                    }
                     StepKind.DeleteCookies -> {
                         updateState(AutomationState.CLEARING_DATA)
                         updateStatus("Triggering native delete dialog...")
@@ -618,7 +622,6 @@ object AutomationEngine {
     // ========================================================================
 
     fun resolveFireDialogResult() {
-        // FIXED: Use resumeWith to avoid "No value passed for parameter 'onCancellation'"
         fireDialogContinuation?.resumeWith(Result.success(Unit))
         fireDialogContinuation = null
     }
