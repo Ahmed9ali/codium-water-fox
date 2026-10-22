@@ -24,6 +24,9 @@ import android.webkit.JavascriptInterface
 /**
  * JS ⇄ Kotlin bridge. Every callback carries the originating [tabId] so
  * the engine can scope state to the correct tab (multi-tab safety, spec §18).
+ *
+ * Each @JavascriptInterface method must have a matching constructor callback;
+ * otherwise the callback is dead code and JS invocations will fail at runtime.
  */
 class AutomationBridge(
     private val tabId: String?,
@@ -31,30 +34,41 @@ class AutomationBridge(
     private val onPageScannedCallback: (String, String?) -> Unit,
     private val onFillCompletedCallback: (String, String?) -> Unit,
     private val onStepSettledCallback: (String, String?) -> Unit,
+    private val onElementRecordedCallback: (String, String?) -> Unit,
 ) {
     private val handler = Handler(Looper.getMainLooper())
 
     @JavascriptInterface
     fun onFieldsDetected(json: String) {
-        Log.d("AutomationBridge", "onFieldsDetected[$tabId]: $json")
+        Log.d(TAG, "onFieldsDetected[$tabId]: $json")
         handler.post { onFieldsDetectedCallback(json, tabId) }
     }
 
     @JavascriptInterface
     fun onPageScanned(json: String) {
-        Log.d("AutomationBridge", "onPageScanned[$tabId]: $json")
+        Log.d(TAG, "onPageScanned[$tabId]: $json")
         handler.post { onPageScannedCallback(json, tabId) }
     }
 
     @JavascriptInterface
     fun onFillCompleted(json: String) {
-        Log.d("AutomationBridge", "onFillCompleted[$tabId]: $json")
+        Log.d(TAG, "onFillCompleted[$tabId]: $json")
         handler.post { onFillCompletedCallback(json, tabId) }
     }
 
     @JavascriptInterface
     fun onStepSettled(json: String) {
-        Log.d("AutomationBridge", "onStepSettled[$tabId]: $json")
+        Log.d(TAG, "onStepSettled[$tabId]: $json")
         handler.post { onStepSettledCallback(json, tabId) }
+    }
+
+    @JavascriptInterface
+    fun onElementRecorded(json: String) {
+        Log.d(TAG, "onElementRecorded[$tabId]: $json")
+        handler.post { onElementRecordedCallback(json, tabId) }
+    }
+
+    private companion object {
+        const val TAG = "AutomationBridge"
     }
 }

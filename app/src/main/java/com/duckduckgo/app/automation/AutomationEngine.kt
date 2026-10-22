@@ -27,6 +27,7 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +49,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.lang.ref.WeakReference
+import java.util.UUID
 
 data class AutomationConfig(
     val targetUrl: String,
@@ -75,6 +77,8 @@ enum class AutomationState {
     PAUSED,
     ERROR,
 }
+
+enum class RecordingPhase { Capturing, Saving }
 
 object AutomationEngine {
     private const val TAG = "AutomationEngine"
@@ -124,6 +128,19 @@ object AutomationEngine {
     var hudStatus by mutableStateOf("")
         private set
     var hudGroupName by mutableStateOf("")
+        private set
+
+    // ---------------- Recorder state (spec §4) ----------------
+    private val _recordedSteps = MutableLiveData<List<RecordedStep>>(emptyList())
+    val recordedSteps: LiveData<List<RecordedStep>> get() = _recordedSteps
+
+    var hudRecordedSteps by mutableStateOf<List<RecordedStep>>(emptyList())
+        private set
+    var hudRecordingPhase by mutableStateOf(RecordingPhase.Capturing)
+        private set
+    var hudRecordingHost by mutableStateOf("")
+        private set
+    var hudRecordingUrl by mutableStateOf("")
         private set
 
     // ---------------- Internal run state ----------------
@@ -177,13 +194,14 @@ object AutomationEngine {
                 onPageScannedCallback = { _, _ -> handlePageScanned("") },
                 onFillCompletedCallback = { _, _ -> handleFillCompleted("") },
                 onStepSettledCallback = { _, _ -> handleStepSettled("") },
+                onElementRecordedCallback = { json, tid -> onRecorderElementCaptured(json, tid) },
             )
             webView.addJavascriptInterface(bridge, "AutomationBridge")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add JavascriptInterface: ${e.message}")
         }
 
-        // NOTE: HUD is now mounted lazily — from onOmnibarBotIconClicked() and startAutomation().
+        // NOTE: HUD is mounted lazily — from onOmnibarBotIconClicked() and startAutomation().
         // The previous eager mountHudOverlayIfNeeded(webView) call here was removed (spec §3).
 
         val queued = pendingBrowserConfig
@@ -223,10 +241,7 @@ object AutomationEngine {
     // ---------------- Field detection (tab-scoped) ----------------
 
     fun onFieldsDetected(json: String, tabId: String?) {
-         android.util.Log.d(
-            "AutomationEngine",
-            "onFieldsDetected tabId=$tabId activeTabId=$activeTabId jsonLen=${json.length}",
-        )
+        Log.d(TAG, "onFieldsDetected tabId=$tabId activeTabId=$activeTabId jsonLen=${json.length}")
         if (tabId == null || tabId != activeTabId) return
         try {
             if (json.contains("\"debug\"")) return
@@ -353,7 +368,7 @@ object AutomationEngine {
         }
     }
 
-    // ---------------- The run loop (unchanged logic from pre-Slice-1) ----------------
+    // ---------------- The run loop ----------------
 
     private suspend fun runAutomationLoop(config: AutomationConfig, navigateFirstCycle: Boolean) {
         val webView = currentWebView?.get() ?: return
@@ -625,10 +640,22 @@ object AutomationEngine {
 
     fun setActiveTab(tabId: String) {
         if (activeTabId == tabId) return
-        // Menu is tab-scoped → close it. Running/Recording belong to the tab they started on.
+        // Menu is tab-scoped → close it.
         if (hudMode == HudMode.Menu) {
             hudMode = HudMode.Hidden
             hudVisible = false
+        }
+        // A recording belongs to the tab it started on. Switching away mid-recording
+        // would show the other tab's HUD with this tab's steps — cancel instead.
+        if (hudMode == HudMode.Recording && activeTabId != null) {
+            cancelRecording()
+            appContext?.let { ctx ->
+                Toast.makeText(
+                    ctx,
+                    "Recording cancelled (tab switched)",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
         }
         activeTabId = tabId
         _detectedFieldCount.postValue(0)
@@ -667,10 +694,217 @@ object AutomationEngine {
         hudVisible = false
     }
 
-    /** Slice 1 scaffold — Slice 2 replaces this with startRecording(). */
-    fun startRecordingScaffold() {
+    // ------------------------------------------------------------------
+    //  Recorder (spec §4, §5)
+    // ------------------------------------------------------------------
+
+    fun startRecording() {
+        val webView = currentWebView?.get() ?: return
+        val url = webView.url.orEmpty()
+        val host = AutomationScriptRepository.hostOfUrl(url)
+
+        hudRecordingHost = host
+        hudRecordingUrl = url
+        hudRecordedSteps = emptyList()
+        _recordedSteps.postValue(emptyList())
+        hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Recording
         hudVisible = true
+
+        val js = loadRecorder()
+        if (js != null) {
+            webView.evaluateJavascript(js) { Log.d(TAG, "Recorder injected on $host") }
+        } else {
+            appContext?.let { ctx ->
+                Toast.makeText(ctx, "Recorder asset missing", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun onRecorderElementCaptured(json: String, tabId: String?) {
+        Log.d(TAG, "onRecorderElementCaptured tabId=$tabId activeTabId=$activeTabId hudMode=$hudMode jsonLen=${json.length}")
+        if (tabId == null || tabId != activeTabId) return
+        if (hudMode != HudMode.Recording) return
+        try {
+            val obj = JSONObject(json)
+            val kindRaw = obj.optString("kind", "Field")
+            val stepKind = when (kindRaw) {
+                "ClickNext" -> StepKind.ClickNext
+                "Wait" -> StepKind.Wait
+                "CaptchaWait" -> StepKind.CaptchaWait
+                else -> StepKind.Field
+            }
+            val looksLike = obj.optString("looksLike", "")
+            val canonicalType = if (stepKind == StepKind.Field) FieldTypeMapper.normalizeLooksLike(looksLike) else ""
+            val fallbackLabel = obj.optString("displayLabel", "")
+            val displayLabel = if (stepKind == StepKind.ClickNext) {
+                obj.optString("buttonLabel", "Next button")
+            } else {
+                FieldTypeMapper.fieldRowLabel(canonicalType, fallbackLabel)
+            }
+            val verified = stepKind != StepKind.Field || canonicalType.isNotBlank()
+
+            val step = RecordedStep(
+                sequenceIndex = hudRecordedSteps.size + 1,
+                kind = stepKind,
+                fieldType = canonicalType,
+                displayLabel = displayLabel,
+                tag = obj.optString("tag"),
+                domType = obj.optString("domType"),
+                name = obj.optString("name"),
+                domId = obj.optString("domId"),
+                placeholder = obj.optString("placeholder"),
+                ariaLabel = obj.optString("ariaLabel"),
+                cssSelector = obj.optString("cssSelector"),
+                xpath = obj.optString("xpath"),
+                buttonLabel = obj.optString("buttonLabel"),
+                verified = verified,
+            )
+            hudRecordedSteps = hudRecordedSteps + step
+            _recordedSteps.postValue(hudRecordedSteps)
+        } catch (e: Exception) {
+            Log.e(TAG, "onRecorderElementCaptured parse failed: ${e.message}")
+        }
+    }
+
+    fun addWaitStep(seconds: Int) {
+        if (hudMode != HudMode.Recording || hudRecordingPhase != RecordingPhase.Capturing) return
+        val secs = seconds.coerceAtLeast(1)
+        val step = RecordedStep(
+            sequenceIndex = hudRecordedSteps.size + 1,
+            kind = StepKind.Wait,
+            waitMs = secs * 1000L,
+            displayLabel = "Wait $secs s",
+            verified = true,
+        )
+        hudRecordedSteps = hudRecordedSteps + step
+        _recordedSteps.postValue(hudRecordedSteps)
+    }
+
+    fun addCaptchaWaitStep() {
+        if (hudMode != HudMode.Recording || hudRecordingPhase != RecordingPhase.Capturing) return
+        val step = RecordedStep(
+            sequenceIndex = hudRecordedSteps.size + 1,
+            kind = StepKind.CaptchaWait,
+            displayLabel = "Wait for CAPTCHA solve",
+            verified = true,
+        )
+        hudRecordedSteps = hudRecordedSteps + step
+        _recordedSteps.postValue(hudRecordedSteps)
+    }
+
+    fun removeRecordedStep(id: String) {
+        if (hudMode != HudMode.Recording) return
+        hudRecordedSteps = hudRecordedSteps
+            .filterNot { it.id == id }
+            .mapIndexed { idx, s -> s.copy(sequenceIndex = idx + 1) }
+        _recordedSteps.postValue(hudRecordedSteps)
+    }
+
+    fun assignFieldTypeToStep(id: String, canonicalType: String) {
+        if (hudMode != HudMode.Recording) return
+        hudRecordedSteps = hudRecordedSteps.map { step ->
+            if (step.id == id) {
+                step.copy(
+                    fieldType = canonicalType,
+                    displayLabel = FieldTypeMapper.fieldRowLabel(canonicalType, step.displayLabel),
+                    verified = true,
+                )
+            } else step
+        }
+        _recordedSteps.postValue(hudRecordedSteps)
+    }
+
+    fun stopRecordingAndPromptSave() {
+        if (hudRecordedSteps.isEmpty()) {
+            cancelRecording()
+            return
+        }
+        currentWebView?.get()?.evaluateJavascript(
+            "try { window.__automationRecorderStop && window.__automationRecorderStop(); } catch(_) {}",
+            null,
+        )
+        hudRecordingPhase = RecordingPhase.Saving
+    }
+
+    /**
+     * User tapped Back on the Save panel. Re-enter capture mode WITHOUT wiping the steps.
+     * Only re-inject the recorder JS (its internal guard prevents double-attach).
+     */
+    fun cancelSaveRecording() {
+        hudRecordingPhase = RecordingPhase.Capturing
+        currentWebView?.get()?.let { wv ->
+            val js = loadRecorder()
+            if (js != null) {
+                wv.evaluateJavascript(js) { Log.d(TAG, "Recorder re-injected for continued recording") }
+            }
+        }
+    }
+
+    fun saveRecording(name: String) {
+        val ctx = appContext
+        val host = hudRecordingHost
+        if (host.isBlank()) {
+            ctx?.let { Toast.makeText(it, "Cannot save: no host", Toast.LENGTH_SHORT).show() }
+            return
+        }
+        if (hudRecordedSteps.isEmpty()) {
+            ctx?.let { Toast.makeText(it, "Nothing recorded", Toast.LENGTH_SHORT).show() }
+            return
+        }
+        currentWebView?.get()?.evaluateJavascript(
+            "try { window.__automationRecorderStop && window.__automationRecorderStop(); } catch(_) {}",
+            null,
+        )
+
+        val finalName = name.trim().ifBlank { "$host Script" }
+        val script = AutomationScript(
+            id = UUID.randomUUID().toString(),
+            host = host,
+            name = finalName,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            steps = hudRecordedSteps,
+        )
+        AutomationScriptRepository.saveScript(script)
+
+        ctx?.let {
+            Toast.makeText(it, "Script saved: $finalName", Toast.LENGTH_SHORT).show()
+        }
+
+        // Reset and re-open the menu so the user sees "Run Automation" next.
+        hudRecordedSteps = emptyList()
+        _recordedSteps.postValue(emptyList())
+        hudRecordingPhase = RecordingPhase.Capturing
+        hudRecordingHost = ""
+        hudRecordingUrl = ""
+        hudMode = HudMode.Menu
+        hudVisible = true
+    }
+
+    fun cancelRecording() {
+        currentWebView?.get()?.evaluateJavascript(
+            "try { window.__automationRecorderStop && window.__automationRecorderStop(); } catch(_) {}",
+            null,
+        )
+        hudRecordedSteps = emptyList()
+        _recordedSteps.postValue(emptyList())
+        hudRecordingPhase = RecordingPhase.Capturing
+        hudRecordingHost = ""
+        hudRecordingUrl = ""
+        hudMode = HudMode.Hidden
+        hudVisible = false
+    }
+
+    private fun loadRecorder(): String? {
+        val ctx = appContext ?: return null
+        return try {
+            ctx.assets.open("automation/automation_recorder.js")
+                .bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading recorder asset: ${e.message}")
+            null
+        }
     }
 
     // ------------------------------------------------------------------

@@ -27,24 +27,39 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 
+// ============================================================================
+// DISPATCHER
+// ============================================================================
+
 /**
- * Top-level dispatcher mounted in `AutomationEngine.mountHudOverlayIfNeeded`.
- * Only renders when `hudVisible` is true; picks the correct panel by `hudMode`.
+ * Top-level overlay entry. Mounted once per tab (lazily) by
+ * `AutomationEngine.mountHudOverlayIfNeeded`. Picks the panel to render
+ * based on `AutomationEngine.hudMode`.
  */
 @Composable
 internal fun BrowserTabAutomationHud() {
@@ -58,7 +73,7 @@ internal fun BrowserTabAutomationHud() {
 }
 
 // ============================================================================
-// MENU  (spec §3)
+// MENU PANEL  (spec §3)
 // ============================================================================
 
 @Composable
@@ -89,7 +104,7 @@ private fun HudMenuPanel() {
 
             DdgPrimaryButton(
                 text = "Create Automation",
-                onClick = { AutomationEngine.startRecordingScaffold() },
+                onClick = { AutomationEngine.startRecording() },
             )
 
             Spacer(Modifier.height(8.dp))
@@ -97,7 +112,7 @@ private fun HudMenuPanel() {
             DdgSecondaryButton(
                 text = "Run Automation",
                 onClick = {
-                    // Slice 3 fills this in — opens the Run script picker panel.
+                    // Slice 3 wires this to the script picker + run panel.
                 },
             )
 
@@ -124,12 +139,15 @@ private fun HudMenuPanel() {
 }
 
 // ============================================================================
-// RECORDING  (Slice 1 = scaffold; Slice 2 replaces this body with a step feed)
+// RECORDING PANEL  (spec §4)
 // ============================================================================
 
 @Composable
 private fun HudRecordingPanel() {
     val shape = RoundedCornerShape(16.dp)
+    val phase = AutomationEngine.hudRecordingPhase
+    val steps = AutomationEngine.hudRecordedSteps
+    val host = AutomationEngine.hudRecordingHost
 
     Box(
         modifier = Modifier
@@ -144,24 +162,271 @@ private fun HudRecordingPanel() {
                 .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
                 .padding(14.dp),
         ) {
-            HudHeaderRow(
-                title = "Recording mode",
-                subtitle = "Step capture wired up in Slice 2",
-                onClose = null, // Not closable via X — Stop is the only exit.
+            when (phase) {
+                RecordingPhase.Saving -> RecordingSavePanel(host = host, stepCount = steps.size)
+                RecordingPhase.Capturing -> RecordingCapturePanel(steps = steps)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingCapturePanel(steps: List<RecordedStep>) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "● Recording",
+                color = Color(0xFFD32F2F),
+                fontFamily = VarelaRound,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
             )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "${steps.size} step(s) captured",
+                color = DuckDuckGoTheme.colors.text.secondary,
+                fontFamily = VarelaRound,
+                fontSize = 12.sp,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Tap form fields on the page. Each tap becomes a step.",
+            color = DuckDuckGoTheme.colors.text.secondary,
+            fontFamily = VarelaRound,
+            fontSize = 11.sp,
+        )
 
-            Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
+        if (steps.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No steps yet — tap a field above.",
+                    color = DuckDuckGoTheme.colors.text.secondary,
+                    fontFamily = VarelaRound,
+                    fontSize = 12.sp,
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                steps.forEach { step -> RecordingStepRow(step) }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RecordingChip("+ Wait 2s") { AutomationEngine.addWaitStep(2) }
+            RecordingChip("+ CAPTCHA") { AutomationEngine.addCaptchaWaitStep() }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             DdgSecondaryButton(
-                text = "Stop Recording",
-                onClick = { AutomationEngine.closeHud() },
+                text = "Cancel",
+                modifier = Modifier.weight(1f),
+                onClick = { AutomationEngine.cancelRecording() },
+            )
+            DdgPrimaryButton(
+                text = "Stop & Save",
+                modifier = Modifier.weight(1f),
+                enabled = steps.isNotEmpty(),
+                onClick = { AutomationEngine.stopRecordingAndPromptSave() },
             )
         }
     }
 }
 
+@Composable
+private fun RecordingStepRow(step: RecordedStep) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable(enabled = !step.verified) { showPicker = true },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (step.verified) "✓" else "✗",
+            color = if (step.verified) Color(0xFF2E7D32) else Color(0xFFD32F2F),
+            fontFamily = VarelaRound,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(18.dp),
+        )
+        Text(
+            text = "${step.sequenceIndex}. ${step.displayLabel}",
+            color = DuckDuckGoTheme.colors.text.primary,
+            fontFamily = VarelaRound,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f),
+        )
+        if (step.isField && step.fieldType.isNotBlank()) {
+            RecordingChip(step.fieldType, compact = true) {}
+            Spacer(Modifier.width(6.dp))
+        } else if (step.isField && !step.verified) {
+            RecordingChip("Assign", compact = true) { showPicker = true }
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            text = "×",
+            color = DuckDuckGoTheme.colors.text.secondary,
+            fontSize = 15.sp,
+            modifier = Modifier
+                .clickable { AutomationEngine.removeRecordedStep(step.id) }
+                .padding(4.dp),
+        )
+    }
+
+    if (showPicker) {
+        FieldTypePickerDialog(stepId = step.id, onDismiss = { showPicker = false })
+    }
+}
+
+@Composable
+private fun FieldTypePickerDialog(stepId: String, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 460.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(DuckDuckGoTheme.colors.backgrounds.surface)
+                .padding(16.dp),
+        ) {
+            Text(
+                text = "Assign field type",
+                color = DuckDuckGoTheme.colors.text.primary,
+                fontFamily = VarelaRound,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(10.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                FieldTypeMapper.assignOptions.forEach { opt ->
+                    Text(
+                        text = opt.label,
+                        color = DuckDuckGoTheme.colors.text.primary,
+                        fontFamily = VarelaRound,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                AutomationEngine.assignFieldTypeToStep(stepId, opt.canonical)
+                                onDismiss()
+                            }
+                            .padding(vertical = 10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingSavePanel(host: String, stepCount: Int) {
+    var nameInput by remember { mutableStateOf("$host Script") }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Save Automation",
+            color = DuckDuckGoTheme.colors.text.primary,
+            fontFamily = VarelaRound,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "$stepCount step(s) captured for $host",
+            color = DuckDuckGoTheme.colors.text.secondary,
+            fontFamily = VarelaRound,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = nameInput,
+            onValueChange = { nameInput = it },
+            label = {
+                Text(
+                    text = "Script name",
+                    fontFamily = VarelaRound,
+                    fontSize = 12.sp,
+                )
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            DdgSecondaryButton(
+                text = "Back",
+                modifier = Modifier.weight(1f),
+                onClick = { AutomationEngine.cancelSaveRecording() },
+            )
+            DdgPrimaryButton(
+                text = "Save",
+                modifier = Modifier.weight(1f),
+                enabled = nameInput.trim().isNotBlank(),
+                onClick = { AutomationEngine.saveRecording(nameInput) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordingChip(
+    text: String,
+    compact: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.14f), shape)
+            .clickable(onClick = onClick)
+            .padding(
+                horizontal = if (compact) 8.dp else 10.dp,
+                vertical = if (compact) 3.dp else 6.dp,
+            ),
+    ) {
+        Text(
+            text = text,
+            color = DuckDuckGoTheme.colors.brand.accentBlue,
+            fontFamily = VarelaRound,
+            fontSize = if (compact) 10.sp else 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
 // ============================================================================
-// RUNNING  (existing panel, body unchanged from earlier AutomationEngine.kt)
+// RUNNING PANEL  (spec §10, §14)
 // ============================================================================
 
 @Composable
@@ -339,7 +604,7 @@ private fun HudRunControlsBlock(state: AutomationState) {
 }
 
 // ============================================================================
-// Shared small composables
+// SHARED SMALL COMPOSABLES
 // ============================================================================
 
 @Composable

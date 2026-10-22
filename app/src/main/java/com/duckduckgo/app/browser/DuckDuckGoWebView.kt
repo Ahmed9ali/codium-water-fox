@@ -113,13 +113,14 @@ class DuckDuckGoWebView :
         }
     }
 
-        private fun createAutomationBridge(): AutomationBridge =
+            private fun createAutomationBridge(): AutomationBridge =
         AutomationBridge(
             tabId = automationTabId,
             onFieldsDetectedCallback = { json, tabId -> AutomationEngine.onFieldsDetected(json, tabId) },
             onPageScannedCallback = { _, _ -> },
             onFillCompletedCallback = { _, _ -> },
             onStepSettledCallback = { _, _ -> },
+            onElementRecordedCallback = { json, tabId -> AutomationEngine.onRecorderElementCaptured(json, tabId) },
         )
 
     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
