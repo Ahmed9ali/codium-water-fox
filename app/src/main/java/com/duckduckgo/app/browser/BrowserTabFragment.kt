@@ -1142,42 +1142,57 @@ class BrowserTabFragment :
         }
         viewModel.handleExternalLaunch(isLaunchedFromExternalApp)
         // --- ADD THIS BLOCK IN onCreate ---
-        com.duckduckgo.app.automation.AutomationEngine.onShowFireDialog = { deleteType ->
+         com.duckduckgo.app.automation.AutomationEngine.onShowFireDialog = { deleteType ->
             if (isAdded) {
-                // 1. Show the actual Native Bottom Sheet
-                val dialog = fireDialogProvider.createFireDialog(FireDialogOrigin.Hatch(tabId))
-                dialog.show(parentFragmentManager, "AUTOMATION_FIRE_DIALOG")
+                viewLifecycleOwner.lifecycleScope.launch(dispatchers.main()) {
+                    try {
+                        // 1. Show the actual Native Bottom Sheet (suspend function called inside coroutine)
+                        val dialog = fireDialogProvider.createFireDialog(FireDialogOrigin.Hatch(tabId))
+                        
+                        // Handle showing based on the object type to avoid compilation issues
+                        (dialog as? androidx.fragment.app.DialogFragment)?.show(parentFragmentManager, "AUTOMATION_FIRE_DIALOG")
+                            ?: run {
+                                try {
+                                    val method = dialog.javaClass.getMethod("show", androidx.fragment.app.FragmentManager::class.java, String::class.java)
+                                    method.invoke(dialog, parentFragmentManager, "AUTOMATION_FIRE_DIALOG")
+                                } catch (e: Exception) {
+                                    Log.e("AutomationEngine", "Failed to show dialog manually", e)
+                                }
+                            }
 
-                // 2. Automatically execute the deletion logic in the background
-                lifecycleScope.launch(dispatchers.main()) {
-                    // Wait 1.5 seconds so the user can see the native dialog appear
-                    delay(1500) 
+                        // 2. Wait 1.5 seconds so the user sees the native dialog appear
+                        delay(1500) 
 
-                    // Trigger the actual clear
-                    if (deleteType == "delete_all") {
-                        webView?.clearCache(true)
-                        webView?.clearHistory()
-                        webView?.clearFormData()
-                        android.webkit.CookieManager.getInstance().removeAllCookies(null)
-                        android.webkit.CookieManager.getInstance().flush()
-                        android.webkit.WebStorage.getInstance().deleteAllData()
-                    } else {
-                        webView?.clearCache(true)
-                        webView?.clearFormData()
-                        val url = webView?.url
-                        val cookieManager = android.webkit.CookieManager.getInstance()
-                        cookieManager.getCookie(url ?: "")?.split(";")?.forEach { cookie ->
-                            val name = cookie.substringBefore("=").trim()
-                            cookieManager.setCookie(url ?: "", "$name=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/")
+                        // 3. Automatically execute the deletion logic in the background
+                        if (deleteType == "delete_all") {
+                            webView?.clearCache(true)
+                            webView?.clearHistory()
+                            webView?.clearFormData()
+                            android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                            android.webkit.CookieManager.getInstance().flush()
+                            android.webkit.WebStorage.getInstance().deleteAllData()
+                        } else {
+                            webView?.clearCache(true)
+                            webView?.clearFormData()
+                            val url = webView?.url
+                            val cookieManager = android.webkit.CookieManager.getInstance()
+                            cookieManager.getCookie(url ?: "")?.split(";")?.forEach { cookie ->
+                                val name = cookie.substringBefore("=").trim()
+                                cookieManager.setCookie(url ?: "", "$name=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/")
+                            }
+                            cookieManager.flush()
                         }
-                        cookieManager.flush()
-                    }
 
-                    // 3. Dismiss the dialog visually
-                    dialog.dismiss()
-                    
-                    // 4. Tell the engine to resume the automation loop
-                    com.duckduckgo.app.automation.AutomationEngine.resolveFireDialogResult()
+                        // 4. Dismiss the dialog visually (using FragmentManager to avoid unresolved dismiss())
+                        parentFragmentManager.findFragmentByTag("AUTOMATION_FIRE_DIALOG")?.let { fragment ->
+                            parentFragmentManager.beginTransaction().remove(fragment).commitAllowingStateLoss()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AutomationEngine", "Error during fire dialog automation", e)
+                    } finally {
+                        // 5. Tell the engine to resume the automation loop regardless of any errors
+                        com.duckduckgo.app.automation.AutomationEngine.resolveFireDialogResult()
+                    }
                 }
             } else {
                 com.duckduckgo.app.automation.AutomationEngine.resolveFireDialogResult()

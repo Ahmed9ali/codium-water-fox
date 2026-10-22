@@ -618,7 +618,8 @@ object AutomationEngine {
     // ========================================================================
 
     fun resolveFireDialogResult() {
-        fireDialogContinuation?.resume(Unit)
+        // FIXED: Use resumeWith to avoid "No value passed for parameter 'onCancellation'"
+        fireDialogContinuation?.resumeWith(Result.success(Unit))
         fireDialogContinuation = null
     }
 
@@ -657,6 +658,80 @@ object AutomationEngine {
             webView.evaluateJavascript(js, null)
         } catch (e: Exception) {
             Log.e(TAG, "Error clearing session: ${e.message}")
+        }
+    }
+
+    private fun clearTabData(webView: WebView) {
+        try {
+            webView.clearCache(true)
+            webView.clearFormData()
+
+            val js = """
+                (function() {
+                    try { localStorage.clear(); } catch(_) {}
+                    try { sessionStorage.clear(); } catch(_) {}
+                    try {
+                        if (window.indexedDB && window.indexedDB.databases) {
+                            window.indexedDB.databases().then(dbs => {
+                                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
+                            });
+                        }
+                    } catch(_) {}
+                    try {
+                        if (navigator.serviceWorker) {
+                            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                                for(let registration of registrations) { registration.unregister(); }
+                            });
+                        }
+                    } catch(_) {}
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(js, null)
+
+            val url = webView.url ?: return
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.getCookie(url)?.split(";")?.forEach { cookie ->
+                val name = cookie.substringBefore("=").trim()
+                cookieManager.setCookie(url, "$name=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/")
+            }
+            cookieManager.flush()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing tab data: ${e.message}")
+        }
+    }
+
+    private fun clearAllData(webView: WebView) {
+        try {
+            webView.clearCache(true)
+            webView.clearHistory()
+            webView.clearFormData()
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            WebStorage.getInstance().deleteAllData()
+            
+            val js = """
+                (function() {
+                    try { localStorage.clear(); } catch(_) {}
+                    try { sessionStorage.clear(); } catch(_) {}
+                    try {
+                        if (window.indexedDB && window.indexedDB.databases) {
+                            window.indexedDB.databases().then(dbs => {
+                                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
+                            });
+                        }
+                    } catch(_) {}
+                    try {
+                        if (navigator.serviceWorker) {
+                            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                                for(let registration of registrations) { registration.unregister(); }
+                            });
+                        }
+                    } catch(_) {}
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(js, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing all data: ${e.message}")
         }
     }
 
