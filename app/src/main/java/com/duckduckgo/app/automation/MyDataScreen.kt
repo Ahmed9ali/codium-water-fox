@@ -1,6 +1,17 @@
 /*
  * Copyright (c) 2025 DuckDuckGo
- * ... license header ...
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package com.duckduckgo.app.automation
@@ -25,8 +36,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -149,7 +158,7 @@ fun MyDataScreen(
         }
     }
 
-    // Custom in-app confirmation dialog (avoids Material3 AlertDialog pink window)
+    // Custom in-app confirmation dialog
     groupToDelete?.let { name ->
         InAppConfirmDialog(
             title = stringResource(R.string.automation_delete_confirm),
@@ -300,157 +309,5 @@ private fun OverflowRow(
             color = tint ?: DuckDuckGoTheme.colors.text.primary,
             fontSize = 14.sp,
         )
-    }
-}
-
-// Custom in-app confirmation dialog
-@Composable
-private fun InAppConfirmDialog(
-    title: String,
-    message: String,
-    confirmLabel: String,
-    cancelLabel: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .background(
-                    color = DuckDuckGoTheme.colors.backgrounds.surface,
-                    shape = RoundedCornerShape(16.dp),
-                )
-                .clickable { /* consume clicks inside */ }
-                .padding(20.dp),
-        ) {
-            Text(
-                text = title,
-                color = DuckDuckGoTheme.colors.text.primary,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = message,
-                color = DuckDuckGoTheme.colors.text.secondary,
-                fontSize = 14.sp,
-            )
-            Spacer(Modifier.height(20.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
-            ) {
-                Text(
-                    text = cancelLabel,
-                    color = DuckDuckGoTheme.colors.brand.accentBlue,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clickable(onClick = onDismiss)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = confirmLabel,
-                    color = DuckDuckGoTheme.colors.text.destructive,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clickable(onClick = onConfirm)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-            }
-        }
-    }
-}
-
-// Custom in-app text-input dialog
-@Composable
-private fun InAppInputDialog(
-    title: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    confirmLabel: String,
-    cancelLabel: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val fieldColors = TextFieldDefaults.colors(
-        focusedTextColor = DuckDuckGoTheme.colors.text.primary,
-        unfocusedTextColor = DuckDuckGoTheme.colors.text.primary,
-        focusedLabelColor = DuckDuckGoTheme.colors.text.secondary,
-        unfocusedLabelColor = DuckDuckGoTheme.colors.text.secondary,
-        cursorColor = DuckDuckGoTheme.colors.brand.accentBlue,
-        focusedContainerColor = DuckDuckGoTheme.colors.backgrounds.background,
-        unfocusedContainerColor = DuckDuckGoTheme.colors.backgrounds.background,
-        focusedIndicatorColor = DuckDuckGoTheme.colors.brand.accentBlue,
-        unfocusedIndicatorColor = DuckDuckGoTheme.colors.text.secondary,
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .background(
-                    color = DuckDuckGoTheme.colors.backgrounds.surface,
-                    shape = RoundedCornerShape(16.dp),
-                )
-                .clickable { }
-                .padding(20.dp),
-        ) {
-            Text(
-                text = title,
-                color = DuckDuckGoTheme.colors.text.primary,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = fieldColors,
-            )
-            Spacer(Modifier.height(20.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
-            ) {
-                Text(
-                    text = cancelLabel,
-                    color = DuckDuckGoTheme.colors.brand.accentBlue,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clickable(onClick = onDismiss)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = confirmLabel,
-                    color = DuckDuckGoTheme.colors.brand.accentBlue,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .clickable(onClick = onConfirm)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
-            }
-        }
     }
 }
