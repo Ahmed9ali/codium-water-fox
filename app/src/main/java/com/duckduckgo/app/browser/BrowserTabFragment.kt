@@ -1172,11 +1172,18 @@ class BrowserTabFragment :
             }
         }
 
-        webView?.let { webView ->
-              // --- HOOK: Attach AutomationEngine (tab-scoped) ---
+               webView?.let { webView ->
+            // --- HOOK: Attach AutomationEngine (tab-scoped) ---
             com.duckduckgo.app.automation.AutomationEngine.init(requireContext())
             webView.automationTabId = tabId
+            // Mark this tab as active FIRST, so the scanner's onFieldsDetected callback
+            // is not discarded by the tab-scope guard in AutomationEngine.
+            com.duckduckgo.app.automation.AutomationEngine.setActiveTab(tabId)
             com.duckduckgo.app.automation.AutomationEngine.attachWebView(webView, tabId)
+            // Re-run the scanner here too: on a cold launch the page can finish loading
+            // before onResume fires, so the scanner's callback may have fired while
+            // activeTabId was still null. Re-running on every resume is idempotent.
+            com.duckduckgo.app.automation.AutomationEngine.injectScanner()
             // -------------------------------------------------
 
             if (webView.isShown) {

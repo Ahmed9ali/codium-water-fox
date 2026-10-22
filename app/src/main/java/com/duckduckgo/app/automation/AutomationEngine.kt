@@ -223,7 +223,10 @@ object AutomationEngine {
     // ---------------- Field detection (tab-scoped) ----------------
 
     fun onFieldsDetected(json: String, tabId: String?) {
-        // Multi-tab scope (spec §18): only the active tab drives icon visibility.
+         android.util.Log.d(
+            "AutomationEngine",
+            "onFieldsDetected tabId=$tabId activeTabId=$activeTabId jsonLen=${json.length}",
+        )
         if (tabId == null || tabId != activeTabId) return
         try {
             if (json.contains("\"debug\"")) return

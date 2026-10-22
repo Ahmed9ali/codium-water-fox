@@ -228,6 +228,7 @@ class OmnibarLayout @JvmOverloads constructor(
     private var previousTransitionState: TransitionState? = null
     private var lastAppliedShowContextualSheetIcon: Boolean? = null
     private val detectedFieldsObserver = Observer<Int> { count ->
+    android.util.Log.d("OmnibarLayout", "detectedFieldCount=$count aiChatMenu=${aiChatMenu?.javaClass?.simpleName}")
     aiChatMenu?.isVisible = count > 0
 }
 
