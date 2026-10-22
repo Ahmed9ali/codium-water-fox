@@ -7,6 +7,8 @@ import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -258,6 +260,10 @@ object AutomationEngine {
         }
     }
 
+    // ========================================================================
+    // SCRIPT DRIVEN EXECUTION
+    // ========================================================================
+
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
         var completed = 0
@@ -351,6 +357,111 @@ object AutomationEngine {
         updateStatus("Finished $completed / ${config.targetRepeatCount}")
         onAutomationFinished?.invoke(completed)
     }
+
+    // ========================================================================
+    // LEGACY ACTIVITY SUPPORT (Scanner-driven)
+    // ========================================================================
+
+    fun queueAutomationInBrowserTab(config: AutomationConfig) {
+        currentConfig = config
+        pendingBrowserConfig = config
+        hudGroupName = config.groupName
+        updateProgress(0, config.targetRepeatCount)
+        updateState(AutomationState.NAVIGATING)
+        updateStatus("Opening ${config.targetUrl} in browser tab...")
+
+        val existingWebView = currentWebView?.get()
+        if (existingWebView != null) {
+            mountHudOverlayIfNeeded(existingWebView)
+            pendingBrowserConfig = null
+            startAutomation(config, navigateFirstCycle = false)
+        }
+    }
+
+    fun startAutomation(config: AutomationConfig, navigateFirstCycle: Boolean = true) {
+        currentConfig = config
+        hudGroupName = config.groupName
+        updateProgress(0, config.targetRepeatCount)
+        updateState(AutomationState.NAVIGATING)
+        hudMode = HudMode.Running
+        hudVisible = true
+        _captchaState.postValue(false)
+        _dataExhaustedState.postValue(false)
+
+        val webView = currentWebView?.get()
+        if (webView == null) {
+            pendingBrowserConfig = config
+            updateStatus("Waiting for browser tab...")
+            return
+        }
+        mountHudOverlayIfNeeded(webView)
+        automationJob?.cancel()
+        automationJob = scope.launch { runAutomationLoop(config, navigateFirstCycle) }
+    }
+
+    private suspend fun runAutomationLoop(config: AutomationConfig, navigateFirstCycle: Boolean) {
+        val webView = currentWebView?.get() ?: return
+        val targetUri = if (config.targetUrl.startsWith("http")) config.targetUrl else "https://${config.targetUrl}"
+        var isFirst = true
+        
+        while (hudCompleted < config.targetRepeatCount && scope.isActive) {
+            if (!VaultRepository.hasUnusedData(config.groupName)) {
+                _dataExhaustedState.postValue(true); updateState(AutomationState.WAITING_DATA_EXHAUSTED); return
+            }
+            val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
+            currentProfile = profile
+            
+            updateState(AutomationState.NAVIGATING)
+            if (!isFirst || navigateFirstCycle) withContext(Dispatchers.Main) { webView.loadUrl(targetUri) }
+            isFirst = false
+            waitForPageReady(webView); injectScanner(); delay(600)
+
+            var stepSuccess = false
+            var counter = 0
+            while (counter < 5 && scope.isActive) {
+                counter++
+                updateState(AutomationState.SCANNING)
+                val scanObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
+                val fieldsArr = scanObj.optJSONArray("fields") ?: JSONArray()
+                if (scanObj.optBoolean("captchaDetected", false) && config.pauseOnCaptcha) {
+                    _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
+                }
+                currentActionRef = scanObj.optString("actionButtonRef").takeIf { it.isNotBlank() }
+                val fillArray = JSONArray()
+                for (i in 0 until fieldsArr.length()) {
+                    val f = fieldsArr.getJSONObject(i)
+                    val looksLike = f.optString("looksLike")
+                    val matched = if (looksLike == "termsCheckbox") "true" else profile.resolveForField(looksLike, f.optString("name"), f.optString("tag"))
+                    if (!matched.isNullOrBlank()) {
+                        fillArray.put(JSONObject().apply { put("ref", f.optString("ref")); put("index", f.optInt("index", i)); put("value", matched) })
+                    }
+                }
+                if (fillArray.length() == 0) { stepSuccess = counter > 1; break }
+                updateState(AutomationState.FILLING)
+                evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill(${JSONObject.quote(fillArray.toString())}, '{}'));")
+                delay(500)
+                updateState(AutomationState.CLICKING_NEXT)
+                val clickOpts = JSONObject().apply { put("actionRef", currentActionRef ?: ""); put("settleTimeoutMs", config.settleTimeoutMs) }
+                val settle = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationClickNextAndSettle(${JSONObject.quote(clickOpts.toString())}));")) } catch (_: Exception) { JSONObject() }
+                if (settle.optString("verdict") == "captcha_blocked" && config.pauseOnCaptcha) {
+                    _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
+                }
+                delay(600); waitForPageReady(webView); injectScanner(); delay(500)
+                stepSuccess = true; break
+            }
+            if (stepSuccess) {
+                VaultRepository.markProfileUsed(profile)
+                updateProgress(hudCompleted + 1, config.targetRepeatCount)
+            } else break
+            delay(1000)
+        }
+        updateState(AutomationState.COMPLETED)
+        onAutomationFinished?.invoke(hudCompleted)
+    }
+
+    // ========================================================================
+    // RECORDER & UTILS
+    // ========================================================================
 
     private suspend fun waitForPageReady(webView: WebView) {
         var waited = 0L

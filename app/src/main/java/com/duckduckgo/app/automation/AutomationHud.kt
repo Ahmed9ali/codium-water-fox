@@ -49,9 +49,17 @@ private fun HudMenuPanel() {
         ) {
             HudHeaderRow("Automation", "Ready on this page") { AutomationEngine.closeHud() }
             Spacer(Modifier.height(12.dp))
-            DdgPrimaryButton("Create Automation") { AutomationEngine.startRecording() }
+            
+            DdgPrimaryButton(
+                text = "Create Automation",
+                onClick = { AutomationEngine.startRecording() }
+            )
             Spacer(Modifier.height(8.dp))
-            DdgSecondaryButton("Run Automation") { AutomationEngine.openScriptList() }
+            
+            DdgSecondaryButton(
+                text = "Run Automation",
+                onClick = { AutomationEngine.openScriptList() }
+            )
             Spacer(Modifier.height(14.dp))
             
             Text(
@@ -117,8 +125,17 @@ private fun RecordingCapturePanel(steps: List<RecordedStep>) {
         Spacer(Modifier.height(14.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DdgSecondaryButton("Cancel", modifier = Modifier.weight(1f)) { AutomationEngine.cancelRecording() }
-            DdgPrimaryButton("Stop & Save", modifier = Modifier.weight(1f), enabled = steps.isNotEmpty()) { AutomationEngine.stopRecordingAndPromptSave() }
+            DdgSecondaryButton(
+                text = "Cancel",
+                onClick = { AutomationEngine.cancelRecording() },
+                modifier = Modifier.weight(1f)
+            )
+            DdgPrimaryButton(
+                text = "Stop & Save",
+                onClick = { AutomationEngine.stopRecordingAndPromptSave() },
+                modifier = Modifier.weight(1f),
+                enabled = steps.isNotEmpty()
+            )
         }
     }
 }
@@ -210,8 +227,17 @@ private fun RecordingSavePanel(host: String, stepCount: Int) {
         )
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DdgSecondaryButton("Back", modifier = Modifier.weight(1f)) { AutomationEngine.cancelSaveRecording() }
-            DdgPrimaryButton("Save", modifier = Modifier.weight(1f), enabled = nameInput.trim().isNotBlank()) { AutomationEngine.saveRecording(nameInput) }
+            DdgSecondaryButton(
+                text = "Back",
+                onClick = { AutomationEngine.cancelSaveRecording() },
+                modifier = Modifier.weight(1f)
+            )
+            DdgPrimaryButton(
+                text = "Save",
+                onClick = { AutomationEngine.saveRecording(nameInput) },
+                modifier = Modifier.weight(1f),
+                enabled = nameInput.trim().isNotBlank()
+            )
         }
     }
 }
@@ -254,7 +280,7 @@ private fun HudScriptListPanel() {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            DdgSecondaryButton("Back") { AutomationEngine.closeHud() }
+            DdgSecondaryButton(text = "Back", onClick = { AutomationEngine.closeHud() })
         }
     }
 }
@@ -292,15 +318,32 @@ private fun HudRunSetupPanel() {
             Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                DdgSecondaryButton("-1", modifier = Modifier.width(60.dp)) { AutomationEngine.updateRunRepeat(repeatCount - 1) }
+                DdgSecondaryButton(
+                    text = "-1",
+                    onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) },
+                    modifier = Modifier.width(60.dp)
+                )
                 Text("$repeatCount", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontFamily = VarelaRound, fontSize = 16.sp)
-                DdgSecondaryButton("+1", modifier = Modifier.width(60.dp)) { AutomationEngine.updateRunRepeat(repeatCount + 1) }
+                DdgSecondaryButton(
+                    text = "+1",
+                    onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) },
+                    modifier = Modifier.width(60.dp)
+                )
             }
 
             Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DdgSecondaryButton("Back", modifier = Modifier.weight(1f)) { AutomationEngine.openScriptList() }
-                DdgPrimaryButton("Run", modifier = Modifier.weight(1f), enabled = selectedGroup.isNotBlank()) { AutomationEngine.startSelectedScriptRun() }
+                DdgSecondaryButton(
+                    text = "Back",
+                    onClick = { AutomationEngine.openScriptList() },
+                    modifier = Modifier.weight(1f)
+                )
+                DdgPrimaryButton(
+                    text = "Run",
+                    onClick = { AutomationEngine.startSelectedScriptRun() },
+                    modifier = Modifier.weight(1f),
+                    enabled = selectedGroup.isNotBlank()
+                )
             }
         }
     }
@@ -335,24 +378,56 @@ private fun HudRunningPanel() {
 
             when (state) {
                 AutomationState.WAITING_CAPTCHA_HUMAN -> {
-                    DdgPrimaryButton("I Solved the CAPTCHA — Continue") { AutomationEngine.continueAfterCaptchaResolution() }
+                    DdgPrimaryButton(
+                        text = "I Solved the CAPTCHA — Continue",
+                        onClick = { AutomationEngine.continueAfterCaptchaResolution() }
+                    )
                     Spacer(Modifier.height(6.dp))
-                    DdgSecondaryButton("Stop Automation") { AutomationEngine.stopAutomation() }
+                    DdgSecondaryButton(
+                        text = "Stop Automation",
+                        onClick = { AutomationEngine.stopAutomation() }
+                    )
                 }
                 AutomationState.WAITING_DATA_EXHAUSTED -> {
                     Text("Group data finished! Repeat with same data or add new?", fontFamily = VarelaRound, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DdgPrimaryButton("Repeat Data", Modifier.weight(1f)) { AutomationEngine.handleDataExhaustedChoice("repeat_same") }
-                        DdgSecondaryButton("Add Data", Modifier.weight(1f)) { AutomationEngine.handleDataExhaustedChoice("add_new") }
+                        DdgPrimaryButton(
+                            text = "Repeat Data",
+                            onClick = { AutomationEngine.handleDataExhaustedChoice("repeat_same") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        DdgSecondaryButton(
+                            text = "Add Data",
+                            onClick = { AutomationEngine.handleDataExhaustedChoice("add_new") },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
-                AutomationState.COMPLETED -> DdgPrimaryButton("Automation Finished") { AutomationEngine.stopAutomation() }
+                AutomationState.COMPLETED -> DdgPrimaryButton(
+                    text = "Automation Finished",
+                    onClick = { AutomationEngine.stopAutomation() }
+                )
                 else -> {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (state == AutomationState.PAUSED) DdgPrimaryButton("Resume", Modifier.weight(1f)) { AutomationEngine.resumeAutomation() }
-                        else DdgSecondaryButton("Pause", Modifier.weight(1f)) { AutomationEngine.pauseAutomation() }
-                        DdgSecondaryButton("Stop", Modifier.weight(1f)) { AutomationEngine.stopAutomation() }
+                        if (state == AutomationState.PAUSED) {
+                            DdgPrimaryButton(
+                                text = "Resume",
+                                onClick = { AutomationEngine.resumeAutomation() },
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            DdgSecondaryButton(
+                                text = "Pause",
+                                onClick = { AutomationEngine.pauseAutomation() },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        DdgSecondaryButton(
+                            text = "Stop",
+                            onClick = { AutomationEngine.stopAutomation() },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
