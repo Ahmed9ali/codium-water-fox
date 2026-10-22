@@ -1141,6 +1141,49 @@ class BrowserTabFragment :
             pendingUploadTask = null
         }
         viewModel.handleExternalLaunch(isLaunchedFromExternalApp)
+        // --- ADD THIS BLOCK IN onCreate ---
+        com.duckduckgo.app.automation.AutomationEngine.onShowFireDialog = { deleteType ->
+            if (isAdded) {
+                // 1. Show the actual Native Bottom Sheet
+                val dialog = fireDialogProvider.createFireDialog(FireDialogOrigin.Hatch(tabId))
+                dialog.show(parentFragmentManager, "AUTOMATION_FIRE_DIALOG")
+
+                // 2. Automatically execute the deletion logic in the background
+                lifecycleScope.launch(dispatchers.main()) {
+                    // Wait 1.5 seconds so the user can see the native dialog appear
+                    delay(1500) 
+
+                    // Trigger the actual clear
+                    if (deleteType == "delete_all") {
+                        webView?.clearCache(true)
+                        webView?.clearHistory()
+                        webView?.clearFormData()
+                        android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                        android.webkit.CookieManager.getInstance().flush()
+                        android.webkit.WebStorage.getInstance().deleteAllData()
+                    } else {
+                        webView?.clearCache(true)
+                        webView?.clearFormData()
+                        val url = webView?.url
+                        val cookieManager = android.webkit.CookieManager.getInstance()
+                        cookieManager.getCookie(url ?: "")?.split(";")?.forEach { cookie ->
+                            val name = cookie.substringBefore("=").trim()
+                            cookieManager.setCookie(url ?: "", "$name=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/")
+                        }
+                        cookieManager.flush()
+                    }
+
+                    // 3. Dismiss the dialog visually
+                    dialog.dismiss()
+                    
+                    // 4. Tell the engine to resume the automation loop
+                    com.duckduckgo.app.automation.AutomationEngine.resolveFireDialogResult()
+                }
+            } else {
+                com.duckduckgo.app.automation.AutomationEngine.resolveFireDialogResult()
+            }
+        }
+        // ----------------------------------
 
         observeSubscriptionEventDataChannel()
         observeDuckChatJsResponseChannel()
@@ -2117,6 +2160,9 @@ class BrowserTabFragment :
         duckChatButtonAnchor = null
         browserNavigationBarIntegration.onDestroyView()
         renderer.removeBrandDesignFitListener()
+
+        com.duckduckgo.app.automation.AutomationEngine.onShowFireDialog = null
+        
         super.onDestroyView()
     }
 

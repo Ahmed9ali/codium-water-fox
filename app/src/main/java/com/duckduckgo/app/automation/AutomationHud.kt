@@ -36,10 +36,6 @@ internal fun BrowserTabAutomationHud() {
     }
 }
 
-// ============================================================================
-// MENU PANEL
-// ============================================================================
-
 @Composable
 private fun HudMenuPanel() {
     val context = LocalContext.current
@@ -81,10 +77,6 @@ private fun HudMenuPanel() {
         }
     }
 }
-
-// ============================================================================
-// RECORDING PANEL
-// ============================================================================
 
 @Composable
 private fun HudRecordingPanel() {
@@ -263,10 +255,6 @@ private fun RecordingChip(text: String, compact: Boolean = false, onClick: () ->
     }
 }
 
-// ============================================================================
-// SCRIPT LIST PANEL
-// ============================================================================
-
 @Composable
 private fun HudScriptListPanel() {
     val shape = RoundedCornerShape(16.dp)
@@ -311,14 +299,17 @@ private fun HudScriptListPanel() {
     }
 }
 
-// ============================================================================
-// SCRIPT EDITOR PANEL
-// ============================================================================
-
 @Composable
 private fun HudScriptEditPanel() {
     val shape = RoundedCornerShape(16.dp)
     val script = AutomationEngine.hudEditingScript ?: return
+
+    var showWaitDialog by remember { mutableStateOf(false) }
+    var waitInput by remember { mutableStateOf("2") }
+    
+    var showCustomDialog by remember { mutableStateOf(false) }
+    var customSelector by remember { mutableStateOf("") }
+    var customValue by remember { mutableStateOf("") }
 
     Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
         Column(modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape).border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
@@ -326,9 +317,16 @@ private fun HudScriptEditPanel() {
             Spacer(Modifier.height(12.dp))
 
             Column(modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState())) {
-                script.steps.forEach { step ->
+                script.steps.forEachIndexed { index, step ->
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${step.sequenceIndex}. ${step.displayLabel}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        
+                        IconButton(onClick = { AutomationEngine.moveStep(step.id, up = true) }, enabled = index > 0) {
+                            Text("↑", fontSize = 16.sp)
+                        }
+                        IconButton(onClick = { AutomationEngine.moveStep(step.id, up = false) }, enabled = index < script.steps.size - 1) {
+                            Text("↓", fontSize = 16.sp)
+                        }
                         Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(4.dp))
                     }
                 }
@@ -338,9 +336,10 @@ private fun HudScriptEditPanel() {
             Text("Add Step:", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                RecordingChip("+ Wait 2s") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.Wait, waitMs = 2000, displayLabel = "Wait 2s")) }
-                RecordingChip("+ Cookies") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.DeleteCookies, displayLabel = "Delete Cookies")) }
+                RecordingChip("+ Wait") { showWaitDialog = true }
+                RecordingChip("+ Clear Data") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.DeleteCookies, displayLabel = "Clear Site Data")) }
                 RecordingChip("+ CAPTCHA") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.CaptchaWait, displayLabel = "Wait CAPTCHA")) }
+                RecordingChip("+ Custom") { showCustomDialog = true }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -350,11 +349,52 @@ private fun HudScriptEditPanel() {
             }
         }
     }
-}
 
-// ============================================================================
-// RUN SETUP PANEL
-// ============================================================================
+    if (showWaitDialog) {
+        InAppInputDialog(
+            title = "Wait Time (seconds)",
+            value = waitInput,
+            onValueChange = { waitInput = it.filter { c -> c.isDigit() } },
+            confirmLabel = "Add",
+            cancelLabel = "Cancel",
+            onConfirm = {
+                val secs = waitInput.toLongOrNull() ?: 2L
+                AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.Wait, waitMs = secs * 1000, displayLabel = "Wait ${secs}s"))
+                showWaitDialog = false
+            },
+            onDismiss = { showWaitDialog = false }
+        )
+    }
+
+    if (showCustomDialog) {
+        Dialog(onDismissRequest = { showCustomDialog = false }) {
+            Column(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
+                Text("Add Custom Function", fontFamily = VarelaRound, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(value = customSelector, onValueChange = { customSelector = it }, label = { Text("CSS Selector (e.g. #submit)") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = customValue, onValueChange = { customValue = it }, label = { Text("Value (blank if click)") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DdgSecondaryButton(text = "Cancel", onClick = { showCustomDialog = false }, modifier = Modifier.weight(1f))
+                    DdgPrimaryButton(text = "Add", onClick = {
+                        if (customSelector.isNotBlank()) {
+                            val kind = if (customValue.isBlank()) StepKind.ClickNext else StepKind.Field
+                            AutomationEngine.addStepToEditingScript(RecordedStep(
+                                sequenceIndex = 0, 
+                                kind = kind, 
+                                cssSelector = customSelector, 
+                                fieldType = "text", 
+                                displayLabel = "Custom: $customSelector"
+                            ))
+                        }
+                        showCustomDialog = false
+                    }, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun HudRunSetupPanel() {
@@ -399,10 +439,6 @@ private fun HudRunSetupPanel() {
         }
     }
 }
-
-// ============================================================================
-// RUNNING PANEL
-// ============================================================================
 
 @Composable
 private fun HudRunningPanel() {
@@ -454,10 +490,6 @@ private fun HudRunningPanel() {
         }
     }
 }
-
-// ============================================================================
-// HELPERS
-// ============================================================================
 
 @Composable
 private fun HudHeaderRow(title: String, subtitle: String, onClose: (() -> Unit)?) {

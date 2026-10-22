@@ -113,11 +113,12 @@ fun AutomationNavHost(
         }
 
         when (val c = current) {
-            AutomationScreen.Home -> AutomationHomeScreen(
+                AutomationScreen.Home -> AutomationHomeScreen(
                 onBack = onBack,
                 onMyDataClick = { current = AutomationScreen.MyData },
                 onAddDataClick = { current = AutomationScreen.AddData },
                 onMyScriptsClick = { current = AutomationScreen.MyScripts },
+                onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) }, // NEW
                 onCreateAutomationClick = { current = AutomationScreen.CreateAutomation },
                 onViewLogsClick = { current = AutomationScreen.MyData },
             )

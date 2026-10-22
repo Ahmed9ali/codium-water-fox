@@ -52,6 +52,7 @@
     const tag = (el.tagName || "").toLowerCase();
     const type = (el.type || "text").toLowerCase();
     const auto = (el.getAttribute("autocomplete") || "").toLowerCase();
+    const role = (el.getAttribute("role") || "").toLowerCase();
     const name = (el.getAttribute("name") || "").toLowerCase();
     const id = (el.id || "").toLowerCase();
     const ph = (el.getAttribute("placeholder") || "").toLowerCase();
@@ -59,11 +60,16 @@
     const lbl = findLabel(el).toLowerCase();
     const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto;
 
-    if (type === "checkbox" || el.getAttribute("role") === "checkbox") {
+    if (role === "combobox" || el.tagName === "SELECT") {
+        if (/\b(country|nation|pays|país)\b/i.test(combined)) return "country";
+        return "text";
+    }
+
+    if (type === "checkbox" || role === "checkbox") {
       if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|acepto|términos|conditions)\b/i.test(combined)) return "termsCheckbox";
       return "checkbox";
     }
-    if (type === "radio") {
+    if (type === "radio" || role === "radio") {
       if (/\b(gender|sex|male|female|género|sexo|homme|femme)\b/i.test(combined)) return "gender";
       return "radio";
     }
@@ -84,12 +90,11 @@
     if (auto === "family-name" || /\b(last\s*name|lname|surname|family|nom|apellido)\b/i.test(combined)) return "lastName";
     if (auto === "name" || /\b(full\s*name|your\s*name|name|nom|nombre)\b/i.test(combined)) return "fullName";
     if (/\b(subject|topic|reason|sujet|asunto)\b/i.test(combined)) return "subject";
-    if (tag === "textarea" || /\b(message|comment|feedback|description|bio|mensaje|message)\b/i.test(combined)) return "message";
+    if (tag === "textarea" || role === "textbox" || /\b(message|comment|feedback|description|bio|mensaje|message)\b/i.test(combined)) return "message";
     if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha|naissance)\b/i.test(combined)) return "dob";
     if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|code postal|código postal)\b/i.test(combined)) return "zip";
     if (auto === "address-level2" || /\b(city|town|ville|ciudad)\b/i.test(combined)) return "city";
     if (auto === "address-level1" || /\b(state|province|region|état|estado)\b/i.test(combined)) return "state";
-    if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país)\b/i.test(combined)) return "country";
     if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 ||
         /\b(address|street|apartment|apt|building|adresse|dirección|endereço)\b/i.test(combined)) return "address";
     return "";
@@ -105,11 +110,12 @@
       let sel = cur.tagName.toLowerCase();
       const nameAttr = cur.getAttribute && cur.getAttribute("name");
       const typeAttr = cur.getAttribute && cur.getAttribute("type");
-      if (nameAttr) {
-        sel += `[name="${nameAttr}"]`;
-      } else if (typeAttr && (typeAttr === 'email' || typeAttr === 'password' || typeAttr === 'tel')) {
-        sel += `[type="${typeAttr}"]`;
-      } else {
+      const roleAttr = cur.getAttribute && cur.getAttribute("role");
+      
+      if (nameAttr) sel += `[name="${nameAttr}"]`;
+      else if (roleAttr) sel += `[role="${roleAttr}"]`;
+      else if (typeAttr && (typeAttr === 'email' || typeAttr === 'password' || typeAttr === 'tel')) sel += `[type="${typeAttr}"]`;
+      else {
         const parent = cur.parentElement;
         if (parent) {
           const sameTag = Array.from(parent.children).filter(c => c.tagName === cur.tagName);
@@ -156,14 +162,15 @@
     if (!el || el.nodeType !== 1) return;
     let target = el;
     if (target.tagName === 'DIV' || target.tagName === 'SPAN' || target.tagName === 'LABEL') {
-        const inner = target.querySelector('input, textarea, select');
+        const inner = target.querySelector('input, textarea, select, [role="combobox"], [contenteditable="true"]');
         if (inner) target = inner;
         else if (document.activeElement && document.activeElement.tagName === 'INPUT') target = document.activeElement;
     }
 
     const tag = (target.tagName || "").toLowerCase();
+    const role = (target.getAttribute("role") || "").toLowerCase();
     const isEditable = target.isContentEditable === true;
-    if (tag !== "input" && tag !== "textarea" && tag !== "select" && !isEditable) return;
+    if (tag !== "input" && tag !== "textarea" && tag !== "select" && !isEditable && role !== "combobox") return;
     
     if (tag === "input") {
       const t = (target.type || "text").toLowerCase();
@@ -173,7 +180,7 @@
     if (recordedElements.has(target)) return;
     recordedElements.add(target);
 
-    const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select'));
+    const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"]'));
     const absIndex = allInputs.indexOf(target);
 
     const looksLike = classify(target);
@@ -210,16 +217,17 @@
   }
 
   function onClick(e) {
-    const el = e.target;
+    const el = e.target.closest('button, input[type="submit"], input[type="button"], [role="button"]');
     if (!el) return;
-    const tag = (el.tagName || "").toLowerCase();
-    const isButton = tag === "button"
-      || (tag === "input" && /submit|button/i.test(el.type || ""))
-      || el.getAttribute("role") === "button";
-    if (!isButton) return;
-
+    
     const label = ((el.innerText || el.value || "") + "").trim();
-    if (!/\b(next|continue|submit|sign\s*up|register|proceed|finish|done|save|send|log\s*in|sign\s*in|get\s*started|suivant|enviar|siguiente|registrarse|envoyer)\b/i.test(label)) return;
+    
+    // CRITICAL: Prevent submission if it's a Next/Submit button during recording
+    if (/\b(next|continue|submit|sign\s*up|register|proceed|finish|done|save|send|log\s*in|sign\s*in|get\s*started|suivant|enviar|siguiente|registrarse|envoyer)\b/i.test(label)) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
     if (recordedElements.has(el)) return;
     recordedElements.add(el);
 

@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -88,6 +89,10 @@ object AutomationEngine {
     var hudTotal by mutableIntStateOf(1); private set
     var hudStatus by mutableStateOf(""); private set
     var hudGroupName by mutableStateOf(""); private set
+
+    // NATIVE FIRE DIALOG CALLBACK
+    var onShowFireDialog: ((String) -> Unit)? = null
+    private var fireDialogContinuation: CancellableContinuation<Unit>? = null
 
     private val _recordedSteps = MutableLiveData<List<RecordedStep>>(emptyList())
     val recordedSteps: LiveData<List<RecordedStep>> get() = _recordedSteps
@@ -210,6 +215,29 @@ object AutomationEngine {
         hudEditingScript = current.copy(steps = updatedSteps)
     }
 
+    fun moveStep(id: String, up: Boolean) {
+        val current = hudEditingScript ?: return
+        val steps = current.steps.toMutableList()
+        val idx = steps.indexOfFirst { it.id == id }
+        if (idx == -1) return
+        val targetIdx = if (up) idx - 1 else idx + 1
+        if (targetIdx in steps.indices) {
+            val temp = steps[idx]
+            steps[idx] = steps[targetIdx]
+            steps[targetIdx] = temp
+            val reindexed = steps.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
+            hudEditingScript = current.copy(steps = reindexed)
+        }
+    }
+
+    fun updateWaitStep(id: String, newWaitMs: Long) {
+        val current = hudEditingScript ?: return
+        val steps = current.steps.map { 
+            if (it.id == id) it.copy(waitMs = newWaitMs, displayLabel = "Wait ${newWaitMs / 1000}s") else it 
+        }
+        hudEditingScript = current.copy(steps = steps)
+    }
+
     fun saveEditingScript() {
         val current = hudEditingScript ?: return
         AutomationScriptRepository.saveScript(current)
@@ -254,6 +282,8 @@ object AutomationEngine {
 
     fun stopAutomation() {
         automationJob?.cancel()
+        fireDialogContinuation?.cancel()
+        fireDialogContinuation = null
         currentConfig = null
         pendingBrowserConfig = null
         currentProfile = null
@@ -292,7 +322,7 @@ object AutomationEngine {
     }
 
     // ========================================================================
-    // EXECUTION ENGINE (Custom Components & Native Setting)
+    // EXECUTION ENGINE
     // ========================================================================
 
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
@@ -332,27 +362,45 @@ object AutomationEngine {
                                     if (!el && '${step.domId}') { el = document.getElementById('${step.domId}'); }
                                     if (!el && '${step.placeholder}') { el = document.querySelector('[placeholder="${step.placeholder}"]'); }
                                     if (!el && ${step.index} >= 0) {
-                                        const all = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [role="checkbox"], [role="radio"]'));
+                                        const all = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"]'));
                                         el = all[${step.index}];
                                     }
                                     if (!el) return {ok: false, err: 'not found'};
                                     
                                     el.focus();
                                     const role = (el.getAttribute("role") || "").toLowerCase();
-                                    const isCustom = ['combobox', 'checkbox', 'radio'].includes(role) || el.tagName === 'DIV';
+                                    const isCustom = ['combobox', 'listbox'].includes(role) || el.isContentEditable;
                                     
-                                    if (isCustom) {
-                                        el.click();
-                                        if (role === 'checkbox' || role === 'radio') {
-                                             if (el.previousElementSibling) el.previousElementSibling.click();
-                                             if (el.parentElement) el.parentElement.click();
+                                    if (isCustom && role === 'combobox') {
+                                        el.click(); // Open the dropdown
+                                    } else if (el.tagName === 'SELECT') {
+                                        // Native select handling
+                                        const strVal = '${valToFill}'.toLowerCase();
+                                        for(let i=0; i<el.options.length; i++) {
+                                            if(el.options[i].text.toLowerCase().includes(strVal) || el.options[i].value.toLowerCase().includes(strVal)) {
+                                                el.selectedIndex = i;
+                                                break;
+                                            }
                                         }
+                                        el.dispatchEvent(new Event('change', { bubbles: true }));
                                     } else {
+                                        // Clear pre-filled data first
                                         const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                                         const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-                                        if (el.tagName === 'TEXTAREA' && nativeTextArea) nativeTextArea.call(el, '${valToFill}');
-                                        else if (nativeInput) nativeInput.call(el, '${valToFill}');
-                                        else el.value = '${valToFill}';
+                                        
+                                        if (el.tagName === 'TEXTAREA' && nativeTextArea) {
+                                            nativeTextArea.call(el, '');
+                                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                                            nativeTextArea.call(el, '${valToFill}');
+                                        } else if (nativeInput) {
+                                            nativeInput.call(el, '');
+                                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                                            nativeInput.call(el, '${valToFill}');
+                                        } else {
+                                            el.value = '';
+                                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                                            el.value = '${valToFill}';
+                                        }
                                         
                                         el.dispatchEvent(new Event('input', { bubbles: true }));
                                         el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -365,12 +413,22 @@ object AutomationEngine {
                         evaluateJsSuspend(webView, "return JSON.stringify(${js});")
                         delay(1000)
                     }
-                    StepKind.Wait -> { updateStatus("Waiting ${step.waitMs}ms..."); delay(step.waitMs) }
                     StepKind.DeleteCookies -> {
-                        updateStatus("Clearing cookies...")
-                        CookieManager.getInstance().removeAllCookies(null)
-                        CookieManager.getInstance().flush()
-                        delay(500)
+                        updateState(AutomationState.CLEARING_DATA)
+                        updateStatus("Triggering native delete dialog...")
+                        
+                        if (onShowFireDialog != null) {
+                            // Suspend the loop while the UI shows and auto-processes the dialog
+                            suspendCancellableCoroutine<Unit> { cont ->
+                                fireDialogContinuation = cont
+                                onShowFireDialog?.invoke(step.fieldType) // Pass "delete_tab" or "delete_all"
+                            }
+                        } else {
+                            // Fallback if UI is not available
+                            if (step.fieldType == "delete_all") clearAllData(webView)
+                            else clearTabData(webView)
+                        }
+                        delay(1000)
                     }
                     StepKind.CaptchaWait -> {
                         _captchaState.postValue(true)
@@ -407,7 +465,7 @@ object AutomationEngine {
     }
 
     // ========================================================================
-    // LEGACY ACTIVITY SUPPORT (Scanner-driven)
+    // LEGACY ACTIVITY SUPPORT
     // ========================================================================
 
     fun queueAutomationInBrowserTab(config: AutomationConfig) {
@@ -555,6 +613,15 @@ object AutomationEngine {
         onAutomationFinished?.invoke(hudCompleted)
     }
 
+    // ========================================================================
+    // UTILS
+    // ========================================================================
+
+    fun resolveFireDialogResult() {
+        fireDialogContinuation?.resume(Unit)
+        fireDialogContinuation = null
+    }
+
     private fun clearBrowserSession(webView: WebView) {
         try {
             webView.clearCache(true)
@@ -563,13 +630,35 @@ object AutomationEngine {
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
             WebStorage.getInstance().deleteAllData()
-            webView.evaluateJavascript("try { localStorage.clear(); sessionStorage.clear(); } catch(_) {}", null)
-        } catch (e: Exception) { Log.e(TAG, "Error clearing session: ${e.message}") }
+            
+            val js = """
+                (function() {
+                    try { localStorage.clear(); } catch(_) {}
+                    try { sessionStorage.clear(); } catch(_) {}
+                    try {
+                        if (window.indexedDB && window.indexedDB.databases) {
+                            window.indexedDB.databases().then(dbs => {
+                                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
+                            });
+                        }
+                    } catch(_) {}
+                    try {
+                        if (navigator.serviceWorker) {
+                            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                                for(let registration of registrations) {
+                                    registration.unregister();
+                                }
+                            });
+                        }
+                    } catch(_) {}
+                    return "cleared";
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(js, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing session: ${e.message}")
+        }
     }
-
-    // ========================================================================
-    // RECORDER & UTILS
-    // ========================================================================
 
     private suspend fun waitForPageReady(webView: WebView) {
         var waited = 0L
@@ -694,13 +783,12 @@ object AutomationEngine {
 
         val finalName = name.trim().ifBlank { "${hudRecordingHost} Script" }
         
-        // FIX: Use named arguments to match the AutomationScript data class exactly
         val script = AutomationScript(
             id = UUID.randomUUID().toString(),
             url = hudRecordingUrl,
             host = hudRecordingHost,
             name = finalName,
-            groupName = "", // Newly recorded script has no group assigned yet
+            groupName = "", 
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(),
             steps = hudRecordedSteps

@@ -25,6 +25,7 @@ fun AutomationHomeScreen(
     onMyDataClick: () -> Unit,
     onAddDataClick: () -> Unit,
     onMyScriptsClick: () -> Unit,
+    onGroupClick: (String) -> Unit, // NEW: Handles specific group click
     onCreateAutomationClick: () -> Unit,
     onViewLogsClick: () -> Unit,
 ) {
@@ -33,6 +34,22 @@ fun AutomationHomeScreen(
     val totalUnused = groups.sumOf { it.unusedCount }
     val totalUsed = groups.sumOf { it.usedCount }
     val totalScripts = AutomationScriptRepository.allScripts().size
+
+    // Filter logic: 1 Pinned, 1 Recent
+    val displayGroups = mutableListOf<VaultGroup>()
+    val pinnedGroup = groups.firstOrNull { it.pinned }
+    val recentGroup = groups.firstOrNull { !it.pinned }
+    
+    if (pinnedGroup != null) displayGroups.add(pinnedGroup)
+    if (recentGroup != null) displayGroups.add(recentGroup)
+    
+    // Fallbacks if there are no pinned groups or no unpinned groups
+    if (displayGroups.isEmpty() && groups.isNotEmpty()) {
+        displayGroups.add(groups[0])
+        if (groups.size > 1) displayGroups.add(groups[1])
+    } else if (pinnedGroup != null && recentGroup == null && groups.size > 1) {
+        displayGroups.add(groups[1])
+    }
 
     Column(
         modifier = Modifier
@@ -161,7 +178,7 @@ fun AutomationHomeScreen(
                 )
             }
 
-            if (groups.isNotEmpty()) {
+            if (displayGroups.isNotEmpty()) {
                 Spacer(Modifier.height(24.dp))
                 DdgSectionHeader(
                     title = "Pinned & Recent Groups",
@@ -169,9 +186,9 @@ fun AutomationHomeScreen(
                 )
                 Spacer(Modifier.height(10.dp))
 
-                groups.take(4).forEach { group ->
+                displayGroups.forEach { group ->
                     DdgCard(
-                        onClick = onMyDataClick,
+                        onClick = { onGroupClick(group.name) }, // FIXED: Now opens the specific group
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),

@@ -181,8 +181,8 @@ fun ScriptDetailScreen(
                         steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.Wait, waitMs = 2000, displayLabel = "Wait 2s")
                         showAddStepDialog = false 
                     }
-                    ScriptChip("Delete Cookies") {
-                        steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, displayLabel = "Delete Cookies")
+                    ScriptChip("Clear Site Data") {
+                        steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, displayLabel = "Clear Site Data")
                         showAddStepDialog = false
                     }
                     ScriptChip("Wait CAPTCHA") {

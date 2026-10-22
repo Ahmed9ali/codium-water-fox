@@ -599,13 +599,13 @@
     return bestEl;
   }
 
-  function scanPage() {
+    function scanPage() {
     refMap.clear();
     refCounter = 0;
 
     const rawNodes = Array.from(
       document.querySelectorAll(
-        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select'
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select, [role="combobox"], [role="listbox"], [contenteditable="true"]'
       )
     );
 
@@ -617,7 +617,9 @@
       const el = rawNodes[i];
       const st = probe.state(el);
       if (!st || !st.visible || !st.enabled) continue;
-      if (st.tag !== "select" && st.type !== "checkbox" && st.type !== "radio" && !st.editable) continue;
+      
+      const isCustom = el.getAttribute("role") === "combobox" || el.getAttribute("role") === "listbox" || el.isContentEditable;
+      if (!isCustom && st.tag !== "select" && st.type !== "checkbox" && st.type !== "radio" && !st.editable) continue;
       if (st.type === "search" || el.closest('[role="search"], search')) continue;
 
       let pwdIdx = 0;
@@ -641,7 +643,7 @@
       fields.push({
         index: fields.length,
         ref,
-        tag: st.tag,
+        tag: isCustom ? "custom" : st.tag,
         type: st.type || st.tag,
         name: st.name || nameOf(el),
         id: st.id,
