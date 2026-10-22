@@ -21,7 +21,7 @@ data class RecordedStep(
     val ariaLabel: String = "",
     val cssSelector: String = "",
     val xpath: String = "",
-    val index: Int = -1, // New: absolute index fallback
+    val index: Int = -1,
 
     // Wait / Click
     val waitMs: Long = 0L,

@@ -48,7 +48,6 @@
     return parts.join(" ").trim();
   }
 
-  // Multi-language classification
   function classify(el) {
     const tag = (el.tagName || "").toLowerCase();
     const type = (el.type || "text").toLowerCase();
@@ -60,58 +59,42 @@
     const lbl = findLabel(el).toLowerCase();
     const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto;
 
-    // Terms
     if (type === "checkbox" || el.getAttribute("role") === "checkbox") {
       if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|acepto|términos|conditions)\b/i.test(combined)) return "termsCheckbox";
       return "checkbox";
     }
-    // Radio
     if (type === "radio") {
       if (/\b(gender|sex|male|female|género|sexo|homme|femme)\b/i.test(combined)) return "gender";
       return "radio";
     }
-    // Password
     if (type === "password" || auto === "new-password" || auto === "current-password") {
       if (/\b(confirm|retype|repeat|verify|again|pass2|password2|contraseña|mot de passe|senha)\b/i.test(combined)) return "confirmPassword";
       return "password";
     }
-    // Email
     if (type === "email" || auto === "email" || /\b(e-?mail|correo|mail)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify|again)\b/i.test(combined)) return "confirmEmail";
       return "email";
     }
-    // OTP
     if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|2fa|pin\s*code|código)\b/i.test(combined)) return "otp";
-    
-    // Phone
     if (type === "tel" || auto.indexOf("tel") >= 0 || /\b(phone|mobile|cell|whatsapp|tel|téléphone|telefono|celular)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify)\b/i.test(combined)) return "confirmPhone";
       return "phone";
     }
-    // Names
     if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|prénom|nombre)\b/i.test(combined)) return "firstName";
     if (auto === "family-name" || /\b(last\s*name|lname|surname|family|nom|apellido)\b/i.test(combined)) return "lastName";
     if (auto === "name" || /\b(full\s*name|your\s*name|name|nom|nombre)\b/i.test(combined)) return "fullName";
-    
-    // Message/Subject
     if (/\b(subject|topic|reason|sujet|asunto)\b/i.test(combined)) return "subject";
     if (tag === "textarea" || /\b(message|comment|feedback|description|bio|mensaje|message)\b/i.test(combined)) return "message";
-    
-    // Dates
     if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha|naissance)\b/i.test(combined)) return "dob";
-    
-    // Location
     if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|code postal|código postal)\b/i.test(combined)) return "zip";
     if (auto === "address-level2" || /\b(city|town|ville|ciudad)\b/i.test(combined)) return "city";
     if (auto === "address-level1" || /\b(state|province|region|état|estado)\b/i.test(combined)) return "state";
     if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país)\b/i.test(combined)) return "country";
     if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 ||
         /\b(address|street|apartment|apt|building|adresse|dirección|endereço)\b/i.test(combined)) return "address";
-        
     return "";
   }
 
-  // Generate stable CSS selector
   function cssPath(el) {
     if (!el || el.nodeType !== 1) return "";
     if (el.id) return "#" + CSS.escape(el.id);
@@ -122,7 +105,6 @@
       let sel = cur.tagName.toLowerCase();
       const nameAttr = cur.getAttribute && cur.getAttribute("name");
       const typeAttr = cur.getAttribute && cur.getAttribute("type");
-      
       if (nameAttr) {
         sel += `[name="${nameAttr}"]`;
       } else if (typeAttr && (typeAttr === 'email' || typeAttr === 'password' || typeAttr === 'tel')) {
@@ -172,7 +154,6 @@
 
   function captureField(el) {
     if (!el || el.nodeType !== 1) return;
-    
     let target = el;
     if (target.tagName === 'DIV' || target.tagName === 'SPAN' || target.tagName === 'LABEL') {
         const inner = target.querySelector('input, textarea, select');
@@ -192,7 +173,6 @@
     if (recordedElements.has(target)) return;
     recordedElements.add(target);
 
-    // Absolute index fallback (helps if DOM changes drastically)
     const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select'));
     const absIndex = allInputs.indexOf(target);
 
@@ -220,9 +200,7 @@
     });
   }
 
-  function onFocusIn(e) {
-    captureField(e.target);
-  }
+  function onFocusIn(e) { captureField(e.target); }
 
   function onMouseDown(e) {
     const active = document.activeElement;
@@ -241,9 +219,7 @@
     if (!isButton) return;
 
     const label = ((el.innerText || el.value || "") + "").trim();
-    // Multi-language button classification
     if (!/\b(next|continue|submit|sign\s*up|register|proceed|finish|done|save|send|log\s*in|sign\s*in|get\s*started|suivant|enviar|siguiente|registrarse|envoyer)\b/i.test(label)) return;
-    
     if (recordedElements.has(el)) return;
     recordedElements.add(el);
 

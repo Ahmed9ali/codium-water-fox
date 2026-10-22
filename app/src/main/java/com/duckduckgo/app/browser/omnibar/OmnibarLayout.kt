@@ -629,7 +629,7 @@ class OmnibarLayout @JvmOverloads constructor(
         browserMenu.setOnClickListener {
             omnibarItemPressedListener?.onBrowserMenuPressed()
         }
-               aiChatMenu?.setOnClickListener {
+                       aiChatMenu?.setOnClickListener {
             AutomationEngine.onOmnibarBotIconClicked()
         }
         shieldIcon.setOnClickListener {

@@ -1,7 +1,3 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- * Licensed under the Apache License, Version 2.0
- */
 package com.duckduckgo.app.automation
 
 import android.content.Context
@@ -14,7 +10,7 @@ import java.util.UUID
 
 data class AutomationScript(
     val id: String,
-    val url: String, // Added: required for navigation
+    val url: String,
     val host: String,
     val name: String,
     val createdAt: Long,

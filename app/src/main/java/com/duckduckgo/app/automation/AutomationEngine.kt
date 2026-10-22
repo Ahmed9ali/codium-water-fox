@@ -38,6 +38,11 @@ data class AutomationConfig(
     val groupName: String,
     val mode: String,
     val targetRepeatCount: Int = 1,
+    val typingDelayMs: Long = 60,
+    val fieldDelayMs: Long = 100,
+    val settleTimeoutMs: Long = 2000,
+    val pauseOnCaptcha: Boolean = true,
+    val clearTabBetweenRuns: Boolean = true,
 )
 
 enum class AutomationState {
@@ -200,6 +205,59 @@ object AutomationEngine {
         automationJob = scope.launch { runScriptExecution(script, config) }
     }
 
+    fun pauseAutomation() {
+        automationJob?.cancel()
+        updateState(AutomationState.PAUSED)
+        updateStatus("Automation paused.")
+    }
+
+    fun resumeAutomation() {
+        val script = hudSelectedScript ?: return
+        val config = currentConfig ?: return
+        updateState(AutomationState.NAVIGATING)
+        automationJob?.cancel()
+        automationJob = scope.launch { runScriptExecution(script, config) }
+    }
+
+    fun stopAutomation() {
+        automationJob?.cancel()
+        currentConfig = null
+        pendingBrowserConfig = null
+        currentProfile = null
+        _captchaState.postValue(false)
+        _dataExhaustedState.postValue(false)
+        updateState(AutomationState.IDLE)
+        updateStatus("")
+        hudMode = HudMode.Hidden
+        hudVisible = false
+    }
+
+    fun continueAfterCaptchaResolution() {
+        _captchaState.postValue(false)
+        resumeAutomation()
+    }
+
+    fun handleDataExhaustedChoice(choice: String) {
+        val script = hudSelectedScript ?: return
+        val config = currentConfig ?: return
+        _dataExhaustedState.postValue(false)
+        if (choice == "repeat_same") {
+            VaultRepository.resetUsed(config.groupName)
+            updateState(AutomationState.NAVIGATING)
+            automationJob?.cancel()
+            automationJob = scope.launch { runScriptExecution(script, config) }
+        } else {
+            stopAutomation()
+            onDataExhaustedAction?.invoke(config.groupName)
+            appContext?.let { ctx ->
+                val intent = Intent(ctx, AutomationActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                ctx.startActivity(intent)
+            }
+        }
+    }
+
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
         var completed = 0
@@ -227,7 +285,6 @@ object AutomationEngine {
                         updateStatus("Filling ${step.displayLabel}...")
                         val valToFill = profile.resolveForField(step.fieldType, step.name, step.tag) ?: ""
                         
-                        // Multi-strategy finder + Native Setter
                         val js = """
                             (function() {
                                 try {
@@ -244,7 +301,6 @@ object AutomationEngine {
                                     if (!el) return {ok: false, err: 'not found'};
                                     
                                     el.focus();
-                                    // React/Vue Native Setter
                                     const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                                     const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
                                     if (el.tagName === 'TEXTAREA' && nativeTextArea) nativeTextArea.call(el, '${valToFill}');

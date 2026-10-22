@@ -32,7 +32,6 @@ internal fun BrowserTabAutomationHud() {
         HudMode.Running -> HudRunningPanel()
         HudMode.ScriptList -> HudScriptListPanel()
         HudMode.RunSetup -> HudRunSetupPanel()
-        else -> Unit
     }
 }
 
