@@ -1,19 +1,3 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import android.content.Context
@@ -23,8 +7,6 @@ import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.WebStorage
 import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -54,28 +36,13 @@ import java.util.UUID
 data class AutomationConfig(
     val targetUrl: String,
     val groupName: String,
-    val mode: String, // "series" (top_down), "bottom_up", "random"
+    val mode: String,
     val targetRepeatCount: Int = 1,
-    val typingDelayMs: Long = 60,
-    val fieldDelayMs: Long = 100,
-    val settleTimeoutMs: Long = 2000,
-    val pauseOnCaptcha: Boolean = true,
-    val clearTabBetweenRuns: Boolean = true,
 )
 
 enum class AutomationState {
-    IDLE,
-    NAVIGATING,
-    SCANNING,
-    FILLING,
-    CLICKING_NEXT,
-    WAITING_SETTLE,
-    WAITING_CAPTCHA_HUMAN,
-    WAITING_DATA_EXHAUSTED,
-    CLEARING_DATA,
-    COMPLETED,
-    PAUSED,
-    ERROR,
+    IDLE, NAVIGATING, SCANNING, FILLING, CLICKING_NEXT, WAITING_SETTLE,
+    WAITING_CAPTCHA_HUMAN, WAITING_DATA_EXHAUSTED, CLEARING_DATA, COMPLETED, PAUSED, ERROR,
 }
 
 enum class RecordingPhase { Capturing, Saving }
@@ -90,60 +57,43 @@ object AutomationEngine {
     private var automationJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    // ---------------- Observed state (LiveData, for legacy observers) ----------------
     private val _detectedFieldCount = MutableLiveData(0)
     val detectedFieldCount: LiveData<Int> get() = _detectedFieldCount
-
     private val _state = MutableLiveData(AutomationState.IDLE)
     val state: LiveData<AutomationState> get() = _state
-
     private val _completedCount = MutableLiveData(0)
     val completedCount: LiveData<Int> get() = _completedCount
-
     private val _totalTargetCount = MutableLiveData(1)
     val totalTargetCount: LiveData<Int> get() = _totalTargetCount
-
     private val _statusMessage = MutableLiveData("")
     val statusMessage: LiveData<String> get() = _statusMessage
-
     private val _captchaState = MutableLiveData(false)
     val captchaState: LiveData<Boolean> get() = _captchaState
-
     private val _dataExhaustedState = MutableLiveData(false)
     val dataExhaustedState: LiveData<Boolean> get() = _dataExhaustedState
 
-    // ---------------- Compose-observed state (for the overlay HUD) ----------------
-    var hudVisible by mutableStateOf(false)
-        private set
-    var hudMode by mutableStateOf(HudMode.Hidden)
-        private set
+    var hudVisible by mutableStateOf(false); private set
+    var hudMode by mutableStateOf(HudMode.Hidden); private set
     private var activeTabId: String? = null
 
-    var hudState by mutableStateOf(AutomationState.IDLE)
-        private set
-    var hudCompleted by mutableIntStateOf(0)
-        private set
-    var hudTotal by mutableIntStateOf(1)
-        private set
-    var hudStatus by mutableStateOf("")
-        private set
-    var hudGroupName by mutableStateOf("")
-        private set
+    var hudState by mutableStateOf(AutomationState.IDLE); private set
+    var hudCompleted by mutableIntStateOf(0); private set
+    var hudTotal by mutableIntStateOf(1); private set
+    var hudStatus by mutableStateOf(""); private set
+    var hudGroupName by mutableStateOf(""); private set
 
-    // ---------------- Recorder state (spec §4) ----------------
     private val _recordedSteps = MutableLiveData<List<RecordedStep>>(emptyList())
     val recordedSteps: LiveData<List<RecordedStep>> get() = _recordedSteps
+    var hudRecordedSteps by mutableStateOf<List<RecordedStep>>(emptyList()); private set
+    var hudRecordingPhase by mutableStateOf(RecordingPhase.Capturing); private set
+    var hudRecordingHost by mutableStateOf(""); private set
+    var hudRecordingUrl by mutableStateOf(""); private set
 
-    var hudRecordedSteps by mutableStateOf<List<RecordedStep>>(emptyList())
-        private set
-    var hudRecordingPhase by mutableStateOf(RecordingPhase.Capturing)
-        private set
-    var hudRecordingHost by mutableStateOf("")
-        private set
-    var hudRecordingUrl by mutableStateOf("")
-        private set
+    var hudAvailableScripts by mutableStateOf<List<AutomationScript>>(emptyList()); private set
+    var hudSelectedScript by mutableStateOf<AutomationScript?>(null); private set
+    var hudSelectedGroup by mutableStateOf(""); private set
+    var hudRunRepeatCount by mutableIntStateOf(1); private set
 
-    // ---------------- Internal run state ----------------
     private var currentConfig: AutomationConfig? = null
     private var pendingBrowserConfig: AutomationConfig? = null
     private var currentFieldsJson: JSONArray = JSONArray()
@@ -152,8 +102,6 @@ object AutomationEngine {
 
     var onAutomationFinished: ((Int) -> Unit)? = null
     var onDataExhaustedAction: ((String) -> Unit)? = null
-
-    // ---------------- Lifecycle ----------------
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -164,11 +112,7 @@ object AutomationEngine {
     private fun updateState(newState: AutomationState) {
         _state.postValue(newState)
         hudState = newState
-        // Only the runner coroutine calls this with a non-IDLE state. Keep HUD visible
-        // while the runner is active; IDLE transitions are handled explicitly by stopAutomation().
-        if (newState != AutomationState.IDLE) {
-            hudVisible = true
-        }
+        if (newState != AutomationState.IDLE) hudVisible = true
     }
 
     private fun updateStatus(msg: String) {
@@ -183,480 +127,201 @@ object AutomationEngine {
         hudTotal = total
     }
 
-    // ---------------- WebView attach / detach ----------------
-
     fun attachWebView(webView: WebView, tabId: String? = null) {
         currentWebView = WeakReference(webView)
         try {
             val bridge = AutomationBridge(
                 tabId = tabId,
                 onFieldsDetectedCallback = { json, tid -> onFieldsDetected(json, tid) },
-                onPageScannedCallback = { _, _ -> handlePageScanned("") },
-                onFillCompletedCallback = { _, _ -> handleFillCompleted("") },
-                onStepSettledCallback = { _, _ -> handleStepSettled("") },
+                onPageScannedCallback = { _, _ -> },
+                onFillCompletedCallback = { _, _ -> },
+                onStepSettledCallback = { _, _ -> },
                 onElementRecordedCallback = { json, tid -> onRecorderElementCaptured(json, tid) },
             )
             webView.addJavascriptInterface(bridge, "AutomationBridge")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to add JavascriptInterface: ${e.message}")
-        }
-
-        // NOTE: HUD is mounted lazily — from onOmnibarBotIconClicked() and startAutomation().
-        // The previous eager mountHudOverlayIfNeeded(webView) call here was removed (spec §3).
-
-        val queued = pendingBrowserConfig
-        if (queued != null) {
-            pendingBrowserConfig = null
-            startAutomation(queued, navigateFirstCycle = false)
-        }
+        } catch (e: Exception) { Log.e(TAG, "Failed to add JS bridge") }
     }
 
-    fun detachWebView() {
-        currentWebView = null
-        _detectedFieldCount.postValue(0)
-    }
-
-    // ---------------- Scanner injection ----------------
+    fun detachWebView() { currentWebView = null; _detectedFieldCount.postValue(0) }
 
     fun injectScanner() {
         val webView = currentWebView?.get() ?: return
         val js = scannerJs ?: loadScanner() ?: return
-        webView.evaluateJavascript(js) {
-            Log.d(TAG, "Scanner injected into tab")
-        }
+        webView.evaluateJavascript(js) { Log.d(TAG, "Scanner injected") }
     }
 
-    private fun loadScanner(): String? {
-        val ctx = appContext ?: return null
-        return try {
-            ctx.assets.open("automation/automation_scanner.js")
-                .bufferedReader().use { it.readText() }
-                .also { scannerJs = it }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading scanner asset: ${e.message}")
-            null
-        }
-    }
-
-    // ---------------- Field detection (tab-scoped) ----------------
+    private fun loadScanner(): String? = try {
+        appContext?.assets?.open("automation/automation_scanner.js")?.bufferedReader()?.use { it.readText() }?.also { scannerJs = it }
+    } catch (e: Exception) { null }
 
     fun onFieldsDetected(json: String, tabId: String?) {
-        Log.d(TAG, "onFieldsDetected tabId=$tabId activeTabId=$activeTabId jsonLen=${json.length}")
         if (tabId == null || tabId != activeTabId) return
         try {
             if (json.contains("\"debug\"")) return
             val arr = JSONArray(json)
             currentFieldsJson = arr
             _detectedFieldCount.postValue(arr.length())
-        } catch (e: Exception) {
-            _detectedFieldCount.postValue(0)
-        }
+        } catch (e: Exception) { _detectedFieldCount.postValue(0) }
     }
 
-    // ---------------- Ad-hoc fill (kept for Quick Fill menu item in Slice 3) ----------------
-
-    fun fillCurrentPage() {
-        val group = VaultRepository.groups.value.firstOrNull() ?: return
-        val webView = currentWebView?.get() ?: return
-        val url = webView.url ?: return
-        startAutomation(
-            config = AutomationConfig(
-                targetUrl = url,
-                groupName = group.name,
-                mode = "series",
-                targetRepeatCount = 1,
-            ),
-            navigateFirstCycle = false,
-        )
+    fun openScriptList() {
+        val host = currentWebView?.get()?.url?.let { AutomationScriptRepository.hostOfUrl(it) } ?: ""
+        hudAvailableScripts = AutomationScriptRepository.scriptsForHost(host)
+        hudMode = HudMode.ScriptList
     }
 
-    // ---------------- Start / pause / resume / stop ----------------
-
-    fun queueAutomationInBrowserTab(config: AutomationConfig) {
-        currentConfig = config
-        pendingBrowserConfig = config
-        hudGroupName = config.groupName
-        updateProgress(0, config.targetRepeatCount)
-        updateState(AutomationState.NAVIGATING)
-        updateStatus("Opening ${config.targetUrl} in browser tab...")
-
-        val existingWebView = currentWebView?.get()
-        if (existingWebView != null) {
-            mountHudOverlayIfNeeded(existingWebView)
-            pendingBrowserConfig = null
-            startAutomation(config, navigateFirstCycle = false)
-        }
+    fun openRunSetup(script: AutomationScript) {
+        hudSelectedScript = script
+        hudSelectedGroup = VaultRepository.groups.value.firstOrNull()?.name ?: ""
+        hudRunRepeatCount = 1
+        hudMode = HudMode.RunSetup
     }
 
-    fun startAutomation(config: AutomationConfig, navigateFirstCycle: Boolean = true) {
-        currentConfig = config
-        hudGroupName = config.groupName
-        updateProgress(0, config.targetRepeatCount)
-        updateState(AutomationState.NAVIGATING)
-        hudMode = HudMode.Running
-        hudVisible = true
-        _captchaState.postValue(false)
-        _dataExhaustedState.postValue(false)
+    fun updateRunGroup(group: String) { hudSelectedGroup = group }
+    fun updateRunRepeat(count: Int) { hudRunRepeatCount = count.coerceAtLeast(1) }
 
-        val webView = currentWebView?.get()
-        if (webView == null) {
-            pendingBrowserConfig = config
-            updateStatus("Waiting for browser tab...")
+    fun startSelectedScriptRun() {
+        val script = hudSelectedScript ?: return
+        if (hudSelectedGroup.isBlank()) {
+            Toast.makeText(appContext, "Select a group first", Toast.LENGTH_SHORT).show()
             return
         }
-
-        mountHudOverlayIfNeeded(webView)
-
-        automationJob?.cancel()
-        automationJob = scope.launch {
-            runAutomationLoop(config, navigateFirstCycle)
-        }
-    }
-
-    fun pauseAutomation() {
-        automationJob?.cancel()
-        updateState(AutomationState.PAUSED)
-        updateStatus("Automation paused.")
-    }
-
-    fun resumeAutomation() {
-        val config = currentConfig ?: return
-        updateState(AutomationState.SCANNING)
-        automationJob?.cancel()
-        automationJob = scope.launch {
-            runAutomationLoop(config, navigateFirstCycle = false)
-        }
-    }
-
-    fun stopAutomation() {
-        automationJob?.cancel()
-        currentConfig = null
-        pendingBrowserConfig = null
-        currentProfile = null
+        val config = AutomationConfig(script.url, hudSelectedGroup, "series", hudRunRepeatCount)
+        hudMode = HudMode.Running
+        hudVisible = true
+        currentConfig = config
+        hudGroupName = config.groupName
+        updateProgress(0, config.targetRepeatCount)
+        updateState(AutomationState.NAVIGATING)
         _captchaState.postValue(false)
         _dataExhaustedState.postValue(false)
-        updateState(AutomationState.IDLE)
-        updateStatus("")
-        hudMode = HudMode.Hidden
-        hudVisible = false
+
+        automationJob?.cancel()
+        automationJob = scope.launch { runScriptExecution(script, config) }
     }
 
-    fun continueAfterCaptchaResolution() {
-        _captchaState.postValue(false)
-        resumeAutomation()
-    }
-
-    fun handleDataExhaustedChoice(choice: String) {
-        val config = currentConfig ?: return
-        _dataExhaustedState.postValue(false)
-        if (choice == "repeat_same") {
-            VaultRepository.resetUsed(config.groupName)
-            updateState(AutomationState.NAVIGATING)
-            automationJob?.cancel()
-            automationJob = scope.launch {
-                runAutomationLoop(config, navigateFirstCycle = true)
-            }
-        } else {
-            stopAutomation()
-            onDataExhaustedAction?.invoke(config.groupName)
-            appContext?.let { ctx ->
-                val intent = Intent(ctx, AutomationActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                ctx.startActivity(intent)
-            }
-        }
-    }
-
-    // ---------------- The run loop ----------------
-
-    private suspend fun runAutomationLoop(config: AutomationConfig, navigateFirstCycle: Boolean) {
+    private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
-        val targetUri = if (config.targetUrl.startsWith("http://") || config.targetUrl.startsWith("https://")) {
-            config.targetUrl
-        } else {
-            "https://${config.targetUrl}"
-        }
+        var completed = 0
 
-        var isFirstIteration = true
-
-        while (hudCompleted < config.targetRepeatCount && scope.isActive) {
+        while (completed < config.targetRepeatCount && scope.isActive) {
             if (!VaultRepository.hasUnusedData(config.groupName)) {
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
-                updateStatus("All data in '${config.groupName}' used. Repeat or add new data?")
                 return
             }
-
-            val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode)
-            if (profile == null) {
-                _dataExhaustedState.postValue(true)
-                updateState(AutomationState.WAITING_DATA_EXHAUSTED)
-                updateStatus("Dataset profile allocation failed. Choose action.")
-                return
-            }
-            currentProfile = profile
-
-            if (config.clearTabBetweenRuns && hudCompleted > 0) {
-                updateState(AutomationState.CLEARING_DATA)
-                updateStatus("Clearing tab cookies, storage & cache...")
-                clearBrowserSession(webView)
-                delay(500)
-            }
+            val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
 
             updateState(AutomationState.NAVIGATING)
-            if (!isFirstIteration || navigateFirstCycle) {
-                updateStatus("Loading ${config.targetUrl}...")
-                withContext(Dispatchers.Main) {
-                    webView.loadUrl(targetUri)
-                }
-            } else {
-                updateStatus("Waiting for page ${config.targetUrl} to ready...")
-                val currentUrl = withContext(Dispatchers.Main) { webView.url.orEmpty() }
-                if (currentUrl.isBlank() || currentUrl == "about:blank") {
-                    withContext(Dispatchers.Main) {
-                        webView.loadUrl(targetUri)
-                    }
-                }
-            }
-            isFirstIteration = false
-
+            updateStatus("Loading ${script.url}...")
+            withContext(Dispatchers.Main) { webView.loadUrl(script.url) }
             waitForPageReady(webView)
-            injectScanner()
-            delay(600)
+            delay(500)
 
-            var stepSuccess = false
-            var multiStepCounter = 0
-
-            while (multiStepCounter < 5 && scope.isActive) {
-                multiStepCounter++
-
-                updateState(AutomationState.SCANNING)
-                updateStatus("Scanning form fields (Step $multiStepCounter)...")
-                val scanResultJson = evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")
-                val scanObj = try { JSONObject(scanResultJson) } catch (_: Exception) { JSONObject() }
-
-                val fieldsArr = scanObj.optJSONArray("fields") ?: currentFieldsJson
-                currentFieldsJson = fieldsArr
-
-                if (scanObj.optBoolean("captchaDetected", false) && config.pauseOnCaptcha) {
-                    _captchaState.postValue(true)
-                    updateState(AutomationState.WAITING_CAPTCHA_HUMAN)
-                    updateStatus("CAPTCHA detected! Solve it in the tab, then tap Continue.")
-                    return
-                }
-
-                currentActionRef = scanObj.optString("actionButtonRef").takeIf { it.isNotBlank() }
-
-                val fillArray = JSONArray()
-                val singleFallbackValue = if (profile.fields.size == 1) profile.fields.values.firstOrNull() else null
-
-                for (i in 0 until fieldsArr.length()) {
-                    val fieldObj = fieldsArr.getJSONObject(i)
-                    val ref = fieldObj.optString("ref")
-                    val looksLike = fieldObj.optString("looksLike")
-                    val name = fieldObj.optString("name")
-                    val tag = fieldObj.optString("tag")
-
-                    val matchedValue = if (looksLike == "termsCheckbox") {
-                        "true"
-                    } else {
-                        profile.resolveForField(looksLike, name, tag)
-                            ?: if (fieldsArr.length() == 1) singleFallbackValue else null
+            for (step in script.steps) {
+                if (!scope.isActive) break
+                
+                when (step.kind) {
+                    StepKind.Field -> {
+                        updateState(AutomationState.FILLING)
+                        updateStatus("Filling ${step.displayLabel}...")
+                        val valToFill = profile.resolveForField(step.fieldType, step.name, step.tag) ?: ""
+                        
+                        // Multi-strategy finder + Native Setter
+                        val js = """
+                            (function() {
+                                try {
+                                    let el = null;
+                                    try { if ('${step.xpath}') el = document.evaluate('${step.xpath}', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
+                                    if (!el && '${step.cssSelector}') { try { el = document.querySelector('${step.cssSelector}'); } catch(_){} }
+                                    if (!el && '${step.name}') { el = document.querySelector('[name="${step.name}"]'); }
+                                    if (!el && '${step.domId}') { el = document.getElementById('${step.domId}'); }
+                                    if (!el && '${step.placeholder}') { el = document.querySelector('[placeholder="${step.placeholder}"]'); }
+                                    if (!el && ${step.index} >= 0) {
+                                        const all = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select'));
+                                        el = all[${step.index}];
+                                    }
+                                    if (!el) return {ok: false, err: 'not found'};
+                                    
+                                    el.focus();
+                                    // React/Vue Native Setter
+                                    const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                    const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                                    if (el.tagName === 'TEXTAREA' && nativeTextArea) nativeTextArea.call(el, '${valToFill}');
+                                    else if (nativeInput) nativeInput.call(el, '${valToFill}');
+                                    else el.value = '${valToFill}';
+                                    
+                                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                    el.blur();
+                                    return {ok: true};
+                                } catch(e) { return {ok: false, err: e.message}; }
+                            })();
+                        """.trimIndent()
+                        evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                        delay(400)
                     }
-
-                    if (!matchedValue.isNullOrBlank()) {
-                        val fillItem = JSONObject().apply {
-                            put("ref", ref)
-                            put("index", fieldObj.optInt("index", i))
-                            put("value", matchedValue)
-                        }
-                        fillArray.put(fillItem)
+                    StepKind.Wait -> { updateStatus("Waiting ${step.waitMs}ms..."); delay(step.waitMs) }
+                    StepKind.CaptchaWait -> {
+                        _captchaState.postValue(true)
+                        updateState(AutomationState.WAITING_CAPTCHA_HUMAN)
+                        return
                     }
-                }
-
-                if (fillArray.length() == 0) {
-                    if (multiStepCounter == 1) {
-                        delay(1200)
-                        injectScanner()
-                        val retryScanJson = evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")
-                        val retryObj = try { JSONObject(retryScanJson) } catch (_: Exception) { JSONObject() }
-                        val retryFields = retryObj.optJSONArray("fields") ?: JSONArray()
-                        if (retryFields.length() > 0) {
-                            multiStepCounter--
-                            continue
-                        }
+                    StepKind.ClickNext -> {
+                        updateState(AutomationState.CLICKING_NEXT)
+                        updateStatus("Clicking ${step.displayLabel}...")
+                        val js = """
+                            (function() {
+                                try {
+                                    let el = null;
+                                    try { if ('${step.xpath}') el = document.evaluate('${step.xpath}', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
+                                    if (!el && '${step.cssSelector}') { try { el = document.querySelector('${step.cssSelector}'); } catch(_){} }
+                                    if (el) { el.click(); return {ok: true}; }
+                                    return {ok: false, err: 'not found'};
+                                } catch(e) { return {ok: false, err: e.message}; }
+                            })();
+                        """.trimIndent()
+                        evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                        delay(1500)
                     }
-                    stepSuccess = multiStepCounter > 1
-                    break
-                }
-
-                updateState(AutomationState.FILLING)
-                updateStatus("Filling ${fillArray.length()} field(s) (Step $multiStepCounter)...")
-
-                val optionsObj = JSONObject().apply {
-                    put("typingDelayMs", config.typingDelayMs)
-                    put("fieldDelayMs", config.fieldDelayMs)
-                }
-
-                val fillArg = JSONObject.quote(fillArray.toString())
-                val optArg = JSONObject.quote(optionsObj.toString())
-                evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill($fillArg, $optArg));")
-                delay(500)
-
-                updateState(AutomationState.CLICKING_NEXT)
-                val btnName = scanObj.optString("actionButtonName").ifBlank { "Next / Submit" }
-                updateStatus("Clicking '$btnName' & checking next step...")
-
-                val clickOptions = JSONObject().apply {
-                    put("actionRef", currentActionRef ?: "")
-                    put("settleTimeoutMs", config.settleTimeoutMs)
-                    put("pauseOnCaptcha", config.pauseOnCaptcha)
-                }
-                val clickArg = JSONObject.quote(clickOptions.toString())
-                val settleResultJson = evaluateJsSuspend(
-                    webView,
-                    "return JSON.stringify(await __automationClickNextAndSettle($clickArg));",
-                )
-                val settleObj = try { JSONObject(settleResultJson) } catch (_: Exception) { JSONObject() }
-
-                val verdict = settleObj.optString("verdict", "none")
-                if (verdict == "captcha_blocked" && config.pauseOnCaptcha) {
-                    _captchaState.postValue(true)
-                    updateState(AutomationState.WAITING_CAPTCHA_HUMAN)
-                    updateStatus("CAPTCHA appeared! Solve it in the tab, then tap Continue.")
-                    return
-                }
-
-                delay(600)
-                waitForPageReady(webView)
-                injectScanner()
-                delay(500)
-
-                val postNavScanJson = evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")
-                val postNavObj = try { JSONObject(postNavScanJson) } catch (_: Exception) { JSONObject() }
-                if (postNavObj.optBoolean("captchaDetected", false) && config.pauseOnCaptcha) {
-                    _captchaState.postValue(true)
-                    updateState(AutomationState.WAITING_CAPTCHA_HUMAN)
-                    updateStatus("CAPTCHA detected! Solve it in the tab, then tap Continue.")
-                    return
-                }
-
-                val postFields = postNavObj.optJSONArray("fields") ?: JSONArray()
-                var unfilledNextStepCount = 0
-                for (k in 0 until postFields.length()) {
-                    val f = postFields.getJSONObject(k)
-                    val curVal = f.optString("currentValue", "")
-                    val typeKey = f.optString("looksLike", "")
-                    if (typeKey != "termsCheckbox" && curVal.isBlank()) {
-                        unfilledNextStepCount++
-                    }
-                }
-
-                if (unfilledNextStepCount > 0 && verdict != "validation_error" && verdict != "no_button_found") {
-                    updateStatus("Moved to Step ${multiStepCounter + 1} — continuing with same profile...")
-                    delay(400)
-                } else {
-                    stepSuccess = true
-                    break
                 }
             }
-
-            if (stepSuccess) {
-                VaultRepository.markProfileUsed(profile)
-                val nextDone = hudCompleted + 1
-                updateProgress(nextDone, config.targetRepeatCount)
-                updateStatus("Completed cycle $nextDone of ${config.targetRepeatCount}")
-            } else {
-                updateStatus("No matching fields found for '${config.groupName}' on this page.")
-                break
-            }
-
+            VaultRepository.markProfileUsed(profile)
+            completed++
+            updateProgress(completed, config.targetRepeatCount)
             delay(1000)
         }
-
         updateState(AutomationState.COMPLETED)
-        updateStatus("Finished $hudCompleted / ${config.targetRepeatCount} automation(s)!")
-        onAutomationFinished?.invoke(hudCompleted)
+        updateStatus("Finished $completed / ${config.targetRepeatCount}")
+        onAutomationFinished?.invoke(completed)
     }
 
     private suspend fun waitForPageReady(webView: WebView) {
-        var waitedMs = 0L
-        while (waitedMs < 8000L) {
+        var waited = 0L
+        while (waited < 8000L) {
             val progress = withContext(Dispatchers.Main) { webView.progress }
-            val readyState = evaluateJsSuspend(webView, "return document.readyState;")
-            if (progress >= 90 && (readyState.contains("interactive") || readyState.contains("complete"))) {
-                break
-            }
-            delay(250)
-            waitedMs += 250
+            val state = evaluateJsSuspend(webView, "return document.readyState;")
+            if (progress >= 90 && (state.contains("interactive") || state.contains("complete"))) break
+            delay(250); waited += 250
         }
     }
 
     private suspend fun evaluateJsSuspend(webView: WebView, script: String): String =
-        suspendCancellableCoroutine { continuation ->
+        suspendCancellableCoroutine { cont ->
             Handler(Looper.getMainLooper()).post {
                 val wrapped = "(async () => { try { ${script.trim()} } catch(e) { return JSON.stringify({error: e.message}); } })();"
                 webView.evaluateJavascript(wrapped) { result ->
                     val clean = if (result.isNullOrEmpty() || result == "null") "{}" else result
-                    val unquoted = try {
-                        if (clean.startsWith("\"") && clean.endsWith("\"")) {
-                            JSONTokener(clean).nextValue() as? String ?: clean
-                        } else {
-                            clean
-                        }
-                    } catch (_: Exception) {
-                        clean
-                    }
-                    continuation.resume(unquoted) { _, _, _ -> }
+                    val unquoted = try { if (clean.startsWith("\"") && clean.endsWith("\"")) JSONTokener(clean).nextValue() as? String ?: clean else clean } catch (_: Exception) { clean }
+                    cont.resume(unquoted) { _, _, _ -> }
                 }
             }
         }
 
-    private fun clearBrowserSession(webView: WebView) {
-        try {
-            webView.clearCache(true)
-            webView.clearHistory()
-            webView.clearFormData()
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
-            WebStorage.getInstance().deleteAllData()
-            webView.evaluateJavascript(
-                "try { localStorage.clear(); sessionStorage.clear(); } catch(_) {}",
-                null,
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error clearing browser session: ${e.message}")
-        }
-    }
-
-    private fun handlePageScanned(json: String) {}
-    private fun handleFillCompleted(json: String) {}
-    private fun handleStepSettled(json: String) {}
-
-    // ------------------------------------------------------------------
-    //  HUD control + tab scoping (spec §2, §3, §18)
-    // ------------------------------------------------------------------
-
     fun setActiveTab(tabId: String) {
         if (activeTabId == tabId) return
-        // Menu is tab-scoped → close it.
-        if (hudMode == HudMode.Menu) {
-            hudMode = HudMode.Hidden
-            hudVisible = false
-        }
-        // A recording belongs to the tab it started on. Switching away mid-recording
-        // would show the other tab's HUD with this tab's steps — cancel instead.
-        if (hudMode == HudMode.Recording && activeTabId != null) {
-            cancelRecording()
-            appContext?.let { ctx ->
-                Toast.makeText(
-                    ctx,
-                    "Recording cancelled (tab switched)",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-        }
+        if (hudMode == HudMode.Menu) { hudMode = HudMode.Hidden; hudVisible = false }
+        if (hudMode == HudMode.Recording && activeTabId != null) { cancelRecording(); Toast.makeText(appContext, "Recording cancelled", Toast.LENGTH_SHORT).show() }
         activeTabId = tabId
         _detectedFieldCount.postValue(0)
     }
@@ -669,81 +334,42 @@ object AutomationEngine {
 
     fun onOmnibarBotIconClicked() {
         when (hudMode) {
-            HudMode.Recording -> return // Cannot dismiss; Stop is in the panel.
-            HudMode.Running -> {
-                val wv = currentWebView?.get() ?: return
-                mountHudOverlayIfNeeded(wv)
-                hudVisible = true
-            }
-            HudMode.Menu -> {
-                hudMode = HudMode.Hidden
-                hudVisible = false
-            }
-            HudMode.Hidden -> {
-                val wv = currentWebView?.get() ?: return
-                mountHudOverlayIfNeeded(wv)
-                hudMode = HudMode.Menu
-                hudVisible = true
-            }
+            HudMode.Recording -> return
+            HudMode.Running -> { currentWebView?.get()?.let { mountHudOverlayIfNeeded(it); hudVisible = true } }
+            HudMode.Menu -> { hudMode = HudMode.Hidden; hudVisible = false }
+            HudMode.Hidden -> { currentWebView?.get()?.let { mountHudOverlayIfNeeded(it); hudMode = HudMode.Menu; hudVisible = true } }
+            else -> { hudMode = HudMode.Hidden; hudVisible = false }
         }
     }
 
     fun closeHud() {
-        if (hudMode == HudMode.Running) return // Only Stop ends a run.
+        if (hudMode == HudMode.Running) return
         hudMode = HudMode.Hidden
         hudVisible = false
     }
 
-    // ------------------------------------------------------------------
-    //  Recorder (spec §4, §5)
-    // ------------------------------------------------------------------
-
     fun startRecording() {
         val webView = currentWebView?.get() ?: return
         val url = webView.url.orEmpty()
-        val host = AutomationScriptRepository.hostOfUrl(url)
-
-        hudRecordingHost = host
+        hudRecordingHost = AutomationScriptRepository.hostOfUrl(url)
         hudRecordingUrl = url
         hudRecordedSteps = emptyList()
-        _recordedSteps.postValue(emptyList())
         hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Recording
         hudVisible = true
-
-        val js = loadRecorder()
-        if (js != null) {
-            webView.evaluateJavascript(js) { Log.d(TAG, "Recorder injected on $host") }
-        } else {
-            appContext?.let { ctx ->
-                Toast.makeText(ctx, "Recorder asset missing", Toast.LENGTH_SHORT).show()
-            }
-        }
+        loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected") } }
     }
 
     fun onRecorderElementCaptured(json: String, tabId: String?) {
-        Log.d(TAG, "onRecorderElementCaptured tabId=$tabId activeTabId=$activeTabId hudMode=$hudMode jsonLen=${json.length}")
-        if (tabId == null || tabId != activeTabId) return
         if (hudMode != HudMode.Recording) return
         try {
             val obj = JSONObject(json)
             val kindRaw = obj.optString("kind", "Field")
-            val stepKind = when (kindRaw) {
-                "ClickNext" -> StepKind.ClickNext
-                "Wait" -> StepKind.Wait
-                "CaptchaWait" -> StepKind.CaptchaWait
-                else -> StepKind.Field
-            }
+            val stepKind = when (kindRaw) { "ClickNext" -> StepKind.ClickNext; "Wait" -> StepKind.Wait; "CaptchaWait" -> StepKind.CaptchaWait; else -> StepKind.Field }
             val looksLike = obj.optString("looksLike", "")
             val canonicalType = if (stepKind == StepKind.Field) FieldTypeMapper.normalizeLooksLike(looksLike) else ""
-            val fallbackLabel = obj.optString("displayLabel", "")
-            val displayLabel = if (stepKind == StepKind.ClickNext) {
-                obj.optString("buttonLabel", "Next button")
-            } else {
-                FieldTypeMapper.fieldRowLabel(canonicalType, fallbackLabel)
-            }
-            val verified = stepKind != StepKind.Field || canonicalType.isNotBlank()
-
+            val displayLabel = if (stepKind == StepKind.ClickNext) obj.optString("buttonLabel", "Next button") else FieldTypeMapper.fieldRowLabel(canonicalType, obj.optString("displayLabel", ""))
+            
             val step = RecordedStep(
                 sequenceIndex = hudRecordedSteps.size + 1,
                 kind = stepKind,
@@ -757,181 +383,71 @@ object AutomationEngine {
                 ariaLabel = obj.optString("ariaLabel"),
                 cssSelector = obj.optString("cssSelector"),
                 xpath = obj.optString("xpath"),
+                index = obj.optInt("index", -1),
                 buttonLabel = obj.optString("buttonLabel"),
-                verified = verified,
+                verified = stepKind != StepKind.Field || canonicalType.isNotBlank(),
             )
             hudRecordedSteps = hudRecordedSteps + step
-            _recordedSteps.postValue(hudRecordedSteps)
-        } catch (e: Exception) {
-            Log.e(TAG, "onRecorderElementCaptured parse failed: ${e.message}")
-        }
-    }
-
-    fun addWaitStep(seconds: Int) {
-        if (hudMode != HudMode.Recording || hudRecordingPhase != RecordingPhase.Capturing) return
-        val secs = seconds.coerceAtLeast(1)
-        val step = RecordedStep(
-            sequenceIndex = hudRecordedSteps.size + 1,
-            kind = StepKind.Wait,
-            waitMs = secs * 1000L,
-            displayLabel = "Wait $secs s",
-            verified = true,
-        )
-        hudRecordedSteps = hudRecordedSteps + step
-        _recordedSteps.postValue(hudRecordedSteps)
-    }
-
-    fun addCaptchaWaitStep() {
-        if (hudMode != HudMode.Recording || hudRecordingPhase != RecordingPhase.Capturing) return
-        val step = RecordedStep(
-            sequenceIndex = hudRecordedSteps.size + 1,
-            kind = StepKind.CaptchaWait,
-            displayLabel = "Wait for CAPTCHA solve",
-            verified = true,
-        )
-        hudRecordedSteps = hudRecordedSteps + step
-        _recordedSteps.postValue(hudRecordedSteps)
+        } catch (e: Exception) { Log.e(TAG, "Parse fail: ${e.message}") }
     }
 
     fun removeRecordedStep(id: String) {
         if (hudMode != HudMode.Recording) return
-        hudRecordedSteps = hudRecordedSteps
-            .filterNot { it.id == id }
-            .mapIndexed { idx, s -> s.copy(sequenceIndex = idx + 1) }
-        _recordedSteps.postValue(hudRecordedSteps)
+        hudRecordedSteps = hudRecordedSteps.filterNot { it.id == id }.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
     }
 
     fun assignFieldTypeToStep(id: String, canonicalType: String) {
         if (hudMode != HudMode.Recording) return
-        hudRecordedSteps = hudRecordedSteps.map { step ->
-            if (step.id == id) {
-                step.copy(
-                    fieldType = canonicalType,
-                    displayLabel = FieldTypeMapper.fieldRowLabel(canonicalType, step.displayLabel),
-                    verified = true,
-                )
-            } else step
-        }
-        _recordedSteps.postValue(hudRecordedSteps)
+        hudRecordedSteps = hudRecordedSteps.map { if (it.id == id) it.copy(fieldType = canonicalType, displayLabel = FieldTypeMapper.fieldRowLabel(canonicalType, it.displayLabel), verified = true) else it }
     }
 
     fun stopRecordingAndPromptSave() {
-        if (hudRecordedSteps.isEmpty()) {
-            cancelRecording()
-            return
-        }
-        currentWebView?.get()?.evaluateJavascript(
-            "try { window.__automationRecorderStop && window.__automationRecorderStop(); } catch(_) {}",
-            null,
-        )
+        if (hudRecordedSteps.isEmpty()) { cancelRecording(); return }
+        currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
         hudRecordingPhase = RecordingPhase.Saving
     }
 
-    /**
-     * User tapped Back on the Save panel. Re-enter capture mode WITHOUT wiping the steps.
-     * Only re-inject the recorder JS (its internal guard prevents double-attach).
-     */
     fun cancelSaveRecording() {
         hudRecordingPhase = RecordingPhase.Capturing
-        currentWebView?.get()?.let { wv ->
-            val js = loadRecorder()
-            if (js != null) {
-                wv.evaluateJavascript(js) { Log.d(TAG, "Recorder re-injected for continued recording") }
-            }
-        }
+        currentWebView?.get()?.let { wv -> loadRecorder()?.let { js -> wv.evaluateJavascript(js) { Log.d(TAG, "Re-injected") } } }
     }
 
     fun saveRecording(name: String) {
-        val ctx = appContext
-        val host = hudRecordingHost
-        if (host.isBlank()) {
-            ctx?.let { Toast.makeText(it, "Cannot save: no host", Toast.LENGTH_SHORT).show() }
-            return
-        }
-        if (hudRecordedSteps.isEmpty()) {
-            ctx?.let { Toast.makeText(it, "Nothing recorded", Toast.LENGTH_SHORT).show() }
-            return
-        }
-        currentWebView?.get()?.evaluateJavascript(
-            "try { window.__automationRecorderStop && window.__automationRecorderStop(); } catch(_) {}",
-            null,
-        )
+        val ctx = appContext ?: return
+        if (hudRecordingHost.isBlank() || hudRecordedSteps.isEmpty()) return
+        currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
 
-        val finalName = name.trim().ifBlank { "$host Script" }
-        val script = AutomationScript(
-            id = UUID.randomUUID().toString(),
-            host = host,
-            name = finalName,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis(),
-            steps = hudRecordedSteps,
-        )
+        val finalName = name.trim().ifBlank { "${hudRecordingHost} Script" }
+        val script = AutomationScript(UUID.randomUUID().toString(), hudRecordingUrl, hudRecordingHost, finalName, System.currentTimeMillis(), System.currentTimeMillis(), hudRecordedSteps)
         AutomationScriptRepository.saveScript(script)
+        Toast.makeText(ctx, "Script saved: $finalName", Toast.LENGTH_SHORT).show()
 
-        ctx?.let {
-            Toast.makeText(it, "Script saved: $finalName", Toast.LENGTH_SHORT).show()
-        }
-
-        // Reset and re-open the menu so the user sees "Run Automation" next.
         hudRecordedSteps = emptyList()
-        _recordedSteps.postValue(emptyList())
         hudRecordingPhase = RecordingPhase.Capturing
-        hudRecordingHost = ""
-        hudRecordingUrl = ""
         hudMode = HudMode.Menu
         hudVisible = true
     }
 
     fun cancelRecording() {
-        currentWebView?.get()?.evaluateJavascript(
-            "try { window.__automationRecorderStop && window.__automationRecorderStop(); } catch(_) {}",
-            null,
-        )
+        currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
         hudRecordedSteps = emptyList()
-        _recordedSteps.postValue(emptyList())
         hudRecordingPhase = RecordingPhase.Capturing
-        hudRecordingHost = ""
-        hudRecordingUrl = ""
         hudMode = HudMode.Hidden
         hudVisible = false
     }
 
-    private fun loadRecorder(): String? {
-        val ctx = appContext ?: return null
-        return try {
-            ctx.assets.open("automation/automation_recorder.js")
-                .bufferedReader().use { it.readText() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading recorder asset: ${e.message}")
-            null
-        }
-    }
-
-    // ------------------------------------------------------------------
-    //  Overlay mount
-    // ------------------------------------------------------------------
+    private fun loadRecorder(): String? = try {
+        appContext?.assets?.open("automation/automation_recorder.js")?.bufferedReader()?.use { it.readText() }
+    } catch (e: Exception) { null }
 
     private fun mountHudOverlayIfNeeded(webView: WebView) {
         val parent = webView.parent as? ViewGroup ?: return
         if (parent.findViewWithTag<ComposeView>(HUD_VIEW_TAG) != null) return
-
         val composeView = ComposeView(webView.context).apply {
             tag = HUD_VIEW_TAG
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent {
-                val isLight = resolveDuckDuckGoIsLight(context)
-                AutomationThemeWrapper(isLightMode = isLight) {
-                    BrowserTabAutomationHud()
-                }
-            }
+            setContent { AutomationThemeWrapper(isLightMode = resolveDuckDuckGoIsLight(context)) { BrowserTabAutomationHud() } }
         }
-
-        val params = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply {
-            gravity = Gravity.BOTTOM
-        }
-        parent.addView(composeView, params)
+        parent.addView(composeView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.BOTTOM })
     }
 }
