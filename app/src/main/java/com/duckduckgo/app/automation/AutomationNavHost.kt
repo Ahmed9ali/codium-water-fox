@@ -1,19 +1,3 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import android.app.Activity
@@ -72,9 +56,8 @@ import com.duckduckgo.app.browser.R
 import com.duckduckgo.app.browser.mode.InAppNavigation
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import com.duckduckgo.mobile.android.R.drawable
-import com.duckduckgo.fonts.R as FontsR // IMPORTED FONTS R
+import com.duckduckgo.fonts.R as FontsR
 
-// CHANGED: Use the hijacked DuckSans font (which is actually Varela Round)
 val VarelaRound = FontFamily(
     Font(FontsR.font.ducksansdisplay_regular, FontWeight.Normal)
 )
@@ -86,6 +69,10 @@ sealed interface AutomationScreen {
     object PasteData : AutomationScreen
     object GenerateData : AutomationScreen
     data class GroupDetail(val groupName: String) : AutomationScreen
+    
+    object MyScripts : AutomationScreen
+    data class ScriptDetail(val scriptId: String) : AutomationScreen
+    
     object CreateAutomation : AutomationScreen
     data class Running(val config: AutomationConfig) : AutomationScreen
     data class Completed(val groupName: String, val mode: String, val count: Int) : AutomationScreen
@@ -112,6 +99,10 @@ fun AutomationNavHost(
                 AutomationScreen.AddData -> current = AutomationScreen.Home
                 AutomationScreen.PasteData -> current = AutomationScreen.AddData
                 AutomationScreen.GenerateData -> current = AutomationScreen.AddData
+                
+                AutomationScreen.MyScripts -> current = AutomationScreen.Home
+                is AutomationScreen.ScriptDetail -> current = AutomationScreen.MyScripts
+                
                 AutomationScreen.CreateAutomation -> current = AutomationScreen.Home
                 is AutomationScreen.Running -> {
                     AutomationEngine.stopAutomation()
@@ -126,6 +117,7 @@ fun AutomationNavHost(
                 onBack = onBack,
                 onMyDataClick = { current = AutomationScreen.MyData },
                 onAddDataClick = { current = AutomationScreen.AddData },
+                onMyScriptsClick = { current = AutomationScreen.MyScripts },
                 onCreateAutomationClick = { current = AutomationScreen.CreateAutomation },
                 onViewLogsClick = { current = AutomationScreen.MyData },
             )
@@ -161,6 +153,16 @@ fun AutomationNavHost(
             is AutomationScreen.GroupDetail -> GroupDetailScreen(
                 groupName = c.groupName,
                 onBack = { current = AutomationScreen.MyData },
+            )
+
+            AutomationScreen.MyScripts -> MyScriptsScreen(
+                onBack = { current = AutomationScreen.Home },
+                onScriptClick = { current = AutomationScreen.ScriptDetail(it) }
+            )
+            
+            is AutomationScreen.ScriptDetail -> ScriptDetailScreen(
+                scriptId = c.scriptId,
+                onBack = { current = AutomationScreen.MyScripts }
             )
 
             AutomationScreen.CreateAutomation -> CreateAutomationScreen(
@@ -212,10 +214,6 @@ fun AutomationNavHost(
         }
     }
 }
-
-// ============================================================================
-// SHARED DUCKDUCKGO DESIGN SYSTEM COMPOSABLES
-// ============================================================================
 
 @Composable
 fun AutomationTopBar(

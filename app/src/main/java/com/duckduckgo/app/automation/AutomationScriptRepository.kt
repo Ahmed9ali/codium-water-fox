@@ -13,6 +13,7 @@ data class AutomationScript(
     val url: String,
     val host: String,
     val name: String,
+    val groupName: String = "", // Persisted data group
     val createdAt: Long,
     val updatedAt: Long,
     val steps: List<RecordedStep>,
@@ -22,6 +23,7 @@ data class AutomationScript(
         put("url", url)
         put("host", host)
         put("name", name)
+        put("groupName", groupName)
         put("createdAt", createdAt)
         put("updatedAt", updatedAt)
         put("steps", JSONArray().apply { steps.forEach { put(it.toJson()) } })
@@ -38,6 +40,7 @@ data class AutomationScript(
                 url = json.optString("url"),
                 host = json.optString("host"),
                 name = json.optString("name"),
+                groupName = json.optString("groupName"),
                 createdAt = json.optLong("createdAt", System.currentTimeMillis()),
                 updatedAt = json.optLong("updatedAt", System.currentTimeMillis()),
                 steps = steps,
@@ -81,11 +84,22 @@ object AutomationScriptRepository {
         scripts.value = scripts.value.filterNot { it.id == id }
         save()
     }
+    
+    fun renameScript(id: String, newName: String) {
+        scripts.value = scripts.value.map { 
+            if (it.id == id) it.copy(name = newName) else it 
+        }
+        save()
+    }
+
+    fun getScript(id: String): AutomationScript? = scripts.value.firstOrNull { it.id == id }
 
     fun scriptsForHost(host: String): List<AutomationScript> =
         scripts.value
             .filter { it.host.equals(host, ignoreCase = true) }
             .sortedByDescending { it.updatedAt }
+
+    fun allScripts(): List<AutomationScript> = scripts.value.sortedByDescending { it.updatedAt }
 
     fun hostOfUrl(url: String): String = try {
         Uri.parse(url).host?.lowercase()?.removePrefix("www.") ?: ""

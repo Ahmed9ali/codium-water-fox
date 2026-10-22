@@ -3,7 +3,7 @@ package com.duckduckgo.app.automation
 import org.json.JSONObject
 import java.util.UUID
 
-enum class StepKind { Field, Wait, CaptchaWait, ClickNext }
+enum class StepKind { Field, Wait, CaptchaWait, ClickNext, DeleteCookies }
 
 data class RecordedStep(
     val id: String = UUID.randomUUID().toString(),
@@ -33,6 +33,7 @@ data class RecordedStep(
     val isWait get() = kind == StepKind.Wait
     val isCaptchaWait get() = kind == StepKind.CaptchaWait
     val isClickNext get() = kind == StepKind.ClickNext
+    val isDeleteCookies get() = kind == StepKind.DeleteCookies
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)

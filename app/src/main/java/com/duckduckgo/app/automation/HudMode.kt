@@ -7,4 +7,5 @@ enum class HudMode {
     Running,
     ScriptList,
     RunSetup,
+    EditScript,
 }

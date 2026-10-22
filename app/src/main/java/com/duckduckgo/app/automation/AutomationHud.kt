@@ -32,8 +32,13 @@ internal fun BrowserTabAutomationHud() {
         HudMode.Running -> HudRunningPanel()
         HudMode.ScriptList -> HudScriptListPanel()
         HudMode.RunSetup -> HudRunSetupPanel()
+        HudMode.EditScript -> HudScriptEditPanel()
     }
 }
+
+// ============================================================================
+// MENU PANEL
+// ============================================================================
 
 @Composable
 private fun HudMenuPanel() {
@@ -76,6 +81,10 @@ private fun HudMenuPanel() {
         }
     }
 }
+
+// ============================================================================
+// RECORDING PANEL
+// ============================================================================
 
 @Composable
 private fun HudRecordingPanel() {
@@ -254,6 +263,10 @@ private fun RecordingChip(text: String, compact: Boolean = false, onClick: () ->
     }
 }
 
+// ============================================================================
+// SCRIPT LIST PANEL
+// ============================================================================
+
 @Composable
 private fun HudScriptListPanel() {
     val shape = RoundedCornerShape(16.dp)
@@ -272,9 +285,22 @@ private fun HudScriptListPanel() {
             } else {
                 Column(modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState())) {
                     scripts.forEach { script ->
-                        DdgCard(onClick = { AutomationEngine.openRunSetup(script) }, modifier = Modifier.padding(bottom = 8.dp)) {
-                            Text(script.name, color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("${script.steps.size} steps", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
+                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                            DdgCard(onClick = { AutomationEngine.openRunSetup(script) }) {
+                                Text(script.name, color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("${script.steps.size} steps", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "Edit Script",
+                                    color = DuckDuckGoTheme.colors.brand.accentBlue,
+                                    fontFamily = VarelaRound,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable { AutomationEngine.openScriptEditor(script) }.padding(4.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -285,6 +311,51 @@ private fun HudScriptListPanel() {
     }
 }
 
+// ============================================================================
+// SCRIPT EDITOR PANEL
+// ============================================================================
+
+@Composable
+private fun HudScriptEditPanel() {
+    val shape = RoundedCornerShape(16.dp)
+    val script = AutomationEngine.hudEditingScript ?: return
+
+    Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape).border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
+            HudHeaderRow("Edit Script", script.name) { AutomationEngine.openScriptList() }
+            Spacer(Modifier.height(12.dp))
+
+            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState())) {
+                script.steps.forEach { step ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${step.sequenceIndex}. ${step.displayLabel}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(4.dp))
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Text("Add Step:", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                RecordingChip("+ Wait 2s") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.Wait, waitMs = 2000, displayLabel = "Wait 2s")) }
+                RecordingChip("+ Cookies") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.DeleteCookies, displayLabel = "Delete Cookies")) }
+                RecordingChip("+ CAPTCHA") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.CaptchaWait, displayLabel = "Wait CAPTCHA")) }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DdgSecondaryButton(text = "Cancel", onClick = { AutomationEngine.openScriptList() }, modifier = Modifier.weight(1f))
+                DdgPrimaryButton(text = "Save Changes", onClick = { AutomationEngine.saveEditingScript() }, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+// ============================================================================
+// RUN SETUP PANEL
+// ============================================================================
+
 @Composable
 private fun HudRunSetupPanel() {
     val shape = RoundedCornerShape(16.dp)
@@ -294,10 +365,7 @@ private fun HudRunSetupPanel() {
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
     Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-        Column(
-            modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
-                .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp),
-        ) {
+        Column(modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape).border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
             HudHeaderRow("Setup Run", script.name) { AutomationEngine.openScriptList() }
             Spacer(Modifier.height(12.dp))
 
@@ -318,36 +386,23 @@ private fun HudRunSetupPanel() {
             Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                DdgSecondaryButton(
-                    text = "-1",
-                    onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) },
-                    modifier = Modifier.width(60.dp)
-                )
+                DdgSecondaryButton(text = "-1", onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) }, modifier = Modifier.width(60.dp))
                 Text("$repeatCount", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontFamily = VarelaRound, fontSize = 16.sp)
-                DdgSecondaryButton(
-                    text = "+1",
-                    onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) },
-                    modifier = Modifier.width(60.dp)
-                )
+                DdgSecondaryButton(text = "+1", onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) }, modifier = Modifier.width(60.dp))
             }
 
             Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DdgSecondaryButton(
-                    text = "Back",
-                    onClick = { AutomationEngine.openScriptList() },
-                    modifier = Modifier.weight(1f)
-                )
-                DdgPrimaryButton(
-                    text = "Run",
-                    onClick = { AutomationEngine.startSelectedScriptRun() },
-                    modifier = Modifier.weight(1f),
-                    enabled = selectedGroup.isNotBlank()
-                )
+                DdgSecondaryButton(text = "Back", onClick = { AutomationEngine.openScriptList() }, modifier = Modifier.weight(1f))
+                DdgPrimaryButton(text = "Run", onClick = { AutomationEngine.startSelectedScriptRun() }, modifier = Modifier.weight(1f), enabled = selectedGroup.isNotBlank())
             }
         }
     }
 }
+
+// ============================================================================
+// RUNNING PANEL
+// ============================================================================
 
 @Composable
 private fun HudRunningPanel() {
@@ -359,8 +414,7 @@ private fun HudRunningPanel() {
     val unusedLeft = VaultRepository.unusedProfileCount(AutomationEngine.hudGroupName)
 
     Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
-            .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape).border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Automation · ${AutomationEngine.hudGroupName}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -369,71 +423,41 @@ private fun HudRunningPanel() {
                 DdgStatusBadge("$completed / $total", state != AutomationState.WAITING_CAPTCHA_HUMAN && state != AutomationState.WAITING_DATA_EXHAUSTED)
             }
             Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(progress = { if (total <= 0) 0f else (completed.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)),
-                color = DuckDuckGoTheme.colors.brand.accentBlue, trackColor = DuckDuckGoTheme.colors.backgrounds.background)
+            LinearProgressIndicator(progress = { if (total <= 0) 0f else (completed.toFloat() / total.toFloat()).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)), color = DuckDuckGoTheme.colors.brand.accentBlue, trackColor = DuckDuckGoTheme.colors.backgrounds.background)
             Spacer(Modifier.height(6.dp))
             Text("$unusedLeft unused profile(s) remaining", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 11.sp)
             Spacer(Modifier.height(10.dp))
 
             when (state) {
                 AutomationState.WAITING_CAPTCHA_HUMAN -> {
-                    DdgPrimaryButton(
-                        text = "I Solved the CAPTCHA — Continue",
-                        onClick = { AutomationEngine.continueAfterCaptchaResolution() }
-                    )
+                    DdgPrimaryButton(text = "I Solved the CAPTCHA — Continue", onClick = { AutomationEngine.continueAfterCaptchaResolution() })
                     Spacer(Modifier.height(6.dp))
-                    DdgSecondaryButton(
-                        text = "Stop Automation",
-                        onClick = { AutomationEngine.stopAutomation() }
-                    )
+                    DdgSecondaryButton(text = "Stop Automation", onClick = { AutomationEngine.stopAutomation() })
                 }
                 AutomationState.WAITING_DATA_EXHAUSTED -> {
                     Text("Group data finished! Repeat with same data or add new?", fontFamily = VarelaRound, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DdgPrimaryButton(
-                            text = "Repeat Data",
-                            onClick = { AutomationEngine.handleDataExhaustedChoice("repeat_same") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        DdgSecondaryButton(
-                            text = "Add Data",
-                            onClick = { AutomationEngine.handleDataExhaustedChoice("add_new") },
-                            modifier = Modifier.weight(1f)
-                        )
+                        DdgPrimaryButton(text = "Repeat Data", onClick = { AutomationEngine.handleDataExhaustedChoice("repeat_same") }, modifier = Modifier.weight(1f))
+                        DdgSecondaryButton(text = "Add Data", onClick = { AutomationEngine.handleDataExhaustedChoice("add_new") }, modifier = Modifier.weight(1f))
                     }
                 }
-                AutomationState.COMPLETED -> DdgPrimaryButton(
-                    text = "Automation Finished",
-                    onClick = { AutomationEngine.stopAutomation() }
-                )
+                AutomationState.COMPLETED -> DdgPrimaryButton(text = "Automation Finished", onClick = { AutomationEngine.stopAutomation() })
                 else -> {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (state == AutomationState.PAUSED) {
-                            DdgPrimaryButton(
-                                text = "Resume",
-                                onClick = { AutomationEngine.resumeAutomation() },
-                                modifier = Modifier.weight(1f)
-                            )
-                        } else {
-                            DdgSecondaryButton(
-                                text = "Pause",
-                                onClick = { AutomationEngine.pauseAutomation() },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        DdgSecondaryButton(
-                            text = "Stop",
-                            onClick = { AutomationEngine.stopAutomation() },
-                            modifier = Modifier.weight(1f)
-                        )
+                        if (state == AutomationState.PAUSED) DdgPrimaryButton(text = "Resume", onClick = { AutomationEngine.resumeAutomation() }, modifier = Modifier.weight(1f))
+                        else DdgSecondaryButton(text = "Pause", onClick = { AutomationEngine.pauseAutomation() }, modifier = Modifier.weight(1f))
+                        DdgSecondaryButton(text = "Stop", onClick = { AutomationEngine.stopAutomation() }, modifier = Modifier.weight(1f))
                     }
                 }
             }
         }
     }
 }
+
+// ============================================================================
+// HELPERS
+// ============================================================================
 
 @Composable
 private fun HudHeaderRow(title: String, subtitle: String, onClose: (() -> Unit)?) {

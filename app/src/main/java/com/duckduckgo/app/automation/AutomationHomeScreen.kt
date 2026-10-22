@@ -1,33 +1,7 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -50,6 +24,7 @@ fun AutomationHomeScreen(
     onBack: () -> Unit,
     onMyDataClick: () -> Unit,
     onAddDataClick: () -> Unit,
+    onMyScriptsClick: () -> Unit,
     onCreateAutomationClick: () -> Unit,
     onViewLogsClick: () -> Unit,
 ) {
@@ -57,6 +32,7 @@ fun AutomationHomeScreen(
     val totalGroups = groups.size
     val totalUnused = groups.sumOf { it.unusedCount }
     val totalUsed = groups.sumOf { it.usedCount }
+    val totalScripts = AutomationScriptRepository.allScripts().size
 
     Column(
         modifier = Modifier
@@ -74,7 +50,7 @@ fun AutomationHomeScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
-            // Primary Hero Card: Create & Run Automation
+            // Primary Hero Card
             DdgCard {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -101,7 +77,7 @@ fun AutomationHomeScreen(
                         Text(
                             text = stringResource(R.string.automation_fill_forms_title),
                             color = DuckDuckGoTheme.colors.text.primary,
-                            fontFamily = VarelaRound, // CHANGED
+                            fontFamily = VarelaRound,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -109,7 +85,7 @@ fun AutomationHomeScreen(
                         Text(
                             text = "Enter target website, pick a group, configure delays & run 1-by-1",
                             color = DuckDuckGoTheme.colors.text.secondary,
-                            fontFamily = VarelaRound, // CHANGED
+                            fontFamily = VarelaRound,
                             fontSize = 13.sp,
                         )
                     }
@@ -160,7 +136,7 @@ fun AutomationHomeScreen(
 
             DdgSectionHeader(
                 title = stringResource(R.string.automation_quick_actions),
-                subtitle = "Manage your saved datasets, groups, and used status",
+                subtitle = "Manage your saved datasets, scripts, and used status",
             )
 
             Spacer(Modifier.height(12.dp))
@@ -178,10 +154,10 @@ fun AutomationHomeScreen(
                 )
                 QuickActionTile(
                     modifier = Modifier.weight(1f),
-                    iconRes = drawable.ic_add_24,
-                    title = stringResource(R.string.automation_add_data),
-                    subtitle = "Paste or upload",
-                    onClick = onAddDataClick,
+                    iconRes = drawable.ic_automation_24,
+                    title = "My Scripts",
+                    subtitle = "$totalScripts saved",
+                    onClick = onMyScriptsClick,
                 )
             }
 
@@ -214,14 +190,14 @@ fun AutomationHomeScreen(
                                 Text(
                                     text = group.name,
                                     color = DuckDuckGoTheme.colors.text.primary,
-                                    fontFamily = VarelaRound, // CHANGED
+                                    fontFamily = VarelaRound,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
                                     text = "${group.unusedCount} available · ${group.usedCount} used",
                                     color = DuckDuckGoTheme.colors.text.secondary,
-                                    fontFamily = VarelaRound, // CHANGED
+                                    fontFamily = VarelaRound,
                                     fontSize = 12.sp,
                                 )
                             }
@@ -254,7 +230,7 @@ private fun SummaryStatCard(
             Text(
                 text = value,
                 color = DuckDuckGoTheme.colors.brand.accentBlue,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -262,7 +238,7 @@ private fun SummaryStatCard(
             Text(
                 text = label,
                 color = DuckDuckGoTheme.colors.text.secondary,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -292,7 +268,7 @@ private fun QuickActionTile(
         Text(
             text = title,
             color = DuckDuckGoTheme.colors.text.primary,
-            fontFamily = VarelaRound, // CHANGED
+            fontFamily = VarelaRound,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -300,7 +276,7 @@ private fun QuickActionTile(
         Text(
             text = subtitle,
             color = DuckDuckGoTheme.colors.text.secondary,
-            fontFamily = VarelaRound, // CHANGED
+            fontFamily = VarelaRound,
             fontSize = 11.sp,
         )
     }

@@ -100,6 +100,8 @@ object AutomationEngine {
     var hudSelectedScript by mutableStateOf<AutomationScript?>(null); private set
     var hudSelectedGroup by mutableStateOf(""); private set
     var hudRunRepeatCount by mutableIntStateOf(1); private set
+    
+    var hudEditingScript by mutableStateOf<AutomationScript?>(null); private set
 
     private var currentConfig: AutomationConfig? = null
     private var pendingBrowserConfig: AutomationConfig? = null
@@ -187,6 +189,35 @@ object AutomationEngine {
     fun updateRunGroup(group: String) { hudSelectedGroup = group }
     fun updateRunRepeat(count: Int) { hudRunRepeatCount = count.coerceAtLeast(1) }
 
+    // ========================================================================
+    // SCRIPT EDITOR
+    // ========================================================================
+
+    fun openScriptEditor(script: AutomationScript) {
+        hudEditingScript = script
+        hudMode = HudMode.EditScript
+    }
+
+    fun addStepToEditingScript(step: RecordedStep) {
+        val current = hudEditingScript ?: return
+        val newStep = step.copy(sequenceIndex = current.steps.size + 1)
+        hudEditingScript = current.copy(steps = current.steps + newStep)
+    }
+
+    fun removeStepFromEditingScript(id: String) {
+        val current = hudEditingScript ?: return
+        val updatedSteps = current.steps.filterNot { it.id == id }.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
+        hudEditingScript = current.copy(steps = updatedSteps)
+    }
+
+    fun saveEditingScript() {
+        val current = hudEditingScript ?: return
+        AutomationScriptRepository.saveScript(current)
+        Toast.makeText(appContext, "Script saved", Toast.LENGTH_SHORT).show()
+        hudEditingScript = null
+        openScriptList()
+    }
+
     fun startSelectedScriptRun() {
         val script = hudSelectedScript ?: return
         if (hudSelectedGroup.isBlank()) {
@@ -261,7 +292,7 @@ object AutomationEngine {
     }
 
     // ========================================================================
-    // SCRIPT DRIVEN EXECUTION
+    // EXECUTION ENGINE (Custom Components & Native Setting)
     // ========================================================================
 
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
@@ -301,29 +332,46 @@ object AutomationEngine {
                                     if (!el && '${step.domId}') { el = document.getElementById('${step.domId}'); }
                                     if (!el && '${step.placeholder}') { el = document.querySelector('[placeholder="${step.placeholder}"]'); }
                                     if (!el && ${step.index} >= 0) {
-                                        const all = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select'));
+                                        const all = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [role="checkbox"], [role="radio"]'));
                                         el = all[${step.index}];
                                     }
                                     if (!el) return {ok: false, err: 'not found'};
                                     
                                     el.focus();
-                                    const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                                    const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-                                    if (el.tagName === 'TEXTAREA' && nativeTextArea) nativeTextArea.call(el, '${valToFill}');
-                                    else if (nativeInput) nativeInput.call(el, '${valToFill}');
-                                    else el.value = '${valToFill}';
+                                    const role = (el.getAttribute("role") || "").toLowerCase();
+                                    const isCustom = ['combobox', 'checkbox', 'radio'].includes(role) || el.tagName === 'DIV';
                                     
-                                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                    if (isCustom) {
+                                        el.click();
+                                        if (role === 'checkbox' || role === 'radio') {
+                                             if (el.previousElementSibling) el.previousElementSibling.click();
+                                             if (el.parentElement) el.parentElement.click();
+                                        }
+                                    } else {
+                                        const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                        const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                                        if (el.tagName === 'TEXTAREA' && nativeTextArea) nativeTextArea.call(el, '${valToFill}');
+                                        else if (nativeInput) nativeInput.call(el, '${valToFill}');
+                                        else el.value = '${valToFill}';
+                                        
+                                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
                                     el.blur();
                                     return {ok: true};
                                 } catch(e) { return {ok: false, err: e.message}; }
                             })();
                         """.trimIndent()
                         evaluateJsSuspend(webView, "return JSON.stringify(${js});")
-                        delay(400)
+                        delay(1000)
                     }
                     StepKind.Wait -> { updateStatus("Waiting ${step.waitMs}ms..."); delay(step.waitMs) }
+                    StepKind.DeleteCookies -> {
+                        updateStatus("Clearing cookies...")
+                        CookieManager.getInstance().removeAllCookies(null)
+                        CookieManager.getInstance().flush()
+                        delay(500)
+                    }
                     StepKind.CaptchaWait -> {
                         _captchaState.postValue(true)
                         updateState(AutomationState.WAITING_CAPTCHA_HUMAN)
@@ -411,8 +459,18 @@ object AutomationEngine {
             val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
             currentProfile = profile
             
+            if (config.clearTabBetweenRuns && hudCompleted > 0) {
+                updateState(AutomationState.CLEARING_DATA)
+                updateStatus("Clearing tab cookies, storage & cache...")
+                clearBrowserSession(webView)
+                delay(500)
+            }
+            
             updateState(AutomationState.NAVIGATING)
-            if (!isFirst || navigateFirstCycle) withContext(Dispatchers.Main) { webView.loadUrl(targetUri) }
+            if (!isFirst || navigateFirstCycle) {
+                updateStatus("Loading ${config.targetUrl}...")
+                withContext(Dispatchers.Main) { webView.loadUrl(targetUri) }
+            }
             isFirst = false
             waitForPageReady(webView); injectScanner(); delay(600)
 
@@ -421,13 +479,18 @@ object AutomationEngine {
             while (counter < 5 && scope.isActive) {
                 counter++
                 updateState(AutomationState.SCANNING)
+                updateStatus("Scanning form fields (Step $counter)...")
                 val scanObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
                 val fieldsArr = scanObj.optJSONArray("fields") ?: JSONArray()
+                
                 if (scanObj.optBoolean("captchaDetected", false) && config.pauseOnCaptcha) {
                     _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
                 }
+                
                 currentActionRef = scanObj.optString("actionButtonRef").takeIf { it.isNotBlank() }
                 val fillArray = JSONArray()
+                val singleFallbackValue = if (profile.fields.size == 1) profile.fields.values.firstOrNull() else null
+
                 for (i in 0 until fieldsArr.length()) {
                     val f = fieldsArr.getJSONObject(i)
                     val looksLike = f.optString("looksLike")
@@ -436,27 +499,72 @@ object AutomationEngine {
                         fillArray.put(JSONObject().apply { put("ref", f.optString("ref")); put("index", f.optInt("index", i)); put("value", matched) })
                     }
                 }
-                if (fillArray.length() == 0) { stepSuccess = counter > 1; break }
+                
+                if (fillArray.length() == 0) {
+                    if (counter == 1) {
+                        delay(1200); injectScanner()
+                        val retryObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
+                        if ((retryObj.optJSONArray("fields")?.length() ?: 0) > 0) { counter--; continue }
+                    }
+                    stepSuccess = counter > 1; break 
+                }
+                
                 updateState(AutomationState.FILLING)
-                evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill(${JSONObject.quote(fillArray.toString())}, '{}'));")
+                updateStatus("Filling ${fillArray.length()} field(s) (Step $counter)...")
+                val fillOpts = JSONObject().apply { put("typingDelayMs", config.typingDelayMs); put("fieldDelayMs", config.fieldDelayMs) }
+                evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill(${JSONObject.quote(fillArray.toString())}, ${JSONObject.quote(fillOpts.toString())}));")
                 delay(500)
+                
                 updateState(AutomationState.CLICKING_NEXT)
-                val clickOpts = JSONObject().apply { put("actionRef", currentActionRef ?: ""); put("settleTimeoutMs", config.settleTimeoutMs) }
+                val btnName = scanObj.optString("actionButtonName").ifBlank { "Next / Submit" }
+                updateStatus("Clicking '$btnName' & checking next step...")
+                val clickOpts = JSONObject().apply { put("actionRef", currentActionRef ?: ""); put("settleTimeoutMs", config.settleTimeoutMs); put("pauseOnCaptcha", config.pauseOnCaptcha) }
                 val settle = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationClickNextAndSettle(${JSONObject.quote(clickOpts.toString())}));")) } catch (_: Exception) { JSONObject() }
+                
                 if (settle.optString("verdict") == "captcha_blocked" && config.pauseOnCaptcha) {
                     _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
                 }
+                
                 delay(600); waitForPageReady(webView); injectScanner(); delay(500)
-                stepSuccess = true; break
+                val postNav = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
+                val postFields = postNav.optJSONArray("fields") ?: JSONArray()
+                var unfilled = 0
+                for (k in 0 until postFields.length()) {
+                    val f = postFields.getJSONObject(k)
+                    if (f.optString("looksLike", "") != "termsCheckbox" && f.optString("currentValue", "").isBlank()) unfilled++
+                }
+                
+                if (unfilled > 0 && settle.optString("verdict") != "validation_error" && settle.optString("verdict") != "no_button_found") {
+                    updateStatus("Moved to Step ${counter + 1} — continuing...")
+                    delay(400)
+                } else { stepSuccess = true; break }
             }
+            
             if (stepSuccess) {
                 VaultRepository.markProfileUsed(profile)
                 updateProgress(hudCompleted + 1, config.targetRepeatCount)
-            } else break
+                updateStatus("Completed cycle ${hudCompleted} of ${config.targetRepeatCount}")
+            } else {
+                updateStatus("No matching fields found for '${config.groupName}'.")
+                break
+            }
             delay(1000)
         }
         updateState(AutomationState.COMPLETED)
+        updateStatus("Finished $hudCompleted / ${config.targetRepeatCount} automation(s)!")
         onAutomationFinished?.invoke(hudCompleted)
+    }
+
+    private fun clearBrowserSession(webView: WebView) {
+        try {
+            webView.clearCache(true)
+            webView.clearHistory()
+            webView.clearFormData()
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            WebStorage.getInstance().deleteAllData()
+            webView.evaluateJavascript("try { localStorage.clear(); sessionStorage.clear(); } catch(_) {}", null)
+        } catch (e: Exception) { Log.e(TAG, "Error clearing session: ${e.message}") }
     }
 
     // ========================================================================
