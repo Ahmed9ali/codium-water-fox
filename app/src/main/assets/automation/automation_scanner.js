@@ -2,7 +2,6 @@
   "use strict";
   const g = globalThis;
 
-  // === SINGLETON GUARD: prevent duplicate installations ===
   if (g.__automationScannerInstalled) {
     try { if (g.__automationScan) g.__automationScan(); } catch (_) {}
     return;
@@ -10,20 +9,17 @@
   g.__automationScannerInstalled = true;
 
   let stableRefCounter = 0;
-  const elementRefs = new WeakMap();   // element -> stable ref (never changes)
+  const elementRefs = new WeakMap(); 
   let scanThrottleTimer = null;
   let lastScanTime = 0;
   const SCAN_THROTTLE_MS = 800;
-  let consecutiveEmptyCount = 0;
-
-  // ============ DOM HELPERS ============
 
   const isVisible = (el) => {
     if (!el || !el.isConnected) return false;
     try {
       if (el.getAttribute && el.getAttribute("aria-hidden") === "true") return false;
       const st = window.getComputedStyle(el);
-      if (!st || st.display === "none" || st.visibility === "hidden") return false;
+      if (!st || st.display === "none" || st.visibility === "hidden" || st.opacity === "0") return false;
       const r = el.getBoundingClientRect();
       if (r.width <= 0 && r.height <= 0 && el.offsetParent === null) return false;
       return true;
@@ -71,16 +67,6 @@
         const t = getText(wrapping).slice(0, 100);
         if (t && !parts.includes(t)) parts.push(t);
       }
-      const byId = el.getAttribute && el.getAttribute("aria-labelledby");
-      if (byId) {
-        byId.split(/\s+/).forEach(id => {
-          const n = document.getElementById(id);
-          if (n) {
-            const t = getText(n).slice(0, 100);
-            if (t && !parts.includes(t)) parts.push(t);
-          }
-        });
-      }
     } catch (_) {}
     return parts.join(" ").trim();
   };
@@ -90,12 +76,9 @@
     stableRefCounter++;
     const ref = "r" + stableRefCounter;
     elementRefs.set(el, ref);
-    // Also set attribute for legacy fill functions
     try { el.setAttribute("data-nano-ref", ref); } catch (_) {}
     return ref;
   };
-
-  // ============ CLASSIFICATION ============
 
   function classify(el) {
     const tag = (el.tagName || "").toLowerCase();
@@ -109,61 +92,33 @@
     const role = (el.getAttribute("role") || "").toLowerCase();
     const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto + " " + role;
 
-    if (type === "checkbox" || role === "checkbox") {
-      if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|acepto|términos|conditions|datenschutz)\b/i.test(combined)) return "termsCheckbox";
-      return "checkbox";
-    }
-    if (type === "radio" || role === "radio") {
-      if (/\b(gender|sex|male|female|género|sexo|homme|femme|geschlecht)\b/i.test(combined)) return "gender";
-      return "radio";
-    }
-    if (type === "password" || auto === "new-password" || auto === "current-password") {
-      if (/\b(confirm|retype|repeat|verify|again|pass2|password2|contraseña|mot de passe|senha|wiederholen)\b/i.test(combined)) return "confirmPassword";
-      return "password";
-    }
-    if (type === "email" || auto === "email" || /\b(e-?mail|correo|mail|courriel)\b/i.test(combined)) {
-      if (/\b(confirm|retype|repeat|verify|again)\b/i.test(combined)) return "confirmEmail";
-      return "email";
-    }
-    if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|2fa|pin\s*code|código|codice)\b/i.test(combined)) return "otp";
-    if (type === "tel" || auto.indexOf("tel") >= 0 || /\b(phone|mobile|cell|whatsapp|tel|téléphone|telefono|celular|telefon)\b/i.test(combined)) {
-      if (/\b(confirm|retype|repeat|verify)\b/i.test(combined)) return "confirmPhone";
-      return "phone";
-    }
-    if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|prénom|nombre|vorname)\b/i.test(combined)) return "firstName";
-    if (auto === "family-name" || /\b(last\s*name|lname|surname|family|nom|apellido|nachname)\b/i.test(combined)) return "lastName";
+    if (type === "checkbox" || role === "checkbox") return "termsCheckbox";
+    if (type === "radio" || role === "radio") return "gender";
+    if (type === "password" || auto === "new-password" || auto === "current-password") return "password";
+    if (type === "email" || auto === "email" || /\b(e-?mail|correo)\b/i.test(combined)) return "email";
+    if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|2fa|pin\s*code|código)\b/i.test(combined)) return "otp";
+    if (type === "tel" || auto.indexOf("tel") >= 0 || /\b(phone|mobile|cell|whatsapp|tel|telefono|celular)\b/i.test(combined)) return "phone";
+    if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|nombre)\b/i.test(combined)) return "firstName";
+    if (auto === "family-name" || /\b(last\s*name|lname|surname|nom|apellido)\b/i.test(combined)) return "lastName";
     if (auto === "name" || /\b(full\s*name|your\s*name|name|nom|nombre)\b/i.test(combined)) return "fullName";
-    if (auto === "username" || /\b(user\s*name|userid|login|handle|utilisateur|usuario|benutzer)\b/i.test(combined)) return "username";
-    if (tag === "textarea" || role === "textbox" || /\b(message|comment|feedback|description|bio|mensaje|message|nachricht)\b/i.test(combined)) return "message";
-    if (/\b(subject|topic|reason|sujet|asunto|betreff)\b/i.test(combined)) return "subject";
-    if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha|naissance|geburtstag)\b/i.test(combined)) return "dob";
-    if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|code postal|código postal|postleitzahl)\b/i.test(combined)) return "zip";
-    if (auto === "address-level2" || /\b(city|town|ville|ciudad|stadt)\b/i.test(combined)) return "city";
-    if (auto === "address-level1" || /\b(state|province|region|état|estado|bundesland)\b/i.test(combined)) return "state";
-    if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país|land)\b/i.test(combined)) return "country";
-    if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 || /\b(address|street|apartment|apt|building|adresse|dirección|endereço|straße)\b/i.test(combined)) return "address";
-    if (auto.indexOf("cc-") >= 0 || /\b(card\s*number|cc-num|creditcard|tarjeta|kreditkarte)\b/i.test(combined)) return "cc-number";
-    if (/\b(expiry|expiration|cvv|cvc|security\s*code|fecha\s*vencimiento)\b/i.test(combined)) return "cc-exp";
-
-    // Custom components
-    if ((tag === "div" || tag === "span" || tag === "custom-element") && (role === "combobox" || role === "listbox" || el.isContentEditable)) return "text";
+    if (auto === "username" || /\b(user\s*name|userid|login|handle|usuario)\b/i.test(combined)) return "username";
+    if (tag === "textarea" || role === "textbox" || /\b(message|comment|feedback|description|bio|mensaje)\b/i.test(combined)) return "message";
+    if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha)\b/i.test(combined)) return "dob";
+    if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|postal|código postal)\b/i.test(combined)) return "zip";
+    if (auto === "address-level2" || /\b(city|town|ville|ciudad)\b/i.test(combined)) return "city";
+    if (auto === "address-level1" || /\b(state|province|region|estado)\b/i.test(combined)) return "state";
+    if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país)\b/i.test(combined)) return "country";
+    if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 || /\b(address|street|apartment|adresse|dirección)\b/i.test(combined)) return "address";
     return "";
   }
 
-  // ============ CAPTCHA DETECTION ============
-
   function detectCaptcha() {
-    const sel = [
-      'iframe[src*="recaptcha" i]', 'iframe[src*="hcaptcha" i]', 'iframe[src*="challenges.cloudflare.com" i]',
-      'iframe[src*="turnstile" i]', 'iframe[src*="arkoselabs" i]', '.g-recaptcha', '.h-captcha', '.cf-turnstile'
-    ];
+    const sel = ['iframe[src*="recaptcha" i]', 'iframe[src*="hcaptcha" i]', 'iframe[src*="challenges.cloudflare.com" i]', '.g-recaptcha', '.h-captcha', '.cf-turnstile'];
     for (const s of sel) {
       try {
         const nodes = document.querySelectorAll(s);
         for (const el of nodes) {
           if (!isVisible(el)) continue;
-          const token = el.querySelector && el.querySelector('textarea[name*="captcha-response" i]');
-          if (token && token.value && token.value.trim().length > 10) continue;
           return true;
         }
       } catch (_) {}
@@ -171,22 +126,18 @@
     return false;
   }
 
-  // ============ MAIN SCAN ============
-
   function scanPage() {
-    // Do not scan if DOM isn't ready
     if (document.readyState === "loading") return { fields: [], captchaDetected: false };
 
-    // Fast selector-based collection
+    // UPDATED: Comprehensive selector for fields and buttons
     const fieldSelector = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select, [role="combobox"], [role="listbox"], [contenteditable="true"]';
-    const buttonSelector = 'button, a[href], input[type="submit"], input[type="button"], [role="button"]';
+    const buttonSelector = 'button, a, input[type="submit"], input[type="button"], input[type="image"], [role="button"], [onclick]';
 
     let rawFields = [];
     let rawButtons = [];
     try { rawFields = Array.from(document.querySelectorAll(fieldSelector)); } catch (_) {}
     try { rawButtons = Array.from(document.querySelectorAll(buttonSelector)); } catch (_) {}
 
-    // Pierce shadow roots
     try {
       const allEls = document.querySelectorAll("*");
       for (const el of allEls) {
@@ -224,7 +175,6 @@
       } catch (_) {}
     }
 
-    // Find best action button
     let bestBtn = null;
     let bestScore = -1;
     const POSITIVE = /\b(next|continue|submit|sign\s*up|signup|register|create|join|proceed|verify|confirm|finish|done|save|send|login|log\s*in|suivant|enviar|siguiente|weiter)\b/i;
@@ -253,8 +203,6 @@
     }
 
     const captchaDetected = detectCaptcha();
-
-    // === SEND TO BRIDGE (with retry) ===
     sendToBridge(fields, captchaDetected);
 
     return {
@@ -270,8 +218,6 @@
   function sendToBridge(fields, captchaDetected) {
     const payload = JSON.stringify(fields);
     let attempts = 0;
-    const maxAttempts = 5;
-
     function trySend() {
       attempts++;
       try {
@@ -280,19 +226,14 @@
           return;
         }
       } catch (_) {}
-      if (attempts < maxAttempts) {
-        setTimeout(trySend, 200);
-      }
+      if (attempts < 5) setTimeout(trySend, 200);
     }
     trySend();
   }
 
-  // ============ THROTTLE SCANNING ============
-
   function scheduleScan() {
     const now = Date.now();
     const elapsed = now - lastScanTime;
-
     if (elapsed >= SCAN_THROTTLE_MS) {
       lastScanTime = now;
       try { scanPage(); } catch (_) {}
@@ -305,113 +246,21 @@
     }
   }
 
-  // ============ MUTATION OBSERVER (childList only, NOT attributes) ============
-
   try {
-    new MutationObserver((records) => {
-      for (const r of records) {
-        if (r.addedNodes && r.addedNodes.length > 0) {
-          scheduleScan();
-          return;
-        }
-      }
-    }).observe(document.documentElement || document, {
-      subtree: true,
-      childList: true
-    });
+    new MutationObserver(() => scheduleScan()).observe(document.documentElement || document, { subtree: true, childList: true });
   } catch (_) {}
 
-  // ============ FALLBACK TRIGGERS ============
-
-  // SPA route changes
   try {
     window.addEventListener("popstate", scheduleScan);
     window.addEventListener("hashchange", scheduleScan);
-  } catch (_) {}
-
-  // User interactions
-  try {
     document.addEventListener("focusin", scheduleScan, true);
     document.addEventListener("click", () => setTimeout(scheduleScan, 300), true);
   } catch (_) {}
 
-  // Heartbeat (every 2s while page visible)
   try {
-    setInterval(() => {
-      if (document.visibilityState === "visible" && !document.hidden) {
-        scheduleScan();
-      }
-    }, 2000);
+    setInterval(() => { if (document.visibilityState === "visible") scheduleScan(); }, 2000);
   } catch (_) {}
 
-  // Initial scan when ready
-  function initialScan() {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => {
-        lastScanTime = Date.now();
-        try { scanPage(); } catch (_) {}
-      }, { once: true });
-    } else {
-      lastScanTime = Date.now();
-      try { scanPage(); } catch (_) {}
-    }
-  }
-
-  // ============ LEGACY SUPPORT (used by runAutomationLoop) ============
-
-  g.__automationFill = async function (rawListJson, rawOptionsJson) {
-    try {
-      const list = typeof rawListJson === "string" ? JSON.parse(rawListJson) : (rawListJson || []);
-      const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : (rawOptionsJson || {});
-      const typingDelay = typeof options.typingDelayMs === "number" ? options.typingDelayMs : 60;
-      const fieldDelay = typeof options.fieldDelayMs === "number" ? options.fieldDelayMs : 120;
-      const receipts = [];
-      for (const item of list) {
-        try {
-          let el = document.querySelector('[data-nano-ref="' + item.ref + '"]');
-          if (!el) {
-            const all = document.querySelectorAll(fieldSelector);
-            if (typeof item.index === "number" && all[item.index]) el = all[item.index];
-          }
-          if (!el) { receipts.push({ ref: item.ref, ok: false }); continue; }
-          el.focus();
-          const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
-          if (desc && desc.set) desc.set.call(el, item.value);
-          else el.value = item.value;
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-          el.dispatchEvent(new Event("blur", { bubbles: true }));
-          receipts.push({ ref: item.ref, ok: true });
-        } catch (_) { receipts.push({ ref: item.ref, ok: false }); }
-        if (fieldDelay > 0) await new Promise(r => setTimeout(r, fieldDelay));
-      }
-      return { filledCount: receipts.filter(r => r.ok).length, receipts };
-    } catch (e) {
-      return { filledCount: 0, receipts: [], error: e.message };
-    }
-  };
-
-  g.__automationClickNextAndSettle = async function (rawOptionsJson) {
-    try {
-      const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : (rawOptionsJson || {});
-      const settleTimeout = typeof options.settleTimeoutMs === "number" ? options.settleTimeoutMs : 2000;
-      let btn = options.actionRef ? document.querySelector('[data-nano-ref="' + options.actionRef + '"]') : null;
-      if (!btn) btn = document.querySelector('button[type="submit"], input[type="submit"]');
-      if (!btn) return { clicked: false, verdict: "no_button_found" };
-      const urlBefore = window.location.href;
-      btn.click();
-      await new Promise(r => setTimeout(r, settleTimeout));
-      return {
-        clicked: true,
-        urlChanged: window.location.href !== urlBefore,
-        verdict: "changed"
-      };
-    } catch (e) {
-      return { clicked: false, verdict: "error", error: e.message };
-    }
-  };
-
-  // ============ EXPORT ============
   g.__automationScan = scanPage;
-  initialScan();
+  scanPage();
 })();

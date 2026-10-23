@@ -46,6 +46,7 @@ import androidx.webkit.WebViewCompat.WebMessageListener
 import com.duckduckgo.anvil.annotations.InjectWith
 import com.duckduckgo.app.automation.AutomationBridge
 import com.duckduckgo.app.automation.AutomationEngine
+import com.duckduckgo.app.automation.HudMode
 import com.duckduckgo.app.browser.navigation.safeCopyBackForwardList
 import com.duckduckgo.app.browser.uilock.BrowserUiLockFeature
 import com.duckduckgo.common.utils.DispatcherProvider
@@ -113,7 +114,7 @@ class DuckDuckGoWebView :
         }
     }
 
-               private fun createAutomationBridge(): AutomationBridge =
+    private fun createAutomationBridge(): AutomationBridge =
         AutomationBridge(
             tabId = automationTabId,
             onFieldsDetectedCallback = { json, tabId -> AutomationEngine.onFieldsDetected(json, tabId) },
@@ -122,6 +123,15 @@ class DuckDuckGoWebView :
             onStepSettledCallback = { _, _ -> },
             onElementRecordedCallback = { json, tabId -> AutomationEngine.onRecorderElementCaptured(json, tabId) },
         )
+
+    private fun loadRecorderAsset(): String? {
+        return try {
+            context.assets.open("automation/automation_recorder.js").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            logcat(ERROR) { "Failed to load recorder asset: ${e.asLog()}" }
+            null
+        }
+    }
 
     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
         super.startActionMode(decorate(callback))
@@ -262,15 +272,25 @@ class DuckDuckGoWebView :
                         }
                     }
 
-                                       override fun onPageFinished(view: WebView?, url: String?) {
+                    override fun onPageFinished(view: WebView?, url: String?) {
                         client.onPageFinished(view, url)
                         try {
                             AutomationEngine.attachWebView(this@DuckDuckGoWebView, automationTabId)
                             AutomationEngine.injectScanner()
+
+                            // FIX FOR BUG 3: Re-inject recorder if still recording after navigation/reload
+                            if (AutomationEngine.hudMode == HudMode.Recording) {
+                                loadRecorderAsset()?.let { js ->
+                                    this@DuckDuckGoWebView.evaluateJavascript(js) {
+                                        logcat { "Recorder re-injected after page load" }
+                                    }
+                                }
+                            }
                         } catch (e: Exception) {
                             logcat(ERROR) { "AutomationEngine: inject failed: ${e.asLog()}" }
                         }
                     }
+
                     override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                         return client.shouldOverrideUrlLoading(view, request)
                     }
