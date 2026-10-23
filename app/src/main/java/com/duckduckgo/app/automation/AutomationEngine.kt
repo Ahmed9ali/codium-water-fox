@@ -90,7 +90,6 @@ object AutomationEngine {
     var hudStatus by mutableStateOf(""); private set
     var hudGroupName by mutableStateOf(""); private set
 
-    // NATIVE FIRE DIALOG CALLBACK
     var onShowFireDialog: ((String) -> Unit)? = null
     private var fireDialogContinuation: CancellableContinuation<Unit>? = null
 
@@ -121,6 +120,13 @@ object AutomationEngine {
         appContext = context.applicationContext
         VaultRepository.init(context)
         AutomationScriptRepository.init(context)
+        
+        // Force reset UI state to prevent getting stuck if the app was killed mid-run
+        hudMode = HudMode.Hidden
+        hudVisible = false
+        hudRecordedSteps = emptyList()
+        hudRecordingPhase = RecordingPhase.Capturing
+        currentWebView = null
     }
 
     private fun updateState(newState: AutomationState) {
@@ -154,6 +160,11 @@ object AutomationEngine {
             )
             webView.addJavascriptInterface(bridge, "AutomationBridge")
         } catch (e: Exception) { Log.e(TAG, "Failed to add JS bridge") }
+
+        // If we attach a WebView while not recording, ensure the recorder is stopped
+        if (hudMode != HudMode.Recording) {
+            webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
+        }
     }
 
     fun detachWebView() { currentWebView = null; _detectedFieldCount.postValue(0) }
@@ -322,7 +333,7 @@ object AutomationEngine {
     }
 
     // ========================================================================
-    // EXECUTION ENGINE
+    // EXECUTION ENGINE (Selenium-style Wait & Click)
     // ========================================================================
 
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
@@ -352,20 +363,25 @@ object AutomationEngine {
                         updateStatus("Filling ${step.displayLabel}...")
                         val valToFill = profile.resolveForField(step.fieldType, step.name, step.tag) ?: ""
                         
+                        // Selenium style: wait for element, clear it, then type
                         val js = """
-                            (function() {
+                            (async function() {
+                                function waitForEl(selector, xpath, timeout = 5000) {
+                                    return new Promise(resolve => {
+                                        const start = Date.now();
+                                        const interval = setInterval(() => {
+                                            let el = null;
+                                            if (selector) try { el = document.querySelector(selector); } catch(_){}
+                                            if (!el && xpath) try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
+                                            if (el) { clearInterval(interval); resolve(el); }
+                                            else if (Date.now() - start > timeout) { clearInterval(interval); resolve(null); }
+                                        }, 200);
+                                    });
+                                }
+
                                 try {
-                                    let el = null;
-                                    try { if ('${step.xpath}') el = document.evaluate('${step.xpath}', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
-                                    if (!el && '${step.cssSelector}') { try { el = document.querySelector('${step.cssSelector}'); } catch(_){} }
-                                    if (!el && '${step.name}') { el = document.querySelector('[name="${step.name}"]'); }
-                                    if (!el && '${step.domId}') { el = document.getElementById('${step.domId}'); }
-                                    if (!el && '${step.placeholder}') { el = document.querySelector('[placeholder="${step.placeholder}"]'); }
-                                    if (!el && ${step.index} >= 0) {
-                                        const all = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"]'));
-                                        el = all[${step.index}];
-                                    }
-                                    if (!el) return {ok: false, err: 'not found'};
+                                    let el = await waitForEl('${step.cssSelector}', '${step.xpath}');
+                                    if (!el) return {ok: false, err: 'timeout waiting for element'};
                                     
                                     el.focus();
                                     const role = (el.getAttribute("role") || "").toLowerCase();
@@ -374,7 +390,6 @@ object AutomationEngine {
                                     if (isCustom && role === 'combobox') {
                                         el.click(); // Open the dropdown
                                     } else if (el.tagName === 'SELECT') {
-                                        // Native select handling
                                         const strVal = '${valToFill}'.toLowerCase();
                                         for(let i=0; i<el.options.length; i++) {
                                             if(el.options[i].text.toLowerCase().includes(strVal) || el.options[i].value.toLowerCase().includes(strVal)) {
@@ -384,7 +399,7 @@ object AutomationEngine {
                                         }
                                         el.dispatchEvent(new Event('change', { bubbles: true }));
                                     } else {
-                                        // Clear pre-filled data first
+                                        // Clear pre-filled data first (like Selenium's .clear())
                                         const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                                         const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
                                         
@@ -410,7 +425,7 @@ object AutomationEngine {
                                 } catch(e) { return {ok: false, err: e.message}; }
                             })();
                         """.trimIndent()
-                        evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                        evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
                         delay(1000)
                     }
                     StepKind.Wait -> {
@@ -420,15 +435,12 @@ object AutomationEngine {
                     StepKind.DeleteCookies -> {
                         updateState(AutomationState.CLEARING_DATA)
                         updateStatus("Triggering native delete dialog...")
-                        
                         if (onShowFireDialog != null) {
-                            // Suspend the loop while the UI shows and auto-processes the dialog
                             suspendCancellableCoroutine<Unit> { cont ->
                                 fireDialogContinuation = cont
-                                onShowFireDialog?.invoke(step.fieldType) // Pass "delete_tab" or "delete_all"
+                                onShowFireDialog?.invoke(step.fieldType)
                             }
                         } else {
-                            // Fallback if UI is not available
                             if (step.fieldType == "delete_all") clearAllData(webView)
                             else clearTabData(webView)
                         }
@@ -443,17 +455,28 @@ object AutomationEngine {
                         updateState(AutomationState.CLICKING_NEXT)
                         updateStatus("Clicking ${step.displayLabel}...")
                         val js = """
-                            (function() {
+                            (async function() {
+                                function waitForEl(selector, xpath, timeout = 5000) {
+                                    return new Promise(resolve => {
+                                        const start = Date.now();
+                                        const interval = setInterval(() => {
+                                            let el = null;
+                                            if (selector) try { el = document.querySelector(selector); } catch(_){}
+                                            if (!el && xpath) try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
+                                            if (el) { clearInterval(interval); resolve(el); }
+                                            else if (Date.now() - start > timeout) { clearInterval(interval); resolve(null); }
+                                        }, 200);
+                                    });
+                                }
                                 try {
-                                    let el = null;
-                                    try { if ('${step.xpath}') el = document.evaluate('${step.xpath}', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
-                                    if (!el && '${step.cssSelector}') { try { el = document.querySelector('${step.cssSelector}'); } catch(_){} }
-                                    if (el) { el.click(); return {ok: true}; }
-                                    return {ok: false, err: 'not found'};
+                                    let el = await waitForEl('${step.cssSelector}', '${step.xpath}');
+                                    if (!el) return {ok: false, err: 'timeout waiting for button'};
+                                    el.click(); 
+                                    return {ok: true};
                                 } catch(e) { return {ok: false, err: e.message}; }
                             })();
                         """.trimIndent()
-                        evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                        evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
                         delay(1500)
                     }
                 }

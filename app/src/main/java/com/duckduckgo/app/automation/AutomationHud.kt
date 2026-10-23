@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,13 +15,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
+import kotlin.math.roundToInt
 
 @Composable
 internal fun BrowserTabAutomationHud() {
@@ -311,6 +316,10 @@ private fun HudScriptEditPanel() {
     var customSelector by remember { mutableStateOf("") }
     var customValue by remember { mutableStateOf("") }
 
+    // DRAG AND DROP STATE
+    var draggedIndex by remember { mutableStateOf(-1) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+
     Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
         Column(modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape).border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
             HudHeaderRow("Edit Script", script.name) { AutomationEngine.openScriptList() }
@@ -318,16 +327,42 @@ private fun HudScriptEditPanel() {
 
             Column(modifier = Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState())) {
                 script.steps.forEachIndexed { index, step ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val isDragging = draggedIndex == index
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .offset { IntOffset(0, if (isDragging) dragOffset.roundToInt() else 0) }
+                            .pointerInput(script.steps.size) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { draggedIndex = index; dragOffset = 0f },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        dragOffset += dragAmount.y
+                                        val threshold = 60.dp.toPx()
+                                        if (dragOffset > threshold && index < script.steps.size - 1) {
+                                            AutomationEngine.moveStep(step.id, up = false)
+                                            draggedIndex = index + 1
+                                            dragOffset -= threshold
+                                        } else if (dragOffset < -threshold && index > 0) {
+                                            AutomationEngine.moveStep(step.id, up = true)
+                                            draggedIndex = index - 1
+                                            dragOffset += threshold
+                                        }
+                                    },
+                                    onDragEnd = { draggedIndex = -1; dragOffset = 0f },
+                                    onDragCancel = { draggedIndex = -1; dragOffset = 0f }
+                                )
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Drag Handle Icon
+                        Text("☰", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                        
                         Text("${step.sequenceIndex}. ${step.displayLabel}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.weight(1f))
                         
-                        IconButton(onClick = { AutomationEngine.moveStep(step.id, up = true) }, enabled = index > 0) {
-                            Text("↑", fontSize = 16.sp)
-                        }
-                        IconButton(onClick = { AutomationEngine.moveStep(step.id, up = false) }, enabled = index < script.steps.size - 1) {
-                            Text("↓", fontSize = 16.sp)
-                        }
-                        Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(4.dp))
+                        Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(8.dp))
                     }
                 }
             }
