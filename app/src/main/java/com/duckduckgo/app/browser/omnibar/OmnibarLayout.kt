@@ -227,10 +227,10 @@ class OmnibarLayout @JvmOverloads constructor(
 
     private var previousTransitionState: TransitionState? = null
     private var lastAppliedShowContextualSheetIcon: Boolean? = null
-    private val detectedFieldsObserver = Observer<Int> { count ->
-    android.util.Log.d("OmnibarLayout", "detectedFieldCount=$count aiChatMenu=${aiChatMenu?.javaClass?.simpleName}")
-    aiChatMenu?.isVisible = count > 0
-}
+    private val detectedFieldsObserver = Observer<Int> { _ ->
+        // Always show the automation bot icon so users can record on any page
+        aiChatMenu?.isVisible = true
+    }
 
     private val lifecycleOwner: LifecycleOwner by lazy {
         requireNotNull(findViewTreeLifecycleOwner())
@@ -500,11 +500,12 @@ class OmnibarLayout @JvmOverloads constructor(
     findInPage.findInPageContainer.viewTreeObserver.addOnGlobalLayoutListener(findInPageLayoutVisibilityChangeListener)
     AutomationEngine.detectedFieldCount.observeForever(detectedFieldsObserver)
 
-    // Force our robot icon on the address bar slot
+        // Force our robot icon on the address bar slot
     (aiChatMenu as? ImageView)?.let { iv ->
         iv.setImageResource(CommonR.drawable.ic_automation_24)
         iv.setColorFilter(context.getColorFromAttr(com.duckduckgo.mobile.android.R.attr.daxColorPrimaryIcon))
         iv.contentDescription = "Automation"
+        iv.isVisible = true  // Always show it
     }
 }
 

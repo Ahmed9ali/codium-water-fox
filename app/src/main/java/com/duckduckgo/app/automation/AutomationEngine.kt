@@ -97,6 +97,7 @@ object AutomationEngine {
     val recordedSteps: LiveData<List<RecordedStep>> get() = _recordedSteps
     var hudRecordedSteps by mutableStateOf<List<RecordedStep>>(emptyList()); private set
     var hudRecordingPhase by mutableStateOf(RecordingPhase.Capturing); private set
+    var hudRecordingPaused by mutableStateOf(false); private set
     var hudRecordingHost by mutableStateOf(""); private set
     var hudRecordingUrl by mutableStateOf(""); private set
 
@@ -123,6 +124,7 @@ object AutomationEngine {
         
         hudMode = HudMode.Hidden
         hudVisible = false
+        hudRecordingPaused = false
         hudRecordedSteps = emptyList()
         hudRecordingPhase = RecordingPhase.Capturing
         currentWebView = null
@@ -148,9 +150,7 @@ object AutomationEngine {
 
     fun attachWebView(webView: WebView, tabId: String? = null) {
         currentWebView = WeakReference(webView)
-        if (tabId != null) {
-            activeTabId = tabId
-        }
+        if (tabId != null) activeTabId = tabId
         
         try {
             val bridge = AutomationBridge(
@@ -166,6 +166,8 @@ object AutomationEngine {
 
         if (hudMode != HudMode.Recording) {
             webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
+        } else if (!hudRecordingPaused) {
+            webView.evaluateJavascript("try { window.__automationRecorderResume(); } catch(_) {}", null)
         }
     }
 
@@ -330,19 +332,6 @@ object AutomationEngine {
         }
     }
 
-    private fun escapeJsString(str: String?): String {
-        if (str == null) return ""
-        return str.replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-    }
-
-    // ========================================================================
-    // SCRIPT EXECUTION (Selenium-style Wait & Type)
-    // ========================================================================
-
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
         var completed = 0
@@ -359,7 +348,7 @@ object AutomationEngine {
             updateStatus("Loading ${script.url}...")
             withContext(Dispatchers.Main) { webView.loadUrl(script.url) }
             waitForPageReady(webView)
-            delay(1500) // Wait for React/Vue to mount
+            delay(1500)
 
             for (step in script.steps) {
                 if (!scope.isActive) break
@@ -370,11 +359,11 @@ object AutomationEngine {
                         updateStatus("Filling ${step.displayLabel}...")
                         val valToFill = profile.resolveForField(step.fieldType, step.name, step.tag) ?: ""
                         
-                        val safeVal = escapeJsString(valToFill)
-                        val safeCss = escapeJsString(step.cssSelector)
-                        val safeXpath = escapeJsString(step.xpath)
-                        val safeName = escapeJsString(step.name)
-                        val safeId = escapeJsString(step.domId)
+                        val qVal = JSONObject.quote(valToFill)
+                        val qCss = JSONObject.quote(step.cssSelector)
+                        val qXpath = JSONObject.quote(step.xpath)
+                        val qName = JSONObject.quote(step.name)
+                        val qId = JSONObject.quote(step.domId)
 
                         var success = false
                         for (attempt in 1..3) {
@@ -382,54 +371,65 @@ object AutomationEngine {
                                 (async function() {
                                     try {
                                         let el = null;
-                                        const id = '$safeId';
-                                        const nm = '$safeName';
-                                        const css = '$safeCss';
-                                        const xpath = '$safeXpath';
+                                        const id = $qId;
+                                        const nm = $qName;
+                                        const css = $qCss;
+                                        const xpath = $qXpath;
 
                                         if (id) el = document.getElementById(id);
                                         if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                         if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                         if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
                                         
-                                        if (!el) return {ok: false, err: 'not found'};
+                                        if (!el) return {ok: false, err: 'element not found'};
                                         
                                         el.focus();
+                                        try { el.click(); } catch(_) {}
                                         
-                                        const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                                        const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                                        const wanted = $qVal;
                                         
-                                        if (el.tagName === 'TEXTAREA' && nativeTextArea) {
-                                            nativeTextArea.call(el, '');
-                                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                                            nativeTextArea.call(el, '$safeVal');
-                                        } else if (nativeInput) {
-                                            nativeInput.call(el, '');
-                                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                                            nativeInput.call(el, '$safeVal');
-                                        } else {
-                                            el.value = '';
-                                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                                            el.value = '$safeVal';
+                                        try {
+                                            const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+                                            const descTA = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value");
+                                            if (el.tagName === 'TEXTAREA' && descTA && descTA.set) {
+                                                descTA.set.call(el, wanted);
+                                            } else if (desc && desc.set) {
+                                                desc.set.call(el, wanted);
+                                            } else {
+                                                el.value = wanted;
+                                            }
+                                        } catch(_) {}
+                                        
+                                        if (el.value !== wanted) {
+                                            try {
+                                                el.select();
+                                                document.execCommand('insertText', false, wanted);
+                                            } catch(_) {}
                                         }
                                         
-                                        el.dispatchEvent(new Event('input', { bubbles: true }));
-                                        el.dispatchEvent(new Event('change', { bubbles: true }));
-                                        el.blur();
-                                        return {ok: true};
+                                        if (el.value !== wanted) {
+                                            try { el.value = wanted; } catch(_) {}
+                                        }
+                                        
+                                        try {
+                                            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                                            el.dispatchEvent(new Event('blur', { bubbles: true }));
+                                        } catch(_) {}
+                                        
+                                        return {ok: true, final: el.value};
                                     } catch(e) { return {ok: false, err: e.message}; }
-                                })();
+                                })()
                             """.trimIndent()
-                            // FIXED: Added 'await' before the js evaluation
-                            val result = evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
-                            if (result.contains("\"ok\":true") || result.contains("\"ok\": true")) {
+                            
+                            val result = evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
+                            if (result.contains("\"ok\":true")) {
                                 success = true
                                 break
                             }
                             delay(1000)
                         }
-                        if (!success) Log.e(TAG, "Failed to fill field: ${step.displayLabel}")
-                        delay(1000)
+                        delay(800)
                     }
                     StepKind.Wait -> {
                         updateStatus("Waiting ${step.waitMs}ms...")
@@ -459,10 +459,10 @@ object AutomationEngine {
                         updateState(AutomationState.CLICKING_NEXT)
                         updateStatus("Clicking ${step.displayLabel}...")
                         
-                        val safeCss = escapeJsString(step.cssSelector)
-                        val safeXpath = escapeJsString(step.xpath)
-                        val safeName = escapeJsString(step.name)
-                        val safeId = escapeJsString(step.domId)
+                        val qCss = JSONObject.quote(step.cssSelector)
+                        val qXpath = JSONObject.quote(step.xpath)
+                        val qName = JSONObject.quote(step.name)
+                        val qId = JSONObject.quote(step.domId)
 
                         var success = false
                         for (attempt in 1..3) {
@@ -470,41 +470,42 @@ object AutomationEngine {
                                 (async function() {
                                     try {
                                         let el = null;
-                                        const id = '$safeId';
-                                        const nm = '$safeName';
-                                        const css = '$safeCss';
-                                        const xpath = '$safeXpath';
+                                        const id = $qId;
+                                        const nm = $qName;
+                                        const css = $qCss;
+                                        const xpath = $qXpath;
 
                                         if (id) el = document.getElementById(id);
                                         if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                         if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                         if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
                                         
-                                        if (!el) return {ok: false, err: 'not found'};
+                                        if (!el) return {ok: false, err: 'element not found'};
                                         
-                                        el.scrollIntoView({block: 'center'});
+                                        try { el.scrollIntoView({block: 'center'}); } catch(_) {}
                                         
                                         const rect = el.getBoundingClientRect();
                                         const cx = rect.left + rect.width / 2;
                                         const cy = rect.top + rect.height / 2;
                                         const eventInit = { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 };
                                         
-                                        el.dispatchEvent(new MouseEvent("mousedown", eventInit));
-                                        el.dispatchEvent(new MouseEvent("mouseup", eventInit));
-                                        el.click();
+                                        try { el.dispatchEvent(new PointerEvent("pointerdown", eventInit)); } catch(_) {}
+                                        try { el.dispatchEvent(new MouseEvent("mousedown", eventInit)); } catch(_) {}
+                                        try { el.dispatchEvent(new PointerEvent("pointerup", eventInit)); } catch(_) {}
+                                        try { el.dispatchEvent(new MouseEvent("mouseup", eventInit)); } catch(_) {}
+                                        try { el.click(); } catch(_) {}
+                                        
                                         return {ok: true};
                                     } catch(e) { return {ok: false, err: e.message}; }
-                                })();
+                                })()
                             """.trimIndent()
-                            // FIXED: Added 'await' before the js evaluation
-                            val result = evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
-                            if (result.contains("\"ok\":true") || result.contains("\"ok\": true")) {
+                            val result = evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
+                            if (result.contains("\"ok\":true")) {
                                 success = true
                                 break
                             }
                             delay(1000)
                         }
-                        if (!success) Log.e(TAG, "Failed to click: ${step.displayLabel}")
                         delay(1500)
                     }
                 }
@@ -518,10 +519,6 @@ object AutomationEngine {
         updateStatus("Finished $completed / ${config.targetRepeatCount}")
         onAutomationFinished?.invoke(completed)
     }
-
-    // ========================================================================
-    // LEGACY ACTIVITY SUPPORT (Scanner-driven)
-    // ========================================================================
 
     fun queueAutomationInBrowserTab(config: AutomationConfig) {
         currentConfig = config
@@ -681,23 +678,6 @@ object AutomationEngine {
                 (function() {
                     try { localStorage.clear(); } catch(_) {}
                     try { sessionStorage.clear(); } catch(_) {}
-                    try {
-                        if (window.indexedDB && window.indexedDB.databases) {
-                            window.indexedDB.databases().then(dbs => {
-                                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
-                            });
-                        }
-                    } catch(_) {}
-                    try {
-                        if (navigator.serviceWorker) {
-                            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                                for(let registration of registrations) {
-                                    registration.unregister();
-                                }
-                            });
-                        }
-                    } catch(_) {}
-                    return "cleared";
                 })();
             """.trimIndent()
             webView.evaluateJavascript(js, null)
@@ -715,20 +695,6 @@ object AutomationEngine {
                 (function() {
                     try { localStorage.clear(); } catch(_) {}
                     try { sessionStorage.clear(); } catch(_) {}
-                    try {
-                        if (window.indexedDB && window.indexedDB.databases) {
-                            window.indexedDB.databases().then(dbs => {
-                                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
-                            });
-                        }
-                    } catch(_) {}
-                    try {
-                        if (navigator.serviceWorker) {
-                            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                                for(let registration of registrations) { registration.unregister(); }
-                            });
-                        }
-                    } catch(_) {}
                 })();
             """.trimIndent()
             webView.evaluateJavascript(js, null)
@@ -758,20 +724,6 @@ object AutomationEngine {
                 (function() {
                     try { localStorage.clear(); } catch(_) {}
                     try { sessionStorage.clear(); } catch(_) {}
-                    try {
-                        if (window.indexedDB && window.indexedDB.databases) {
-                            window.indexedDB.databases().then(dbs => {
-                                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
-                            });
-                        }
-                    } catch(_) {}
-                    try {
-                        if (navigator.serviceWorker) {
-                            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                                for(let registration of registrations) { registration.unregister(); }
-                            });
-                        }
-                    } catch(_) {}
                 })();
             """.trimIndent()
             webView.evaluateJavascript(js, null)
@@ -787,7 +739,7 @@ object AutomationEngine {
 
     private suspend fun waitForPageReady(webView: WebView) {
         var waited = 0L
-        while (waited < 8000L) {
+        while (waited < 10000L) {
             val progress = withContext(Dispatchers.Main) { webView.progress }
             val state = evaluateJsSuspend(webView, "return document.readyState;")
             if (progress >= 90 && (state.contains("interactive") || state.contains("complete"))) break
@@ -839,18 +791,37 @@ object AutomationEngine {
 
     fun startRecording() {
         val webView = currentWebView?.get() ?: return
+        
+        webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
+        
         val url = webView.url.orEmpty()
         hudRecordingHost = AutomationScriptRepository.hostOfUrl(url)
         hudRecordingUrl = url
         hudRecordedSteps = emptyList()
+        hudRecordingPaused = false
         hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Recording
         hudVisible = true
-        loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected") } }
+        
+        webView.postDelayed({
+            loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected") } }
+        }, 150)
+    }
+
+    fun pauseRecording() {
+        if (hudMode != HudMode.Recording) return
+        hudRecordingPaused = true
+        currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderPause(); } catch(_) {}", null)
+    }
+
+    fun resumeRecording() {
+        if (hudMode != HudMode.Recording) return
+        hudRecordingPaused = false
+        currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderResume(); } catch(_) {}", null)
     }
 
     fun onRecorderElementCaptured(json: String, tabId: String?) {
-        if (hudMode != HudMode.Recording) return
+        if (hudMode != HudMode.Recording || hudRecordingPaused) return
         try {
             val obj = JSONObject(json)
             val kindRaw = obj.optString("kind", "Field")
@@ -923,6 +894,7 @@ object AutomationEngine {
         Toast.makeText(ctx, "Script saved: $finalName", Toast.LENGTH_SHORT).show()
 
         hudRecordedSteps = emptyList()
+        hudRecordingPaused = false
         hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Menu
         hudVisible = true
@@ -931,6 +903,7 @@ object AutomationEngine {
     fun cancelRecording() {
         currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
         hudRecordedSteps = emptyList()
+        hudRecordingPaused = false
         hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Hidden
         hudVisible = false

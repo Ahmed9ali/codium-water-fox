@@ -1,8 +1,11 @@
 (function () {
   "use strict";
   const g = globalThis;
-  if (g.__automationRecorderActive) return;
-  g.__automationRecorderActive = true;
+
+  // Force-stop any prior recorder before installing a fresh one
+  if (typeof g.__automationRecorderStop === "function" && g.__automationRecorderActive) {
+    try { g.__automationRecorderStop(); } catch (_) {}
+  }
 
   const recordedElements = new WeakSet();
 
@@ -25,26 +28,28 @@
 
   function findLabel(el) {
     const parts = [];
-    if (el.labels && el.labels.length) {
-      for (let i = 0; i < el.labels.length; i++) {
-        const t = shownText(el.labels[i], 100);
-        if (t) parts.push(t);
-      }
-    }
-    if (el.id) {
-      try {
-        const explicit = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
-        if (explicit) {
-          const t = shownText(explicit, 100);
-          if (t && !parts.includes(t)) parts.push(t);
+    try {
+      if (el.labels && el.labels.length) {
+        for (let i = 0; i < el.labels.length; i++) {
+          const t = shownText(el.labels[i], 100);
+          if (t) parts.push(t);
         }
-      } catch (_) {}
-    }
-    const wrapping = el.closest && el.closest("label");
-    if (wrapping) {
-      const t = shownText(wrapping, 100);
-      if (t && !parts.includes(t)) parts.push(t);
-    }
+      }
+      if (el.id) {
+        try {
+          const explicit = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+          if (explicit) {
+            const t = shownText(explicit, 100);
+            if (t && !parts.includes(t)) parts.push(t);
+          }
+        } catch (_) {}
+      }
+      const wrapping = el.closest && el.closest("label");
+      if (wrapping) {
+        const t = shownText(wrapping, 100);
+        if (t && !parts.includes(t)) parts.push(t);
+      }
+    } catch (_) {}
     return parts.join(" ").trim();
   }
 
@@ -96,52 +101,56 @@
   }
 
   function cssPath(el) {
-    if (!el || el.nodeType !== 1) return "";
-    if (el.id) return "#" + CSS.escape(el.id);
-    const parts = [];
-    let cur = el;
-    let depth = 0;
-    while (cur && cur.nodeType === 1 && depth < 6) {
-      let sel = cur.tagName.toLowerCase();
-      const nameAttr = cur.getAttribute && cur.getAttribute("name");
-      const typeAttr = cur.getAttribute && cur.getAttribute("type");
-      if (nameAttr) {
-        sel += `[name="${nameAttr}"]`;
-      } else if (typeAttr && (typeAttr === 'email' || typeAttr === 'password' || typeAttr === 'tel')) {
-        sel += `[type="${typeAttr}"]`;
-      } else {
-        const parent = cur.parentElement;
-        if (parent) {
-          const sameTag = Array.from(parent.children).filter(c => c.tagName === cur.tagName);
-          if (sameTag.length > 1) sel += `:nth-of-type(${sameTag.indexOf(cur) + 1})`;
+    try {
+      if (!el || el.nodeType !== 1) return "";
+      if (el.id) return "#" + CSS.escape(el.id);
+      const parts = [];
+      let cur = el;
+      let depth = 0;
+      while (cur && cur.nodeType === 1 && depth < 6) {
+        let sel = cur.tagName.toLowerCase();
+        const nameAttr = cur.getAttribute && cur.getAttribute("name");
+        const typeAttr = cur.getAttribute && cur.getAttribute("type");
+        if (nameAttr) {
+          sel += '[name="' + nameAttr + '"]';
+        } else if (typeAttr && (typeAttr === 'email' || typeAttr === 'password' || typeAttr === 'tel')) {
+          sel += '[type="' + typeAttr + '"]';
+        } else {
+          const parent = cur.parentElement;
+          if (parent) {
+            const sameTag = Array.from(parent.children).filter(c => c.tagName === cur.tagName);
+            if (sameTag.length > 1) sel += ':nth-of-type(' + (sameTag.indexOf(cur) + 1) + ')';
+          }
         }
+        parts.unshift(sel);
+        cur = cur.parentElement;
+        depth++;
       }
-      parts.unshift(sel);
-      cur = cur.parentElement;
-      depth++;
-    }
-    return parts.join(" > ");
+      return parts.join(" > ");
+    } catch (_) { return ""; }
   }
 
   function xpath(el) {
-    if (!el || el.nodeType !== 1) return "";
-    if (el.id) return '//*[@id="' + el.id + '"]';
-    const parts = [];
-    let cur = el;
-    while (cur && cur.nodeType === 1) {
-      const tag = cur.tagName.toLowerCase();
-      const nameAttr = cur.getAttribute && cur.getAttribute("name");
-      if (nameAttr) {
-        parts.unshift(`${tag}[@name="${nameAttr}"]`);
-        break;
+    try {
+      if (!el || el.nodeType !== 1) return "";
+      if (el.id) return '//*[@id="' + el.id + '"]';
+      const parts = [];
+      let cur = el;
+      while (cur && cur.nodeType === 1) {
+        const tag = cur.tagName.toLowerCase();
+        const nameAttr = cur.getAttribute && cur.getAttribute("name");
+        if (nameAttr) {
+          parts.unshift(tag + '[@name="' + nameAttr + '"]');
+          break;
+        }
+        let idx = 1;
+        let sib = cur.previousElementSibling;
+        while (sib) { if (sib.tagName === cur.tagName) idx++; sib = sib.previousElementSibling; }
+        parts.unshift(tag + "[" + idx + "]");
+        cur = cur.parentElement;
       }
-      let idx = 1;
-      let sib = cur.previousElementSibling;
-      while (sib) { if (sib.tagName === cur.tagName) idx++; sib = sib.previousElementSibling; }
-      parts.unshift(`${tag}[${idx}]`);
-      cur = cur.parentElement;
-    }
-    return "/" + parts.join("/");
+      return "/" + parts.join("/");
+    } catch (_) { return ""; }
   }
 
   function send(payload) {
@@ -153,99 +162,145 @@
   }
 
   function captureField(el) {
-    if (!el || el.nodeType !== 1) return;
-    
-    let target = el;
-    if (target.tagName === 'DIV' || target.tagName === 'SPAN' || target.tagName === 'LABEL') {
+    try {
+      if (!el || el.nodeType !== 1) return;
+
+      let target = el;
+      if (target.tagName === 'DIV' || target.tagName === 'SPAN' || target.tagName === 'LABEL') {
         const inner = target.querySelector('input, textarea, select, [role="combobox"]');
         if (inner) target = inner;
+      }
+
+      const tag = (target.tagName || "").toLowerCase();
+      const role = (target.getAttribute("role") || "").toLowerCase();
+      const isEditable = target.isContentEditable === true;
+      if (tag !== "input" && tag !== "textarea" && tag !== "select" && !isEditable && role !== "combobox") return;
+
+      if (tag === "input") {
+        const t = (target.type || "text").toLowerCase();
+        if (["hidden", "submit", "button", "reset", "image", "file", "search"].indexOf(t) >= 0) return;
+      }
+      if (!isVisible(target)) return;
+      if (recordedElements.has(target)) return;
+      recordedElements.add(target);
+
+      const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"]'));
+      const absIndex = allInputs.indexOf(target);
+
+      const looksLike = classify(target);
+      const label = findLabel(target)
+        || target.getAttribute("aria-label")
+        || target.getAttribute("placeholder")
+        || target.getAttribute("name")
+        || target.id
+        || "";
+
+      send({
+        kind: "Field",
+        looksLike: looksLike,
+        tag: tag,
+        domType: (target.type || "").toLowerCase(),
+        name: target.getAttribute("name") || "",
+        domId: target.id || "",
+        placeholder: target.getAttribute("placeholder") || "",
+        ariaLabel: target.getAttribute("aria-label") || "",
+        displayLabel: label,
+        cssSelector: cssPath(target),
+        xpath: xpath(target),
+        index: absIndex
+      });
+    } catch (err) {
+      // Swallow to keep listener alive
     }
-
-    const tag = (target.tagName || "").toLowerCase();
-    const role = (target.getAttribute("role") || "").toLowerCase();
-    const isEditable = target.isContentEditable === true;
-    if (tag !== "input" && tag !== "textarea" && tag !== "select" && !isEditable && role !== "combobox") return;
-    
-    if (tag === "input") {
-      const t = (target.type || "text").toLowerCase();
-      if (["hidden", "submit", "button", "reset", "image", "file", "search"].indexOf(t) >= 0) return;
-    }
-    if (!isVisible(target)) return;
-    if (recordedElements.has(target)) return;
-    recordedElements.add(target);
-
-    const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"]'));
-    const absIndex = allInputs.indexOf(target);
-
-    const looksLike = classify(target);
-    const label = findLabel(target)
-      || target.getAttribute("aria-label")
-      || target.getAttribute("placeholder")
-      || target.getAttribute("name")
-      || target.id
-      || "";
-
-    send({
-      kind: "Field",
-      looksLike: looksLike,
-      tag: tag,
-      domType: (target.type || "").toLowerCase(),
-      name: target.getAttribute("name") || "",
-      domId: target.id || "",
-      placeholder: target.getAttribute("placeholder") || "",
-      ariaLabel: target.getAttribute("aria-label") || "",
-      displayLabel: label,
-      cssSelector: cssPath(target),
-      xpath: xpath(target),
-      index: absIndex
-    });
   }
+
+  // === Handlers (all wrapped in try/catch to prevent state corruption) ===
 
   function onFocusIn(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    captureField(e.target);
-  }
-
-  function onMouseDown(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    const active = document.activeElement;
-    if (active && active !== e.target && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
-        captureField(active);
-    }
+    try {
+      captureField(e.target);
+    } catch (_) {}
   }
 
   function onClick(e) {
-    const el = e.target.closest('button, a, input[type="submit"], input[type="button"], [role="button"]');
-    if (!el) return;
-    
-    // CRITICAL: Stop the page from navigating or submitting while recording!
-    e.preventDefault();
-    e.stopPropagation();
+    try {
+      const el = e.target.closest('button, a, input[type="submit"], input[type="button"], [role="button"]');
+      if (!el) return;
 
-    const label = ((el.innerText || el.value || "") + "").trim();
-    if (recordedElements.has(el)) return;
-    recordedElements.add(el);
+      // Fully block navigation and page reactions during recording
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
 
-    send({
-      kind: "ClickNext",
-      buttonLabel: label.slice(0, 60),
-      cssSelector: cssPath(el),
-      xpath: xpath(el),
-    });
+      const label = ((el.innerText || el.value || "") + "").trim();
+      if (recordedElements.has(el)) return;
+      recordedElements.add(el);
+
+      send({
+        kind: "ClickNext",
+        buttonLabel: label.slice(0, 60),
+        cssSelector: cssPath(el),
+        xpath: xpath(el),
+      });
+    } catch (_) {}
   }
 
-  document.addEventListener("focusin", onFocusIn, true);
-  document.addEventListener("mousedown", onMouseDown, true);
-  document.addEventListener("touchstart", onMouseDown, true);
-  document.addEventListener("click", onClick, true);
+  function onFormSubmit(e) {
+    try {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    } catch (_) {}
+  }
+
+  function onKeyDown(e) {
+    try {
+      if (e.key === "Enter") {
+        const tag = (e.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea") {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    } catch (_) {}
+  }
+
+  function attach() {
+    document.addEventListener("focusin", onFocusIn, true);
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("submit", onFormSubmit, true);
+    document.addEventListener("keydown", onKeyDown, true);
+  }
+
+  function detach() {
+    try {
+      document.removeEventListener("focusin", onFocusIn, true);
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("submit", onFormSubmit, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    } catch (_) {}
+  }
+
+  // Install
+  g.__automationRecorderActive = true;
+  g.__automationRecorderPaused = false;
+  attach();
 
   g.__automationRecorderStop = function () {
-    document.removeEventListener("focusin", onFocusIn, true);
-    document.removeEventListener("mousedown", onMouseDown, true);
-    document.removeEventListener("touchstart", onMouseDown, true);
-    document.removeEventListener("click", onClick, true);
+    detach();
     g.__automationRecorderActive = false;
+    g.__automationRecorderPaused = false;
+  };
+
+  g.__automationRecorderPause = function () {
+    if (!g.__automationRecorderActive || g.__automationRecorderPaused) return;
+    detach();
+    g.__automationRecorderPaused = true;
+  };
+
+  g.__automationRecorderResume = function () {
+    if (!g.__automationRecorderActive || !g.__automationRecorderPaused) return;
+    attach();
+    g.__automationRecorderPaused = false;
   };
 })();
