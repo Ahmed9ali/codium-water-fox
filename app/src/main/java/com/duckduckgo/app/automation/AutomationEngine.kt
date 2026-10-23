@@ -121,7 +121,6 @@ object AutomationEngine {
         VaultRepository.init(context)
         AutomationScriptRepository.init(context)
         
-        // Force reset UI state to prevent getting stuck if the app was killed mid-run
         hudMode = HudMode.Hidden
         hudVisible = false
         hudRecordedSteps = emptyList()
@@ -379,17 +378,19 @@ object AutomationEngine {
 
                         var success = false
                         for (attempt in 1..3) {
+                            // FIXED: Replaced `[name="${name}"]` template literal with string concatenation
+                            // to avoid Kotlin trying to interpolate ${name} as a Kotlin variable
                             val js = """
                                 (function() {
                                     try {
                                         let el = null;
                                         const id = '$safeId';
-                                        const name = '$safeName';
+                                        const nm = '$safeName';
                                         const css = '$safeCss';
                                         const xpath = '$safeXpath';
 
                                         if (id) el = document.getElementById(id);
-                                        if (!el && name) el = document.querySelector(`[name="${name}"]`);
+                                        if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                         if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                         if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
                                         
@@ -466,17 +467,18 @@ object AutomationEngine {
 
                         var success = false
                         for (attempt in 1..3) {
+                            // FIXED: Replaced `[name="${name}"]` template literal with string concatenation
                             val js = """
                                 (function() {
                                     try {
                                         let el = null;
                                         const id = '$safeId';
-                                        const name = '$safeName';
+                                        const nm = '$safeName';
                                         const css = '$safeCss';
                                         const xpath = '$safeXpath';
 
                                         if (id) el = document.getElementById(id);
-                                        if (!el && name) el = document.querySelector(`[name="${name}"]`);
+                                        if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                         if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                         if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
                                         
@@ -484,7 +486,6 @@ object AutomationEngine {
                                         
                                         el.scrollIntoView({block: 'center'});
                                         
-                                        // Simulate native React/Vue click
                                         const rect = el.getBoundingClientRect();
                                         const cx = rect.left + rect.width / 2;
                                         const cy = rect.top + rect.height / 2;
@@ -779,10 +780,6 @@ object AutomationEngine {
             Log.e(TAG, "Error clearing all data: ${e.message}")
         }
     }
-
-    // ========================================================================
-    // UTILS
-    // ========================================================================
 
     fun resolveFireDialogResult() {
         fireDialogContinuation?.resumeWith(Result.success(Unit))
