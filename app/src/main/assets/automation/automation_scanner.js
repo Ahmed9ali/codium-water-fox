@@ -1,82 +1,102 @@
 (function () {
   "use strict";
-
   const g = globalThis;
-  let refCounter = 0;
-  const refMap = new Map();
-  let scanDebounceTimer = null;
 
-  // --- UTILS ---
-
-  // Recursively gather all elements, piercing Shadow DOM
-  function getAllElements(root, result) {
-    if (!root) return result;
-    try {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null, false);
-      let node = walker.nextNode();
-      while (node) {
-        result.push(node);
-        if (node.shadowRoot) {
-          getAllElements(node.shadowRoot, result);
-        }
-        node = walker.nextNode();
-      }
-    } catch (_) {}
-    return result;
+  // === SINGLETON GUARD: prevent duplicate installations ===
+  if (g.__automationScannerInstalled) {
+    try { if (g.__automationScan) g.__automationScan(); } catch (_) {}
+    return;
   }
+  g.__automationScannerInstalled = true;
 
-  const isElementVisible = (el) => {
+  let stableRefCounter = 0;
+  const elementRefs = new WeakMap();   // element -> stable ref (never changes)
+  let scanThrottleTimer = null;
+  let lastScanTime = 0;
+  const SCAN_THROTTLE_MS = 800;
+  let consecutiveEmptyCount = 0;
+
+  // ============ DOM HELPERS ============
+
+  const isVisible = (el) => {
     if (!el || !el.isConnected) return false;
-    if (el.getAttribute && el.getAttribute("aria-hidden") === "true") return false;
-    const style = window.getComputedStyle(el);
-    if (!style || style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
-    const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 && rect.height <= 0 && el.offsetParent === null) return false;
-    return true;
+    try {
+      if (el.getAttribute && el.getAttribute("aria-hidden") === "true") return false;
+      const st = window.getComputedStyle(el);
+      if (!st || st.display === "none" || st.visibility === "hidden") return false;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 && r.height <= 0 && el.offsetParent === null) return false;
+      return true;
+    } catch (_) { return false; }
   };
 
   const isDisabled = (el) => {
     if (!el) return false;
     if (el.disabled === true || el.inert === true) return true;
     if (el.getAttribute && el.getAttribute("aria-disabled") === "true") return true;
-    const parentFieldset = el.closest && el.closest("fieldset[disabled]");
-    if (parentFieldset) {
-      const legend = parentFieldset.querySelector(":scope > legend");
+    const fs = el.closest && el.closest("fieldset[disabled]");
+    if (fs) {
+      const legend = fs.querySelector(":scope > legend");
       if (!legend || !legend.contains(el)) return true;
     }
     return false;
   };
 
-  const findLabel = (el) => {
+  const getText = (el) => {
     if (!el) return "";
-    let labels = [];
-    try {
-      if (el.labels && el.labels.length) labels = Array.from(el.labels);
-      else if (el.id) {
-        const explicit = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
-        if (explicit) labels.push(explicit);
-      }
-      const wrapping = el.closest && el.closest("label");
-      if (wrapping && !labels.includes(wrapping)) labels.push(wrapping);
-    } catch (_) {}
-    const text = labels.map(l => (l.innerText || l.textContent || "").replace(/\s+/g, " ").trim()).join(" ");
-    if (text) return text;
-    
-    // Check aria-labelledby
-    const labelledBy = el.getAttribute && el.getAttribute("aria-labelledby");
-    if (labelledBy) {
-      try {
-        return labelledBy.split(/\s+/).map(id => {
-          const n = document.getElementById(id);
-          return n ? (n.innerText || "").trim() : "";
-        }).join(" ");
-      } catch (_) {}
-    }
-    return "";
+    return ((el.innerText || el.textContent || "").replace(/\s+/g, " ").trim());
   };
 
-  // --- CLASSIFICATION (Multi-lingual & Custom) ---
-  
+  const findLabel = (el) => {
+    if (!el) return "";
+    const parts = [];
+    try {
+      if (el.labels && el.labels.length) {
+        for (const l of el.labels) {
+          const t = getText(l).slice(0, 100);
+          if (t) parts.push(t);
+        }
+      }
+      if (el.id) {
+        try {
+          const explicit = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+          if (explicit) {
+            const t = getText(explicit).slice(0, 100);
+            if (t && !parts.includes(t)) parts.push(t);
+          }
+        } catch (_) {}
+      }
+      const wrapping = el.closest && el.closest("label");
+      if (wrapping) {
+        const t = getText(wrapping).slice(0, 100);
+        if (t && !parts.includes(t)) parts.push(t);
+      }
+      const byId = el.getAttribute && el.getAttribute("aria-labelledby");
+      if (byId) {
+        byId.split(/\s+/).forEach(id => {
+          const n = document.getElementById(id);
+          if (n) {
+            const t = getText(n).slice(0, 100);
+            if (t && !parts.includes(t)) parts.push(t);
+          }
+        });
+      }
+    } catch (_) {}
+    return parts.join(" ").trim();
+  };
+
+  const getRef = (el) => {
+    if (elementRefs.has(el)) return elementRefs.get(el);
+    stableRefCounter++;
+    const ref = "r" + stableRefCounter;
+    elementRefs.set(el, ref);
+    // Also set attribute for legacy fill functions
+    try { el.setAttribute("data-nano-ref", ref); } catch (_) {}
+    return ref;
+  };
+
+  // ============ CLASSIFICATION ============
+
   function classify(el) {
     const tag = (el.tagName || "").toLowerCase();
     const type = (el.type || "text").toLowerCase();
@@ -89,7 +109,6 @@
     const role = (el.getAttribute("role") || "").toLowerCase();
     const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto + " " + role;
 
-    // Checkboxes / Radio
     if (type === "checkbox" || role === "checkbox") {
       if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|acepto|términos|conditions|datenschutz)\b/i.test(combined)) return "termsCheckbox";
       return "checkbox";
@@ -98,230 +117,301 @@
       if (/\b(gender|sex|male|female|género|sexo|homme|femme|geschlecht)\b/i.test(combined)) return "gender";
       return "radio";
     }
-
-    // Passwords
     if (type === "password" || auto === "new-password" || auto === "current-password") {
       if (/\b(confirm|retype|repeat|verify|again|pass2|password2|contraseña|mot de passe|senha|wiederholen)\b/i.test(combined)) return "confirmPassword";
       return "password";
     }
-
-    // Emails
     if (type === "email" || auto === "email" || /\b(e-?mail|correo|mail|courriel)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify|again)\b/i.test(combined)) return "confirmEmail";
       return "email";
     }
-
-    // OTP / Codes
     if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|2fa|pin\s*code|código|codice)\b/i.test(combined)) return "otp";
-
-    // Phones
     if (type === "tel" || auto.indexOf("tel") >= 0 || /\b(phone|mobile|cell|whatsapp|tel|téléphone|telefono|celular|telefon)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify)\b/i.test(combined)) return "confirmPhone";
       return "phone";
     }
-
-    // Names
     if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|prénom|nombre|vorname)\b/i.test(combined)) return "firstName";
     if (auto === "family-name" || /\b(last\s*name|lname|surname|family|nom|apellido|nachname)\b/i.test(combined)) return "lastName";
-    if (auto === "name" || /\b(full\s*name|your\s*name|name|nom|nombre|name)\b/i.test(combined)) return "fullName";
+    if (auto === "name" || /\b(full\s*name|your\s*name|name|nom|nombre)\b/i.test(combined)) return "fullName";
     if (auto === "username" || /\b(user\s*name|userid|login|handle|utilisateur|usuario|benutzer)\b/i.test(combined)) return "username";
-
-    // Text areas
     if (tag === "textarea" || role === "textbox" || /\b(message|comment|feedback|description|bio|mensaje|message|nachricht)\b/i.test(combined)) return "message";
     if (/\b(subject|topic|reason|sujet|asunto|betreff)\b/i.test(combined)) return "subject";
-
-    // Dates
     if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha|naissance|geburtstag)\b/i.test(combined)) return "dob";
-
-    // Addresses
     if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|code postal|código postal|postleitzahl)\b/i.test(combined)) return "zip";
     if (auto === "address-level2" || /\b(city|town|ville|ciudad|stadt)\b/i.test(combined)) return "city";
     if (auto === "address-level1" || /\b(state|province|region|état|estado|bundesland)\b/i.test(combined)) return "state";
     if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país|land)\b/i.test(combined)) return "country";
     if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 || /\b(address|street|apartment|apt|building|adresse|dirección|endereço|straße)\b/i.test(combined)) return "address";
-
-    // Credit Cards (Huge for checkouts)
     if (auto.indexOf("cc-") >= 0 || /\b(card\s*number|cc-num|creditcard|tarjeta|kreditkarte)\b/i.test(combined)) return "cc-number";
     if (/\b(expiry|expiration|cvv|cvc|security\s*code|fecha\s*vencimiento)\b/i.test(combined)) return "cc-exp";
 
-    // Custom components often have text-like tags
-    if (tag === "div" || tag === "span" || tag === "custom-element") {
-      if (role === "combobox" || role === "listbox" || el.isContentEditable) return "text";
-    }
-
-    return ""; // Unrecognized
+    // Custom components
+    if ((tag === "div" || tag === "span" || tag === "custom-element") && (role === "combobox" || role === "listbox" || el.isContentEditable)) return "text";
+    return "";
   }
 
-  // --- CAPTCHA DETECTION ---
+  // ============ CAPTCHA DETECTION ============
+
   function detectCaptcha() {
-    const selectors = [
+    const sel = [
       'iframe[src*="recaptcha" i]', 'iframe[src*="hcaptcha" i]', 'iframe[src*="challenges.cloudflare.com" i]',
-      'iframe[src*="turnstile" i]', 'iframe[src*="arkoselabs" i]', 'iframe[src*="funcaptcha" i]',
-      ".g-recaptcha", ".h-captcha", ".cf-turnstile", ".grecaptcha-badge"
+      'iframe[src*="turnstile" i]', 'iframe[src*="arkoselabs" i]', '.g-recaptcha', '.h-captcha', '.cf-turnstile'
     ];
-    for (let i = 0; i < selectors.length; i++) {
+    for (const s of sel) {
       try {
-        const nodes = document.querySelectorAll(selectors[i]);
-        for (let j = 0; j < nodes.length; j++) {
-          if (!isElementVisible(nodes[j])) continue;
-          const token = nodes[j].querySelector && nodes[j].querySelector('textarea[name*="captcha-response" i]');
-          if (token && token.value && token.value.trim().length > 10) continue; // Already solved
-          return { detected: true, type: selectors[i], description: "Captcha Frame Detected" };
+        const nodes = document.querySelectorAll(s);
+        for (const el of nodes) {
+          if (!isVisible(el)) continue;
+          const token = el.querySelector && el.querySelector('textarea[name*="captcha-response" i]');
+          if (token && token.value && token.value.trim().length > 10) continue;
+          return true;
         }
       } catch (_) {}
     }
-    return { detected: false, type: "", description: "" };
+    return false;
   }
 
-  // --- PRIMARY ACTION BUTTON ---
-  function findPrimaryActionButton(elements) {
-    const POSITIVE = /\b(next|continue|submit|sign\s*up|signup|register|create|join|proceed|verify|confirm|finish|done|save|send|login|log\s*in|suivant|enviar|siguiente|weiter)\b/i;
-    const NEGATIVE = /\b(back|previous|prev|cancel|close|reset|clear|delete|remove|log\s*out|sign\s*out|skip|forgot|resend)\b/i;
+  // ============ MAIN SCAN ============
 
-    let bestEl = null;
-    let bestScore = -1;
-
-    for (let i = 0; i < elements.length; i++) {
-      const el = elements[i];
-      if (!isElementVisible(el) || isDisabled(el)) continue;
-      
-      const tag = el.tagName.toLowerCase();
-      const type = (el.type || "").toLowerCase();
-      const role = (el.getAttribute("role") || "").toLowerCase();
-      
-      const isButton = tag === "button" || (tag === "input" && (type === "submit" || type === "button")) || role === "button";
-      if (!isButton) continue;
-
-      let label = ((el.innerText || el.value || el.getAttribute("aria-label") || "") + "").trim();
-      if (NEGATIVE.test(label)) continue;
-
-      let score = 0;
-      if (type === "submit") score += 50;
-      if (POSITIVE.test(label)) score += 100;
-      if (el.form) score += 20;
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestEl = el;
-      }
-    }
-    
-    // If no POSITIVE match, and we are on a form, grab any submit button
-    if (!bestEl && elements.length > 0) {
-       const forms = document.querySelectorAll("form");
-       if (forms.length > 0) {
-           const submitBtn = forms[0].querySelector('button[type="submit"], input[type="submit"]');
-           if (submitBtn && isElementVisible(submitBtn)) return submitBtn;
-       }
-    }
-
-    return bestEl;
-  }
-
-  // --- MAIN SCAN ---
   function scanPage() {
-    refMap.clear();
-    refCounter = 0;
+    // Do not scan if DOM isn't ready
+    if (document.readyState === "loading") return { fields: [], captchaDetected: false };
 
-    const allElements = getAllElements(document.body, []);
-    const fields = [];
-    const interactiveElements = [];
+    // Fast selector-based collection
+    const fieldSelector = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select, [role="combobox"], [role="listbox"], [contenteditable="true"]';
+    const buttonSelector = 'button, a[href], input[type="submit"], input[type="button"], [role="button"]';
 
-    for (let i = 0; i < allElements.length; i++) {
-      const el = allElements[i];
-      
-      try {
-        const tag = (el.tagName || "").toLowerCase();
-        const type = (el.type || "text").toLowerCase();
-        const role = (el.getAttribute("role") || "").toLowerCase();
-        
-        // 1. Check if it's a field
-        const isField = 
-          (tag === "input" && !["hidden", "submit", "button", "reset", "image", "file", "search"].includes(type)) ||
-          tag === "textarea" ||
-          tag === "select" ||
-          role === "combobox" ||
-          el.isContentEditable;
+    let rawFields = [];
+    let rawButtons = [];
+    try { rawFields = Array.from(document.querySelectorAll(fieldSelector)); } catch (_) {}
+    try { rawButtons = Array.from(document.querySelectorAll(buttonSelector)); } catch (_) {}
 
-        if (isField && isElementVisible(el) && !isDisabled(el)) {
-           // Ignore search bars
-           if (type === "search" || el.closest('[role="search"], search')) continue;
-
-           const looksLike = classify(el);
-           // Skip plain checkboxes unless they are terms, but we still track them in elements
-           if (looksLike !== "checkbox") {
-             refCounter++;
-             const ref = `a${refCounter}`;
-             refMap.set(ref, el);
-             fields.push({
-               index: fields.length,
-               ref,
-               tag: role === "combobox" ? "custom" : tag,
-               type: type,
-               name: el.getAttribute("name") || findLabel(el) || el.id || "",
-               id: el.id || "",
-               looksLike: looksLike || "text",
-               currentValue: el.value || el.innerText || "",
-               checked: el.checked || false
-             });
-           }
-        }
-
-        // 2. Collect all possible buttons/links for the action finder
-        if (tag === "button" || tag === "a" || (tag === "input" && ["submit", "button"].includes(type)) || role === "button") {
-           if (isElementVisible(el) && !isDisabled(el)) {
-               interactiveElements.push(el);
-           }
-        }
-      } catch (_) {}
-    }
-
-    const captcha = detectCaptcha();
-    const actionBtn = findPrimaryActionButton(interactiveElements);
-    let actionRef = null;
-    let actionName = "";
-    if (actionBtn) {
-      refCounter++;
-      actionRef = `a${refCounter}`;
-      refMap.set(actionRef, actionBtn);
-      actionName = (actionBtn.innerText || actionBtn.value || actionBtn.id || "Submit").trim().slice(0, 40);
-    }
-
-    const payload = {
-      url: window.location.href,
-      title: document.title || "",
-      fields: fields,
-      captchaDetected: captcha.detected,
-      actionButtonRef: actionRef,
-      actionButtonName: actionName,
-    };
-
+    // Pierce shadow roots
     try {
-      if (window.AutomationBridge && typeof window.AutomationBridge.onFieldsDetected === "function") {
-        window.AutomationBridge.onFieldsDetected(JSON.stringify(fields));
+      const allEls = document.querySelectorAll("*");
+      for (const el of allEls) {
+        if (el.shadowRoot) {
+          try { rawFields.push(...Array.from(el.shadowRoot.querySelectorAll(fieldSelector))); } catch (_) {}
+          try { rawButtons.push(...Array.from(el.shadowRoot.querySelectorAll(buttonSelector))); } catch (_) {}
+        }
       }
     } catch (_) {}
 
-    return payload;
+    const fields = [];
+    const refMap = new Map();
+
+    for (const el of rawFields) {
+      try {
+        if (!isVisible(el) || isDisabled(el)) continue;
+        const tag = (el.tagName || "").toLowerCase();
+        const type = (el.type || "text").toLowerCase();
+        if (type === "search" || el.closest('[role="search"], search')) continue;
+        const looksLike = classify(el);
+        if (looksLike === "checkbox") continue;
+        const ref = getRef(el);
+        refMap.set(ref, el);
+        fields.push({
+          index: fields.length,
+          ref,
+          tag,
+          type,
+          name: el.getAttribute("name") || findLabel(el) || el.id || "",
+          id: el.id || "",
+          looksLike: looksLike || "text",
+          currentValue: el.value || el.innerText || "",
+          checked: el.checked || false
+        });
+      } catch (_) {}
+    }
+
+    // Find best action button
+    let bestBtn = null;
+    let bestScore = -1;
+    const POSITIVE = /\b(next|continue|submit|sign\s*up|signup|register|create|join|proceed|verify|confirm|finish|done|save|send|login|log\s*in|suivant|enviar|siguiente|weiter)\b/i;
+    const NEGATIVE = /\b(back|previous|prev|cancel|close|reset|clear|delete|remove|log\s*out|sign\s*out|skip|forgot|resend)\b/i;
+
+    for (const btn of rawButtons) {
+      try {
+        if (!isVisible(btn) || isDisabled(btn)) continue;
+        const type = (btn.type || "").toLowerCase();
+        const label = ((btn.innerText || btn.value || btn.getAttribute("aria-label") || "") + "").trim();
+        if (NEGATIVE.test(label)) continue;
+        let score = 0;
+        if (type === "submit") score += 50;
+        if (POSITIVE.test(label)) score += 100;
+        if (btn.form) score += 20;
+        if (score > bestScore) { bestScore = score; bestBtn = btn; }
+      } catch (_) {}
+    }
+
+    let actionRef = null;
+    let actionName = "";
+    if (bestBtn) {
+      actionRef = getRef(bestBtn);
+      refMap.set(actionRef, bestBtn);
+      actionName = (bestBtn.innerText || bestBtn.value || bestBtn.id || "Submit").trim().slice(0, 40);
+    }
+
+    const captchaDetected = detectCaptcha();
+
+    // === SEND TO BRIDGE (with retry) ===
+    sendToBridge(fields, captchaDetected);
+
+    return {
+      url: window.location.href,
+      title: document.title || "",
+      fields: fields,
+      captchaDetected: captchaDetected,
+      actionButtonRef: actionRef,
+      actionButtonName: actionName,
+    };
   }
 
-  // --- OBSERVER & EXPORTS ---
-  
-  // Watch for dynamic DOM changes (SPAs), ignoring our own data attributes
+  function sendToBridge(fields, captchaDetected) {
+    const payload = JSON.stringify(fields);
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    function trySend() {
+      attempts++;
+      try {
+        if (window.AutomationBridge && typeof window.AutomationBridge.onFieldsDetected === "function") {
+          window.AutomationBridge.onFieldsDetected(payload);
+          return;
+        }
+      } catch (_) {}
+      if (attempts < maxAttempts) {
+        setTimeout(trySend, 200);
+      }
+    }
+    trySend();
+  }
+
+  // ============ THROTTLE SCANNING ============
+
+  function scheduleScan() {
+    const now = Date.now();
+    const elapsed = now - lastScanTime;
+
+    if (elapsed >= SCAN_THROTTLE_MS) {
+      lastScanTime = now;
+      try { scanPage(); } catch (_) {}
+    } else if (!scanThrottleTimer) {
+      scanThrottleTimer = setTimeout(() => {
+        scanThrottleTimer = null;
+        lastScanTime = Date.now();
+        try { scanPage(); } catch (_) {}
+      }, SCAN_THROTTLE_MS - elapsed);
+    }
+  }
+
+  // ============ MUTATION OBSERVER (childList only, NOT attributes) ============
+
   try {
-    new MutationObserver(() => {
-      if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
-      scanDebounceTimer = setTimeout(() => {
-          if (g.__automationScan) g.__automationScan();
-      }, 400); // 400ms debounce for speed
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.addedNodes && r.addedNodes.length > 0) {
+          scheduleScan();
+          return;
+        }
+      }
     }).observe(document.documentElement || document, {
       subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["class", "style", "disabled", "type", "name", "id"]
+      childList: true
     });
   } catch (_) {}
 
+  // ============ FALLBACK TRIGGERS ============
+
+  // SPA route changes
+  try {
+    window.addEventListener("popstate", scheduleScan);
+    window.addEventListener("hashchange", scheduleScan);
+  } catch (_) {}
+
+  // User interactions
+  try {
+    document.addEventListener("focusin", scheduleScan, true);
+    document.addEventListener("click", () => setTimeout(scheduleScan, 300), true);
+  } catch (_) {}
+
+  // Heartbeat (every 2s while page visible)
+  try {
+    setInterval(() => {
+      if (document.visibilityState === "visible" && !document.hidden) {
+        scheduleScan();
+      }
+    }, 2000);
+  } catch (_) {}
+
+  // Initial scan when ready
+  function initialScan() {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => {
+        lastScanTime = Date.now();
+        try { scanPage(); } catch (_) {}
+      }, { once: true });
+    } else {
+      lastScanTime = Date.now();
+      try { scanPage(); } catch (_) {}
+    }
+  }
+
+  // ============ LEGACY SUPPORT (used by runAutomationLoop) ============
+
+  g.__automationFill = async function (rawListJson, rawOptionsJson) {
+    try {
+      const list = typeof rawListJson === "string" ? JSON.parse(rawListJson) : (rawListJson || []);
+      const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : (rawOptionsJson || {});
+      const typingDelay = typeof options.typingDelayMs === "number" ? options.typingDelayMs : 60;
+      const fieldDelay = typeof options.fieldDelayMs === "number" ? options.fieldDelayMs : 120;
+      const receipts = [];
+      for (const item of list) {
+        try {
+          let el = document.querySelector('[data-nano-ref="' + item.ref + '"]');
+          if (!el) {
+            const all = document.querySelectorAll(fieldSelector);
+            if (typeof item.index === "number" && all[item.index]) el = all[item.index];
+          }
+          if (!el) { receipts.push({ ref: item.ref, ok: false }); continue; }
+          el.focus();
+          const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+          if (desc && desc.set) desc.set.call(el, item.value);
+          else el.value = item.value;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          el.dispatchEvent(new Event("blur", { bubbles: true }));
+          receipts.push({ ref: item.ref, ok: true });
+        } catch (_) { receipts.push({ ref: item.ref, ok: false }); }
+        if (fieldDelay > 0) await new Promise(r => setTimeout(r, fieldDelay));
+      }
+      return { filledCount: receipts.filter(r => r.ok).length, receipts };
+    } catch (e) {
+      return { filledCount: 0, receipts: [], error: e.message };
+    }
+  };
+
+  g.__automationClickNextAndSettle = async function (rawOptionsJson) {
+    try {
+      const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : (rawOptionsJson || {});
+      const settleTimeout = typeof options.settleTimeoutMs === "number" ? options.settleTimeoutMs : 2000;
+      let btn = options.actionRef ? document.querySelector('[data-nano-ref="' + options.actionRef + '"]') : null;
+      if (!btn) btn = document.querySelector('button[type="submit"], input[type="submit"]');
+      if (!btn) return { clicked: false, verdict: "no_button_found" };
+      const urlBefore = window.location.href;
+      btn.click();
+      await new Promise(r => setTimeout(r, settleTimeout));
+      return {
+        clicked: true,
+        urlChanged: window.location.href !== urlBefore,
+        verdict: "changed"
+      };
+    } catch (e) {
+      return { clicked: false, verdict: "error", error: e.message };
+    }
+  };
+
+  // ============ EXPORT ============
   g.__automationScan = scanPage;
-  scanPage();
+  initialScan();
 })();

@@ -10,7 +10,6 @@ data class RecordedStep(
     val sequenceIndex: Int,
     val kind: StepKind,
 
-    // Field attributes
     val fieldType: String = "",
     val displayLabel: String = "",
     val tag: String = "",
@@ -23,7 +22,10 @@ data class RecordedStep(
     val xpath: String = "",
     val index: Int = -1,
 
-    // Wait / Click
+    // NEW: Value for custom-added Field steps. When non-blank, takes priority
+    // over profile.resolveForField at execution time.
+    val customValue: String = "",
+
     val waitMs: Long = 0L,
     val buttonLabel: String = "",
     val verified: Boolean = true,
@@ -50,6 +52,7 @@ data class RecordedStep(
         put("cssSelector", cssSelector)
         put("xpath", xpath)
         put("index", index)
+        put("customValue", customValue)
         put("waitMs", waitMs)
         put("buttonLabel", buttonLabel)
         put("verified", verified)
@@ -72,6 +75,7 @@ data class RecordedStep(
             cssSelector = json.optString("cssSelector"),
             xpath = json.optString("xpath"),
             index = json.optInt("index", -1),
+            customValue = json.optString("customValue", ""),
             waitMs = json.optLong("waitMs", 0L),
             buttonLabel = json.optString("buttonLabel"),
             verified = json.optBoolean("verified", true),

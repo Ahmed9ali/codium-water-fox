@@ -2,7 +2,6 @@
   "use strict";
   const g = globalThis;
 
-  // Force-stop any prior recorder before installing a fresh one
   if (typeof g.__automationRecorderStop === "function" && g.__automationRecorderActive) {
     try { g.__automationRecorderStop(); } catch (_) {}
   }
@@ -11,19 +10,23 @@
 
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
-    if (el.getAttribute("aria-hidden") === "true") return false;
-    const st = window.getComputedStyle(el);
-    if (!st || st.display === "none" || st.visibility === "hidden") return false;
-    const r = el.getBoundingClientRect();
-    if (r.width <= 0 && r.height <= 0 && el.offsetParent === null) return false;
-    return true;
+    try {
+      if (el.getAttribute("aria-hidden") === "true") return false;
+      const st = window.getComputedStyle(el);
+      if (!st || st.display === "none" || st.visibility === "hidden") return false;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 && r.height <= 0 && el.offsetParent === null) return false;
+      return true;
+    } catch (_) { return false; }
   }
 
   function shownText(el, max) {
     if (!el) return "";
-    const limit = max || 100;
-    const t = (el.innerText || "").replace(/\s+/g, " ").trim();
-    return t.length > limit ? t.slice(0, limit - 1) + "…" : t;
+    try {
+      const limit = max || 100;
+      const t = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+      return t.length > limit ? t.slice(0, limit - 1) + "…" : t;
+    } catch (_) { return ""; }
   }
 
   function findLabel(el) {
@@ -62,41 +65,42 @@
     const ph = (el.getAttribute("placeholder") || "").toLowerCase();
     const aria = (el.getAttribute("aria-label") || "").toLowerCase();
     const lbl = findLabel(el).toLowerCase();
-    const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto;
+    const role = (el.getAttribute("role") || "").toLowerCase();
+    const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto + " " + role;
 
-    if (type === "checkbox" || el.getAttribute("role") === "checkbox") {
-      if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|acepto|términos|conditions)\b/i.test(combined)) return "termsCheckbox";
+    if (type === "checkbox" || role === "checkbox") {
+      if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|acepto|términos|conditions|datenschutz)\b/i.test(combined)) return "termsCheckbox";
       return "checkbox";
     }
-    if (type === "radio" || el.getAttribute("role") === "radio") {
-      if (/\b(gender|sex|male|female|género|sexo|homme|femme)\b/i.test(combined)) return "gender";
+    if (type === "radio" || role === "radio") {
+      if (/\b(gender|sex|male|female|género|sexo|homme|femme|geschlecht)\b/i.test(combined)) return "gender";
       return "radio";
     }
     if (type === "password" || auto === "new-password" || auto === "current-password") {
-      if (/\b(confirm|retype|repeat|verify|again|pass2|password2|contraseña|mot de passe|senha)\b/i.test(combined)) return "confirmPassword";
+      if (/\b(confirm|retype|repeat|verify|again|pass2|password2|contraseña|mot de passe|senha|wiederholen)\b/i.test(combined)) return "confirmPassword";
       return "password";
     }
-    if (type === "email" || auto === "email" || /\b(e-?mail|correo|mail)\b/i.test(combined)) {
+    if (type === "email" || auto === "email" || /\b(e-?mail|correo|mail|courriel)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify|again)\b/i.test(combined)) return "confirmEmail";
       return "email";
     }
-    if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|2fa|pin\s*code|código)\b/i.test(combined)) return "otp";
-    if (type === "tel" || auto.indexOf("tel") >= 0 || /\b(phone|mobile|cell|whatsapp|tel|téléphone|telefono|celular)\b/i.test(combined)) {
+    if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|2fa|pin\s*code|código|codice)\b/i.test(combined)) return "otp";
+    if (type === "tel" || auto.indexOf("tel") >= 0 || /\b(phone|mobile|cell|whatsapp|tel|téléphone|telefono|celular|telefon)\b/i.test(combined)) {
       if (/\b(confirm|retype|repeat|verify)\b/i.test(combined)) return "confirmPhone";
       return "phone";
     }
-    if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|prénom|nombre)\b/i.test(combined)) return "firstName";
-    if (auto === "family-name" || /\b(last\s*name|lname|surname|family|nom|apellido)\b/i.test(combined)) return "lastName";
+    if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|prénom|nombre|vorname)\b/i.test(combined)) return "firstName";
+    if (auto === "family-name" || /\b(last\s*name|lname|surname|family|nom|apellido|nachname)\b/i.test(combined)) return "lastName";
     if (auto === "name" || /\b(full\s*name|your\s*name|name|nom|nombre)\b/i.test(combined)) return "fullName";
-    if (/\b(subject|topic|reason|sujet|asunto)\b/i.test(combined)) return "subject";
-    if (tag === "textarea" || /\b(message|comment|feedback|description|bio|mensaje|message)\b/i.test(combined)) return "message";
-    if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha|naissance)\b/i.test(combined)) return "dob";
-    if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|code postal|código postal)\b/i.test(combined)) return "zip";
-    if (auto === "address-level2" || /\b(city|town|ville|ciudad)\b/i.test(combined)) return "city";
-    if (auto === "address-level1" || /\b(state|province|region|état|estado)\b/i.test(combined)) return "state";
-    if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país)\b/i.test(combined)) return "country";
-    if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 ||
-        /\b(address|street|apartment|apt|building|adresse|dirección|endereço)\b/i.test(combined)) return "address";
+    if (auto === "username" || /\b(user\s*name|userid|login|handle|utilisateur|usuario|benutzer)\b/i.test(combined)) return "username";
+    if (tag === "textarea" || role === "textbox" || /\b(message|comment|feedback|description|bio|mensaje|message|nachricht)\b/i.test(combined)) return "message";
+    if (/\b(subject|topic|reason|sujet|asunto|betreff)\b/i.test(combined)) return "subject";
+    if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha|naissance|geburtstag)\b/i.test(combined)) return "dob";
+    if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|code postal|código postal|postleitzahl)\b/i.test(combined)) return "zip";
+    if (auto === "address-level2" || /\b(city|town|ville|ciudad|stadt)\b/i.test(combined)) return "city";
+    if (auto === "address-level1" || /\b(state|province|region|état|estado|bundesland)\b/i.test(combined)) return "state";
+    if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país|land)\b/i.test(combined)) return "country";
+    if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 || /\b(address|street|apartment|apt|building|adresse|dirección|endereço|straße)\b/i.test(combined)) return "address";
     return "";
   }
 
@@ -110,12 +114,8 @@
       while (cur && cur.nodeType === 1 && depth < 6) {
         let sel = cur.tagName.toLowerCase();
         const nameAttr = cur.getAttribute && cur.getAttribute("name");
-        const typeAttr = cur.getAttribute && cur.getAttribute("type");
-        if (nameAttr) {
-          sel += '[name="' + nameAttr + '"]';
-        } else if (typeAttr && (typeAttr === 'email' || typeAttr === 'password' || typeAttr === 'tel')) {
-          sel += '[type="' + typeAttr + '"]';
-        } else {
+        if (nameAttr) { sel += '[name="' + nameAttr + '"]'; }
+        else {
           const parent = cur.parentElement;
           if (parent) {
             const sameTag = Array.from(parent.children).filter(c => c.tagName === cur.tagName);
@@ -139,10 +139,7 @@
       while (cur && cur.nodeType === 1) {
         const tag = cur.tagName.toLowerCase();
         const nameAttr = cur.getAttribute && cur.getAttribute("name");
-        if (nameAttr) {
-          parts.unshift(tag + '[@name="' + nameAttr + '"]');
-          break;
-        }
+        if (nameAttr) { parts.unshift(tag + '[@name="' + nameAttr + '"]'); break; }
         let idx = 1;
         let sib = cur.previousElementSibling;
         while (sib) { if (sib.tagName === cur.tagName) idx++; sib = sib.previousElementSibling; }
@@ -164,18 +161,15 @@
   function captureField(el) {
     try {
       if (!el || el.nodeType !== 1) return;
-
       let target = el;
-      if (target.tagName === 'DIV' || target.tagName === 'SPAN' || target.tagName === 'LABEL') {
+      if (target.tagName === "DIV" || target.tagName === "SPAN" || target.tagName === "LABEL") {
         const inner = target.querySelector('input, textarea, select, [role="combobox"]');
         if (inner) target = inner;
       }
-
       const tag = (target.tagName || "").toLowerCase();
       const role = (target.getAttribute("role") || "").toLowerCase();
       const isEditable = target.isContentEditable === true;
       if (tag !== "input" && tag !== "textarea" && tag !== "select" && !isEditable && role !== "combobox") return;
-
       if (tag === "input") {
         const t = (target.type || "text").toLowerCase();
         if (["hidden", "submit", "button", "reset", "image", "file", "search"].indexOf(t) >= 0) return;
@@ -186,14 +180,8 @@
 
       const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"]'));
       const absIndex = allInputs.indexOf(target);
-
       const looksLike = classify(target);
-      const label = findLabel(target)
-        || target.getAttribute("aria-label")
-        || target.getAttribute("placeholder")
-        || target.getAttribute("name")
-        || target.id
-        || "";
+      const label = findLabel(target) || target.getAttribute("aria-label") || target.getAttribute("placeholder") || target.getAttribute("name") || target.id || "";
 
       send({
         kind: "Field",
@@ -209,33 +197,58 @@
         xpath: xpath(target),
         index: absIndex
       });
-    } catch (err) {
-      // Swallow to keep listener alive
-    }
+    } catch (_) {}
   }
 
-  // === Handlers (all wrapped in try/catch to prevent state corruption) ===
+  // ===== HANDLERS =====
 
   function onFocusIn(e) {
+    try { captureField(e.target); } catch (_) {}
+  }
+
+  // FIX-D3: Determine navigation based on element semantics, not button text
+  function isNavigationTrigger(el) {
     try {
-      captureField(e.target);
-    } catch (_) {}
+      const tag = el.tagName.toLowerCase();
+      const type = (el.type || "").toLowerCase();
+      const role = (el.getAttribute("role") || "").toLowerCase();
+      const href = el.getAttribute("href");
+      const ariaExpanded = el.getAttribute("aria-expanded");
+      const ariaHaspopup = el.getAttribute("aria-haspopup");
+      const formAttr = el.getAttribute("form");
+      const isInForm = !!el.form || !!formAttr;
+
+      // UI toggles — never navigation
+      if (ariaHaspopup !== null) return false;
+      if (ariaExpanded !== null) return false;
+      if (role === "combobox" || role === "listbox" || role === "tab") return false;
+
+      // Anchor with real href → navigation
+      if (tag === "a" && href && !href.startsWith("#") && !href.startsWith("javascript:")) return true;
+
+      // Submit-type buttons → navigation/submission
+      if (tag === "button" && (type === "submit" || type === "")) return isInForm;
+      if (tag === "input" && (type === "submit" || type === "image")) return true;
+
+      return false;
+    } catch (_) { return false; }
   }
 
   function onClick(e) {
     try {
-      const el = e.target.closest('button, a, input[type="submit"], input[type="button"], [role="button"]');
+      const el = e.target.closest('button, a, input[type="submit"], input[type="button"], input[type="image"], [role="button"]');
       if (!el) return;
 
-      // Fully block navigation and page reactions during recording
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
+      if (isNavigationTrigger(el)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
 
-      const label = ((el.innerText || el.value || "") + "").trim();
       if (recordedElements.has(el)) return;
       recordedElements.add(el);
 
+      const label = ((el.innerText || el.value || "") + "").trim();
       send({
         kind: "ClickNext",
         buttonLabel: label.slice(0, 60),
@@ -281,7 +294,6 @@
     } catch (_) {}
   }
 
-  // Install
   g.__automationRecorderActive = true;
   g.__automationRecorderPaused = false;
   attach();

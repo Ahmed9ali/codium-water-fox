@@ -41,6 +41,10 @@ internal fun BrowserTabAutomationHud() {
     }
 }
 
+// ============================================================================
+// 1. MENU PANEL
+// ============================================================================
+
 @Composable
 private fun HudMenuPanel() {
     val context = LocalContext.current
@@ -75,6 +79,10 @@ private fun HudMenuPanel() {
         }
     }
 }
+
+// ============================================================================
+// 2. RECORDING PANEL
+// ============================================================================
 
 @Composable
 private fun HudRecordingPanel() {
@@ -115,7 +123,7 @@ private fun RecordingCapturePanel(steps: List<RecordedStep>, isPaused: Boolean) 
         Spacer(Modifier.height(6.dp))
         Text(
             text = if (isPaused) "Website is unlocked. Tap Resume to keep recording."
-                   else "Click fields or buttons on the page. Blocked from navigating.",
+                   else "Click fields or buttons on the page. Navigation is blocked.",
             color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 11.sp
         )
         Spacer(Modifier.height(10.dp))
@@ -246,6 +254,10 @@ private fun RecordingChip(text: String, compact: Boolean = false, onClick: () ->
     }
 }
 
+// ============================================================================
+// 3. SCRIPT LIST PANEL
+// ============================================================================
+
 @Composable
 private fun HudScriptListPanel() {
     val shape = RoundedCornerShape(16.dp)
@@ -281,6 +293,10 @@ private fun HudScriptListPanel() {
     }
 }
 
+// ============================================================================
+// 4. SCRIPT EDITOR PANEL
+// ============================================================================
+
 @Composable
 private fun HudScriptEditPanel() {
     val shape = RoundedCornerShape(16.dp)
@@ -288,6 +304,7 @@ private fun HudScriptEditPanel() {
 
     var showWaitDialog by remember { mutableStateOf(false) }
     var waitInput by remember { mutableStateOf("2") }
+    var showDeleteDialog by remember { mutableStateOf(false) }
     var showCustomDialog by remember { mutableStateOf(false) }
     var customSelector by remember { mutableStateOf("") }
     var customValue by remember { mutableStateOf("") }
@@ -342,10 +359,10 @@ private fun HudScriptEditPanel() {
             Text("Add Step:", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                RecordingChip("+ Wait") { showWaitDialog = true }
-                RecordingChip("+ Clear Data") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.DeleteCookies, displayLabel = "Clear Site Data")) }
+                RecordingChip("+ Wait") { waitInput = "2"; showWaitDialog = true }
+                RecordingChip("+ Delete Data") { showDeleteDialog = true }
                 RecordingChip("+ CAPTCHA") { AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.CaptchaWait, displayLabel = "Wait CAPTCHA")) }
-                RecordingChip("+ Custom") { showCustomDialog = true }
+                RecordingChip("+ Custom") { customSelector = ""; customValue = ""; showCustomDialog = true }
             }
 
             Spacer(Modifier.height(14.dp))
@@ -358,37 +375,79 @@ private fun HudScriptEditPanel() {
 
     if (showWaitDialog) {
         InAppInputDialog(
-            title = "Wait Time (seconds)",
+            title = "Wait Time (1-300 seconds)",
             value = waitInput,
-            onValueChange = { waitInput = it.filter { c -> c.isDigit() } },
+            onValueChange = { waitInput = it.filter { c -> c.isDigit() }.take(3) },
             confirmLabel = "Add", cancelLabel = "Cancel",
             onConfirm = {
-                val secs = waitInput.toLongOrNull() ?: 2L
-                AutomationEngine.addStepToEditingScript(RecordedStep(sequenceIndex = 0, kind = StepKind.Wait, waitMs = secs * 1000, displayLabel = "Wait ${secs}s"))
+                val secs = (waitInput.toLongOrNull() ?: 2L).coerceIn(1L, 300L)
+                AutomationEngine.addStepToEditingScript(RecordedStep(
+                    sequenceIndex = 0, kind = StepKind.Wait, waitMs = secs * 1000,
+                    displayLabel = "Wait ${secs}s"
+                ))
                 showWaitDialog = false
             },
             onDismiss = { showWaitDialog = false }
         )
     }
 
+    if (showDeleteDialog) {
+        Dialog(onDismissRequest = { showDeleteDialog = false }) {
+            Column(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
+                Text("Delete Site Data", fontFamily = VarelaRound, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text("This step clears cookies, cache, localStorage, IndexedDB and service workers. Use with care — may sign you out.", fontFamily = VarelaRound, fontSize = 12.sp, color = DuckDuckGoTheme.colors.text.secondary)
+                Spacer(Modifier.height(14.dp))
+                DdgPrimaryButton(
+                    text = "Delete This Tab Data",
+                    onClick = {
+                        AutomationEngine.addStepToEditingScript(RecordedStep(
+                            sequenceIndex = 0, kind = StepKind.DeleteCookies, fieldType = "delete_tab",
+                            displayLabel = "Delete This Tab Data"
+                        ))
+                        showDeleteDialog = false
+                    }
+                )
+                Spacer(Modifier.height(8.dp))
+                DdgSecondaryButton(
+                    text = "Delete All Data",
+                    onClick = {
+                        AutomationEngine.addStepToEditingScript(RecordedStep(
+                            sequenceIndex = 0, kind = StepKind.DeleteCookies, fieldType = "delete_all",
+                            displayLabel = "Delete All Data"
+                        ))
+                        showDeleteDialog = false
+                    }
+                )
+                Spacer(Modifier.height(8.dp))
+                DsgCancelText { showDeleteDialog = false }
+            }
+        }
+    }
+
     if (showCustomDialog) {
         Dialog(onDismissRequest = { showCustomDialog = false }) {
             Column(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
-                Text("Add Custom Function", fontFamily = VarelaRound, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Custom Step", fontFamily = VarelaRound, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(value = customSelector, onValueChange = { customSelector = it }, label = { Text("CSS Selector (e.g. #submit)") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = customValue, onValueChange = { customValue = it }, label = { Text("Value (blank if click)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = customValue, onValueChange = { customValue = it }, label = { Text("Value (blank = just click)") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(16.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DdgSecondaryButton(text = "Cancel", onClick = { showCustomDialog = false }, modifier = Modifier.weight(1f))
                     DdgPrimaryButton(text = "Add", onClick = {
                         if (customSelector.isNotBlank()) {
-                            val kind = if (customValue.isBlank()) StepKind.ClickNext else StepKind.Field
-                            AutomationEngine.addStepToEditingScript(RecordedStep(
-                                sequenceIndex = 0, kind = kind, cssSelector = customSelector,
-                                fieldType = "text", displayLabel = "Custom: $customSelector"
-                            ))
+                            val hasValue = customValue.isNotBlank()
+                            val step = RecordedStep(
+                                sequenceIndex = 0,
+                                kind = if (hasValue) StepKind.Field else StepKind.ClickNext,
+                                cssSelector = customSelector,
+                                customValue = if (hasValue) customValue else "",
+                                fieldType = if (hasValue) "custom" else "",
+                                displayLabel = if (hasValue) "Fill: $customSelector" else "Click: $customSelector"
+                            )
+                            AutomationEngine.addStepToEditingScript(step)
                         }
                         showCustomDialog = false
                     }, modifier = Modifier.weight(1f))
@@ -397,6 +456,10 @@ private fun HudScriptEditPanel() {
         }
     }
 }
+
+// ============================================================================
+// 5. RUN SETUP PANEL
+// ============================================================================
 
 @Composable
 private fun HudRunSetupPanel() {
@@ -442,6 +505,10 @@ private fun HudRunSetupPanel() {
         }
     }
 }
+
+// ============================================================================
+// 6. RUNNING PANEL
+// ============================================================================
 
 @Composable
 private fun HudRunningPanel() {
@@ -498,6 +565,10 @@ private fun HudRunningPanel() {
     }
 }
 
+// ============================================================================
+// 7. HELPERS
+// ============================================================================
+
 @Composable
 private fun HudHeaderRow(title: String, subtitle: String, onClose: (() -> Unit)?) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -509,4 +580,16 @@ private fun HudHeaderRow(title: String, subtitle: String, onClose: (() -> Unit)?
             Text("✕", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onClose).padding(6.dp))
         }
     }
+}
+
+@Composable
+private fun DsgCancelText(onClick: () -> Unit) {
+    Text(
+        "Cancel",
+        color = DuckDuckGoTheme.colors.brand.accentBlue,
+        fontFamily = VarelaRound,
+        fontSize = 13.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(8.dp)
+    )
 }
