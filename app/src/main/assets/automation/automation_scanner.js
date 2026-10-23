@@ -1,37 +1,25 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 (function () {
   "use strict";
 
   const g = globalThis;
-
   let mutationCount = 0;
   let blockCount = 0;
   let blockObserver = null;
   let refCounter = 0;
   const refMap = new Map();
+  let scanDebounceTimer = null;
 
-  const BLOCKS =
-    "form, dialog, [role=dialog], [role=alertdialog], [role=menu], [role=listbox], article, section, li, tr, table, main, nav";
+  const BLOCKS = "form, dialog, [role=dialog], [role=alertdialog], [role=menu], [role=listbox], article, section, li, tr, table, main, nav";
   const UNQUOTED = new Set(["SELECT", "TEXTAREA", "DATALIST", "OPTION", "OPTGROUP", "SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"]);
 
+  // SPAs (React/Vue) change the DOM after loading. We must re-scan!
   try {
     new MutationObserver((records) => {
       mutationCount += records.length;
+      if (scanDebounceTimer) clearTimeout(scanDebounceTimer);
+      scanDebounceTimer = setTimeout(() => {
+          if (g.__automationScan) g.__automationScan();
+      }, 500);
     }).observe(document.documentElement || document, {
       subtree: true,
       childList: true,
@@ -130,7 +118,6 @@
         }
       });
     }
-    // Check preceding sibling or parent label/heading text (common in modern card forms)
     if (parts.length === 0) {
       const prev = el.previousElementSibling;
       if (prev && ["LABEL", "SPAN", "DIV", "P", "H4", "H5", "H6"].includes(prev.tagName)) {
@@ -254,128 +241,6 @@
       };
     },
 
-    setNativeValue(el, value) {
-      if (!el) return "";
-      const strVal = value == null ? "" : String(value);
-      try {
-        el.focus();
-      } catch (_) {}
-
-      try {
-        const proto = Object.getPrototypeOf(el);
-        const protoSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
-        const fallbackSetter =
-          el.tagName === "TEXTAREA"
-            ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
-            : Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        const setter = protoSetter || fallbackSetter;
-        if (setter) {
-          setter.call(el, strVal);
-        } else {
-          el.value = strVal;
-        }
-      } catch (_) {
-        el.value = strVal;
-      }
-
-      // Reset React _valueTracker if present so React 16/17/18/19 sees the change
-      try {
-        const tracker = el._valueTracker;
-        if (tracker) {
-          tracker.setValue("");
-        }
-      } catch (_) {}
-
-      el.dispatchEvent(new Event("focus", { bubbles: true }));
-      el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, data: strVal, inputType: "insertText" }));
-      el.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, data: strVal, inputType: "insertText" }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-      return el.value != null ? String(el.value) : "";
-    },
-
-    selectOption(el, rawValue) {
-      const select = el;
-      const options = Array.from(select.options || []);
-      if (options.length === 0) return { ok: false, error: "NO_OPTIONS" };
-      const norm = (t) => String(t || "").replace(/\s+/g, " ").trim().toLowerCase();
-      const target = norm(rawValue);
-
-      let picked =
-        options.find((o) => norm(o.value) === target) ||
-        options.find((o) => norm(o.label) === target) ||
-        options.find((o) => norm(o.text) === target) ||
-        options.find((o) => norm(o.text).includes(target) || target.includes(norm(o.text)));
-
-      if (!picked) {
-        picked = options.find((o, idx) => idx > 0 && !o.disabled && o.value !== "") || options.find((o) => !o.disabled);
-      }
-
-      if (!picked) {
-        return { ok: false, error: "NO_SUCH_OPTION" };
-      }
-
-      options.forEach((o) => {
-        o.selected = o === picked;
-      });
-      select.value = picked.value;
-      select.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-      return {
-        ok: true,
-        value: picked.value,
-        label: picked.label || picked.text,
-      };
-    },
-
-    watchBlock(el) {
-      if (blockObserver) {
-        try {
-          blockObserver.disconnect();
-        } catch (_) {}
-      }
-      blockCount = 0;
-      let block = el && el.closest ? el.closest(BLOCKS) : null;
-      if (!block) {
-        block = document.body || document.documentElement;
-      }
-      try {
-        blockObserver = new MutationObserver((records) => {
-          blockCount += records.length;
-        });
-        blockObserver.observe(block, {
-          subtree: true,
-          childList: true,
-          attributes: true,
-          characterData: true,
-        });
-      } catch (_) {}
-      return probe.describe(block);
-    },
-
-    blockMutations() {
-      return blockCount;
-    },
-
-    pageFacts() {
-      const text = (el) => shownText(el, 120);
-      const vis = (el) => isElementVisible(el);
-      const alerts = Array.from(
-        document.querySelectorAll("[role=alert], [role=status], [aria-live=assertive], [aria-live=polite], output, .error, .alert-danger, .invalid-feedback")
-      )
-        .filter(vis)
-        .map(text)
-        .filter(Boolean);
-      const invalid = Array.from(document.querySelectorAll(":invalid"))
-        .filter((el) => "validationMessage" in el && el.validationMessage && el.tagName !== "FORM")
-        .map((el) => el.validationMessage);
-      const layers = Array.from(
-        document.querySelectorAll("dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]")
-      )
-        .filter(vis)
-        .map((el) => `${el.getAttribute("role") || el.tagName.toLowerCase()} "${el.getAttribute("aria-label") || shownText(el, 60)}"`);
-      return { alerts, invalid, layers };
-    },
-
     describe(node) {
       const el = node && node.nodeType === 1 ? node : node ? node.parentElement : null;
       if (!el) return "document";
@@ -402,9 +267,7 @@
     const combined = `${name} ${id} ${placeholder} ${ariaLabel} ${labelText} ${auto}`;
 
     if (type === "checkbox" || el.getAttribute("role") === "checkbox") {
-      if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|18)\b/i.test(combined)) {
-        return "termsCheckbox";
-      }
+      if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|18)\b/i.test(combined)) return "termsCheckbox";
       return "checkbox";
     }
 
@@ -414,10 +277,7 @@
     }
 
     if (type === "password" || auto === "new-password" || auto === "current-password") {
-      if (
-        /\b(confirm|retype|repeat|verify|again|match|pass2|password2|password_confirmation)\b/i.test(combined) ||
-        passwordIndexInForm >= 1
-      ) {
+      if (/\b(confirm|retype|repeat|verify|again|match|pass2|password2|password_confirmation)\b/i.test(combined) || passwordIndexInForm >= 1) {
         return "confirmPassword";
       }
       return "password";
@@ -430,10 +290,7 @@
       return "email";
     }
 
-    if (
-      auto === "one-time-code" ||
-      /\b(otp|verification\s*code|security\s*code|confirm\s*code|auth\s*code|2fa|6-digit|pin\s*code)\b/i.test(combined)
-    ) {
+    if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|confirm\s*code|auth\s*code|2fa|6-digit|pin\s*code)\b/i.test(combined)) {
       return "otp";
     }
 
@@ -476,11 +333,7 @@
       return "message";
     }
 
-    if (
-      type === "date" ||
-      auto.includes("bday") ||
-      /\b(dob|date\s*of\s*birth|birth\s*date|birthday|dd\/mm|mm\/dd|yyyy)\b/i.test(combined)
-    ) {
+    if (type === "date" || auto.includes("bday") || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|dd\/mm|mm\/dd|yyyy)\b/i.test(combined)) {
       return "dob";
     }
 
@@ -488,10 +341,7 @@
       return "gender";
     }
 
-    if (
-      auto === "postal-code" ||
-      /\b(zip|zip\s*code|postal|postal\s*code|pin\s*code|pincode)\b/i.test(combined)
-    ) {
+    if (auto === "postal-code" || /\b(zip|zip\s*code|postal|postal\s*code|pin\s*code|pincode)\b/i.test(combined)) {
       return "zip";
     }
     if (auto === "address-level2" || /\b(city|town|locality|district)\b/i.test(combined)) {
@@ -503,11 +353,7 @@
     if (auto.includes("country") || /\b(country|nation|nationality)\b/i.test(combined)) {
       return "country";
     }
-    if (
-      auto.includes("address") ||
-      auto.includes("street") ||
-      /\b(address|street|apartment|apt|suite|house\s*no|flat|building)\b/i.test(combined)
-    ) {
+    if (auto.includes("address") || auto.includes("street") || /\b(address|street|apartment|apt|suite|house\s*no|flat|building)\b/i.test(combined)) {
       return "address";
     }
 
@@ -553,17 +399,13 @@
   }
 
   function findPrimaryActionButton(filledElements) {
-    const POSITIVE_REGEX =
-      /\b(next|continue|submit|sign\s*up|signup|register|create\s*account|join|proceed|verify|confirm|finish|done|save|send|send\s*message|log\s*in|login|sign\s*in|get\s*started)\b/i;
-    const NEGATIVE_REGEX =
-      /\b(back|previous|prev|cancel|close|reset|clear|delete|remove|log\s*out|sign\s*out|skip|forgot|resend|google|facebook|apple|github|twitter)\b/i;
+    const POSITIVE_REGEX = /\b(next|continue|submit|sign\s*up|signup|register|create\s*account|join|proceed|verify|confirm|finish|done|save|send|send\s*message|log\s*in|login|sign\s*in|get\s*started)\b/i;
+    const NEGATIVE_REGEX = /\b(back|previous|prev|cancel|close|reset|clear|delete|remove|log\s*out|sign\s*out|skip|forgot|resend|google|facebook|apple|github|twitter)\b/i;
 
     for (let i = 0; i < filledElements.length; i++) {
       const el = filledElements[i];
       if (el && el.form) {
-        const submitters = submittersOf(el.form).filter(
-          (b) => isElementVisible(b) && !disabledByAncestor(b)
-        );
+        const submitters = submittersOf(el.form).filter((b) => isElementVisible(b) && !disabledByAncestor(b));
         if (submitters.length > 0) {
           const best = submitters.find((b) => !NEGATIVE_REGEX.test(nameOf(b))) || submitters[0];
           if (best) return best;
@@ -572,9 +414,7 @@
     }
 
     const candidates = Array.from(
-      document.querySelectorAll(
-        'button, input[type="submit"], input[type="button"], input[type="image"], [role="button"], a[class*="btn" i], a[class*="button" i]'
-      )
+      document.querySelectorAll('button, input[type="submit"], input[type="button"], input[type="image"], [role="button"], a[class*="btn" i], a[class*="button" i]')
     ).filter((el) => isElementVisible(el) && !disabledByAncestor(el));
 
     let bestEl = null;
@@ -599,13 +439,14 @@
     return bestEl;
   }
 
-    function scanPage() {
+  function scanPage() {
     refMap.clear();
     refCounter = 0;
 
+    // Include custom web components, role=combobox, etc.
     const rawNodes = Array.from(
       document.querySelectorAll(
-        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select, [role="combobox"], [role="listbox"], [contenteditable="true"]'
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select, [role="combobox"], [contenteditable="true"]'
       )
     );
 
@@ -683,207 +524,6 @@
 
     return payload;
   }
-
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
-
-  async function fillFieldItem(el, wantedValue, typingDelayMs) {
-    if (!el || !el.isConnected) {
-      return { ok: false, reason: "element detached" };
-    }
-
-    // Scroll both window and element into the visible viewport center
-    scrollElementToCenter(el);
-    await sleep(220);
-
-    const st = probe.state(el);
-    if (!st) {
-      return { ok: false, reason: "element state unreadable" };
-    }
-
-    if (st.type === "checkbox" || st.type === "radio") {
-      const wantChecked = wantedValue !== "false" && wantedValue !== "0";
-      if (st.checked !== wantChecked) {
-        const lbl = el.labels && el.labels[0] ? el.labels[0] : el;
-        lbl.click();
-        if (el.checked !== wantChecked) {
-          el.checked = wantChecked;
-          el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-      }
-      return { ok: true, mechanism: "toggle", readBack: String(el.checked) };
-    }
-
-    if (st.tag === "select") {
-      const res = probe.selectOption(el, wantedValue || "__first_valid__");
-      return { ok: res.ok, mechanism: "select-option", readBack: res.label || res.value || "" };
-    }
-
-    const text = String(wantedValue ?? "");
-    if (typingDelayMs > 0 && text.length <= 64 && !["date", "month", "time", "color", "range"].includes(st.type)) {
-      probe.setNativeValue(el, "");
-      let built = "";
-      const perCharMs = Math.min(80, Math.max(10, Math.floor(typingDelayMs / Math.max(1, text.length))));
-      for (let c = 0; c < text.length; c++) {
-        const ch = text[c];
-        built += ch;
-        el.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, composed: true }));
-        probe.setNativeValue(el, built);
-        el.dispatchEvent(new KeyboardEvent("keyup", { key: ch, bubbles: true, composed: true }));
-        await sleep(perCharMs);
-      }
-    } else {
-      probe.setNativeValue(el, text);
-    }
-
-    el.dispatchEvent(new Event("blur", { bubbles: true }));
-    return {
-      ok: true,
-      mechanism: "set-value",
-      readBack: el.value != null ? String(el.value) : text,
-    };
-  }
-
-  g.__automationFill = async function (rawListJson, rawOptionsJson) {
-    const list = typeof rawListJson === "string" ? JSON.parse(rawListJson) : rawListJson || [];
-    const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : rawOptionsJson || {};
-    const typingDelayMs = typeof options.typingDelayMs === "number" ? options.typingDelayMs : 60;
-    const fieldDelayMs = typeof options.fieldDelayMs === "number" ? options.fieldDelayMs : 120;
-
-    if (refMap.size === 0) {
-      scanPage();
-    }
-
-    const domInputs = Array.from(
-      document.querySelectorAll(
-        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select'
-      )
-    ).filter((el) => isElementVisible(el) && !disabledByAncestor(el));
-
-    const receipts = [];
-    const filledElements = [];
-
-    for (let i = 0; i < list.length; i++) {
-      const item = list[i];
-      let targetEl = null;
-      if (item.ref && refMap.has(item.ref)) {
-        targetEl = refMap.get(item.ref);
-      } else if (item.ref) {
-        targetEl = document.querySelector(`[data-nano-ref="${item.ref}"]`);
-      }
-      if (!targetEl && typeof item.index === "number" && domInputs[item.index]) {
-        targetEl = domInputs[item.index];
-      }
-      if (!targetEl) continue;
-
-      const res = await fillFieldItem(targetEl, item.value, typingDelayMs);
-      receipts.push({
-        ref: item.ref || String(item.index),
-        ok: res.ok,
-        mechanism: res.mechanism,
-      });
-      if (res.ok) filledElements.push(targetEl);
-      if (fieldDelayMs > 0 && i < list.length - 1) {
-        await sleep(fieldDelayMs);
-      }
-    }
-
-    return {
-      filledCount: filledElements.length,
-      totalRequested: list.length,
-      receipts,
-      captcha: detectCaptcha(),
-    };
-  };
-
-  g.__automationClickNextAndSettle = async function (rawOptionsJson) {
-    const options = typeof rawOptionsJson === "string" ? JSON.parse(rawOptionsJson) : rawOptionsJson || {};
-    const settleTimeoutMs = typeof options.settleTimeoutMs === "number" ? options.settleTimeoutMs : 2000;
-
-    const preCaptcha = detectCaptcha();
-    if (preCaptcha.detected && options.pauseOnCaptcha !== false) {
-      return { clicked: false, captchaDetected: true, verdict: "captcha_blocked" };
-    }
-
-    const filledEls = Array.from(refMap.values()).filter((el) => el && el.isConnected && holdsValue(el));
-    let btn = options.actionRef ? refMap.get(options.actionRef) : null;
-    if (!btn || !btn.isConnected || !isElementVisible(btn)) {
-      btn = findPrimaryActionButton(filledEls);
-    }
-
-    if (!btn) {
-      return { clicked: false, captchaDetected: false, verdict: "no_button_found" };
-    }
-
-    const urlBefore = window.location.href;
-    const factsBefore = probe.pageFacts();
-    probe.watchBlock(btn);
-    const blockBefore = probe.blockMutations();
-
-    scrollElementToCenter(btn);
-    await sleep(250);
-
-    const rect = btn.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const eventInit = { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy, button: 0 };
-    btn.dispatchEvent(new PointerEvent("pointerdown", eventInit));
-    btn.dispatchEvent(new MouseEvent("mousedown", eventInit));
-    btn.dispatchEvent(new PointerEvent("pointerup", eventInit));
-    btn.dispatchEvent(new MouseEvent("mouseup", eventInit));
-    btn.click();
-
-    const start = performance.now();
-    let lastSignalKey = "";
-    let quietPolls = 0;
-
-    while (performance.now() - start < settleTimeoutMs) {
-      await sleep(100);
-      const urlNow = window.location.href;
-      const btnRemoved = !btn.isConnected || !isElementVisible(btn);
-      const muts = probe.blockMutations() - blockBefore;
-      const sig = `${urlNow}|${btnRemoved}|${muts}`;
-      if (sig === lastSignalKey && (urlNow !== urlBefore || btnRemoved || muts > 0)) {
-        quietPolls++;
-        if (quietPolls >= 3) break;
-      } else {
-        quietPolls = 0;
-      }
-      lastSignalKey = sig;
-    }
-
-    const urlAfter = window.location.href;
-    const urlChanged = urlAfter !== urlBefore;
-    const targetRemoved = !btn.isConnected || !isElementVisible(btn);
-    const blockMutations = probe.blockMutations() - blockBefore;
-    const factsAfter = probe.pageFacts();
-    const newAlerts = factsAfter.alerts.filter((a) => !factsBefore.alerts.includes(a));
-    const newInvalid = factsAfter.invalid.filter((v) => !factsBefore.invalid.includes(v));
-    const postScan = scanPage();
-
-    const unfilledNewFields = postScan.fields.filter(
-      (f) => f.looksLike !== "termsCheckbox" && (!f.currentValue || f.currentValue.trim() === "")
-    );
-
-    return {
-      clicked: true,
-      urlChanged,
-      targetRemoved,
-      blockMutations,
-      alerts: newAlerts,
-      invalidMessages: newInvalid,
-      captchaDetected: postScan.captchaDetected,
-      remainingUnfilledCount: unfilledNewFields.length,
-      verdict:
-        newInvalid.length > 0
-          ? "validation_error"
-          : postScan.captchaDetected
-            ? "captcha_blocked"
-            : urlChanged || targetRemoved || blockMutations > 0
-              ? "changed"
-              : "none",
-    };
-  };
 
   g.__automationScan = scanPage;
   scanPage();

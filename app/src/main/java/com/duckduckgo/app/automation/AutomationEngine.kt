@@ -121,7 +121,6 @@ object AutomationEngine {
         VaultRepository.init(context)
         AutomationScriptRepository.init(context)
         
-        // Force reset UI state to prevent getting stuck if the app was killed mid-run
         hudMode = HudMode.Hidden
         hudVisible = false
         hudRecordedSteps = emptyList()
@@ -149,6 +148,11 @@ object AutomationEngine {
 
     fun attachWebView(webView: WebView, tabId: String? = null) {
         currentWebView = WeakReference(webView)
+        // Ensure activeTabId is set so the icon works
+        if (tabId != null) {
+            activeTabId = tabId
+        }
+        
         try {
             val bridge = AutomationBridge(
                 tabId = tabId,
@@ -161,7 +165,6 @@ object AutomationEngine {
             webView.addJavascriptInterface(bridge, "AutomationBridge")
         } catch (e: Exception) { Log.e(TAG, "Failed to add JS bridge") }
 
-        // If we attach a WebView while not recording, ensure the recorder is stopped
         if (hudMode != HudMode.Recording) {
             webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
         }
@@ -180,7 +183,8 @@ object AutomationEngine {
     } catch (e: Exception) { null }
 
     fun onFieldsDetected(json: String, tabId: String?) {
-        if (tabId == null || tabId != activeTabId) return
+        // Relaxed check to prevent icon missing
+        if (tabId != null && activeTabId != null && tabId != activeTabId) return
         try {
             if (json.contains("\"debug\"")) return
             val arr = JSONArray(json)
@@ -204,10 +208,6 @@ object AutomationEngine {
 
     fun updateRunGroup(group: String) { hudSelectedGroup = group }
     fun updateRunRepeat(count: Int) { hudRunRepeatCount = count.coerceAtLeast(1) }
-
-    // ========================================================================
-    // SCRIPT EDITOR
-    // ========================================================================
 
     fun openScriptEditor(script: AutomationScript) {
         hudEditingScript = script
@@ -332,9 +332,14 @@ object AutomationEngine {
         }
     }
 
-    // ========================================================================
-    // EXECUTION ENGINE (Selenium-style Wait & Click)
-    // ========================================================================
+    private fun escapeJsString(str: String?): String {
+        if (str == null) return ""
+        return str.replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+    }
 
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
@@ -352,7 +357,7 @@ object AutomationEngine {
             updateStatus("Loading ${script.url}...")
             withContext(Dispatchers.Main) { webView.loadUrl(script.url) }
             waitForPageReady(webView)
-            delay(500)
+            delay(1500) // Wait for React/Vue to mount
 
             for (step in script.steps) {
                 if (!scope.isActive) break
@@ -363,69 +368,66 @@ object AutomationEngine {
                         updateStatus("Filling ${step.displayLabel}...")
                         val valToFill = profile.resolveForField(step.fieldType, step.name, step.tag) ?: ""
                         
-                        // Selenium style: wait for element, clear it, then type
-                        val js = """
-                            (async function() {
-                                function waitForEl(selector, xpath, timeout = 5000) {
-                                    return new Promise(resolve => {
-                                        const start = Date.now();
-                                        const interval = setInterval(() => {
-                                            let el = null;
-                                            if (selector) try { el = document.querySelector(selector); } catch(_){}
-                                            if (!el && xpath) try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
-                                            if (el) { clearInterval(interval); resolve(el); }
-                                            else if (Date.now() - start > timeout) { clearInterval(interval); resolve(null); }
-                                        }, 200);
-                                    });
-                                }
+                        val safeVal = escapeJsString(valToFill)
+                        val safeCss = escapeJsString(step.cssSelector)
+                        val safeXpath = escapeJsString(step.xpath)
+                        val safeName = escapeJsString(step.name)
+                        val safeId = escapeJsString(step.domId)
 
-                                try {
-                                    let el = await waitForEl('${step.cssSelector}', '${step.xpath}');
-                                    if (!el) return {ok: false, err: 'timeout waiting for element'};
-                                    
-                                    el.focus();
-                                    const role = (el.getAttribute("role") || "").toLowerCase();
-                                    const isCustom = ['combobox', 'listbox'].includes(role) || el.isContentEditable;
-                                    
-                                    if (isCustom && role === 'combobox') {
-                                        el.click(); // Open the dropdown
-                                    } else if (el.tagName === 'SELECT') {
-                                        const strVal = '${valToFill}'.toLowerCase();
-                                        for(let i=0; i<el.options.length; i++) {
-                                            if(el.options[i].text.toLowerCase().includes(strVal) || el.options[i].value.toLowerCase().includes(strVal)) {
-                                                el.selectedIndex = i;
-                                                break;
-                                            }
-                                        }
-                                        el.dispatchEvent(new Event('change', { bubbles: true }));
-                                    } else {
-                                        // Clear pre-filled data first (like Selenium's .clear())
+                        // Retry logic: loop 3 times trying to find the element
+                        var success = false
+                        for (attempt in 1..3) {
+                            val js = """
+                                (function() {
+                                    try {
+                                        let el = null;
+                                        const id = '$safeId';
+                                        const name = '$safeName';
+                                        const css = '$safeCss';
+                                        const xpath = '$safeXpath';
+
+                                        if (id) el = document.getElementById(id);
+                                        if (!el && name) el = document.querySelector(`[name="${name}"]`);
+                                        if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
+                                        if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
+                                        
+                                        if (!el) return {ok: false, err: 'not found'};
+                                        
+                                        el.focus();
+                                        
+                                        // Trigger native React input setter
                                         const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
                                         const nativeTextArea = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
                                         
                                         if (el.tagName === 'TEXTAREA' && nativeTextArea) {
                                             nativeTextArea.call(el, '');
                                             el.dispatchEvent(new Event('input', { bubbles: true }));
-                                            nativeTextArea.call(el, '${valToFill}');
+                                            nativeTextArea.call(el, '$safeVal');
                                         } else if (nativeInput) {
                                             nativeInput.call(el, '');
                                             el.dispatchEvent(new Event('input', { bubbles: true }));
-                                            nativeInput.call(el, '${valToFill}');
+                                            nativeInput.call(el, '$safeVal');
                                         } else {
                                             el.value = '';
                                             el.dispatchEvent(new Event('input', { bubbles: true }));
-                                            el.value = '${valToFill}';
+                                            el.value = '$safeVal';
                                         }
                                         
                                         el.dispatchEvent(new Event('input', { bubbles: true }));
                                         el.dispatchEvent(new Event('change', { bubbles: true }));
-                                    }
-                                    el.blur();
-                                    return {ok: true};
-                                } catch(e) { return {ok: false, err: e.message}; }
-                            })();
-                        """.trimIndent()
-                        evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
+                                        el.blur();
+                                        return {ok: true};
+                                    } catch(e) { return {ok: false, err: e.message}; }
+                                })();
+                            """.trimIndent()
+                            val result = evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                            if (result.contains("\"ok\":true") || result.contains("\"ok\": true")) {
+                                success = true
+                                break
+                            }
+                            delay(1000)
+                        }
+                        if (!success) Log.e(TAG, "Failed to fill field: ${step.displayLabel}")
                         delay(1000)
                     }
                     StepKind.Wait -> {
@@ -435,6 +437,7 @@ object AutomationEngine {
                     StepKind.DeleteCookies -> {
                         updateState(AutomationState.CLEARING_DATA)
                         updateStatus("Triggering native delete dialog...")
+                        
                         if (onShowFireDialog != null) {
                             suspendCancellableCoroutine<Unit> { cont ->
                                 fireDialogContinuation = cont
@@ -454,29 +457,53 @@ object AutomationEngine {
                     StepKind.ClickNext -> {
                         updateState(AutomationState.CLICKING_NEXT)
                         updateStatus("Clicking ${step.displayLabel}...")
-                        val js = """
-                            (async function() {
-                                function waitForEl(selector, xpath, timeout = 5000) {
-                                    return new Promise(resolve => {
-                                        const start = Date.now();
-                                        const interval = setInterval(() => {
-                                            let el = null;
-                                            if (selector) try { el = document.querySelector(selector); } catch(_){}
-                                            if (!el && xpath) try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
-                                            if (el) { clearInterval(interval); resolve(el); }
-                                            else if (Date.now() - start > timeout) { clearInterval(interval); resolve(null); }
-                                        }, 200);
-                                    });
-                                }
-                                try {
-                                    let el = await waitForEl('${step.cssSelector}', '${step.xpath}');
-                                    if (!el) return {ok: false, err: 'timeout waiting for button'};
-                                    el.click(); 
-                                    return {ok: true};
-                                } catch(e) { return {ok: false, err: e.message}; }
-                            })();
-                        """.trimIndent()
-                        evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
+                        
+                        val safeCss = escapeJsString(step.cssSelector)
+                        val safeXpath = escapeJsString(step.xpath)
+                        val safeName = escapeJsString(step.name)
+                        val safeId = escapeJsString(step.domId)
+
+                        var success = false
+                        for (attempt in 1..3) {
+                            val js = """
+                                (function() {
+                                    try {
+                                        let el = null;
+                                        const id = '$safeId';
+                                        const name = '$safeName';
+                                        const css = '$safeCss';
+                                        const xpath = '$safeXpath';
+
+                                        if (id) el = document.getElementById(id);
+                                        if (!el && name) el = document.querySelector(`[name="${name}"]`);
+                                        if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
+                                        if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
+                                        
+                                        if (!el) return {ok: false, err: 'not found'};
+                                        
+                                        el.scrollIntoView({block: 'center'});
+                                        
+                                        // Simulate native React/Vue click
+                                        const rect = el.getBoundingClientRect();
+                                        const cx = rect.left + rect.width / 2;
+                                        const cy = rect.top + rect.height / 2;
+                                        const eventInit = { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 };
+                                        
+                                        el.dispatchEvent(new MouseEvent("mousedown", eventInit));
+                                        el.dispatchEvent(new MouseEvent("mouseup", eventInit));
+                                        el.click();
+                                        return {ok: true};
+                                    } catch(e) { return {ok: false, err: e.message}; }
+                                })();
+                            """.trimIndent()
+                            val result = evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                            if (result.contains("\"ok\":true") || result.contains("\"ok\": true")) {
+                                success = true
+                                break
+                            }
+                            delay(1000)
+                        }
+                        if (!success) Log.e(TAG, "Failed to click: ${step.displayLabel}")
                         delay(1500)
                     }
                 }
@@ -492,199 +519,12 @@ object AutomationEngine {
     }
 
     // ========================================================================
-    // LEGACY ACTIVITY SUPPORT
-    // ========================================================================
-
-    fun queueAutomationInBrowserTab(config: AutomationConfig) {
-        currentConfig = config
-        pendingBrowserConfig = config
-        hudGroupName = config.groupName
-        updateProgress(0, config.targetRepeatCount)
-        updateState(AutomationState.NAVIGATING)
-        updateStatus("Opening ${config.targetUrl} in browser tab...")
-
-        val existingWebView = currentWebView?.get()
-        if (existingWebView != null) {
-            mountHudOverlayIfNeeded(existingWebView)
-            pendingBrowserConfig = null
-            startAutomation(config, navigateFirstCycle = false)
-        }
-    }
-
-    fun startAutomation(config: AutomationConfig, navigateFirstCycle: Boolean = true) {
-        currentConfig = config
-        hudGroupName = config.groupName
-        updateProgress(0, config.targetRepeatCount)
-        updateState(AutomationState.NAVIGATING)
-        hudMode = HudMode.Running
-        hudVisible = true
-        _captchaState.postValue(false)
-        _dataExhaustedState.postValue(false)
-
-        val webView = currentWebView?.get()
-        if (webView == null) {
-            pendingBrowserConfig = config
-            updateStatus("Waiting for browser tab...")
-            return
-        }
-        mountHudOverlayIfNeeded(webView)
-        automationJob?.cancel()
-        automationJob = scope.launch { runAutomationLoop(config, navigateFirstCycle) }
-    }
-
-    private suspend fun runAutomationLoop(config: AutomationConfig, navigateFirstCycle: Boolean) {
-        val webView = currentWebView?.get() ?: return
-        val targetUri = if (config.targetUrl.startsWith("http")) config.targetUrl else "https://${config.targetUrl}"
-        var isFirst = true
-        
-        while (hudCompleted < config.targetRepeatCount && scope.isActive) {
-            if (!VaultRepository.hasUnusedData(config.groupName)) {
-                _dataExhaustedState.postValue(true); updateState(AutomationState.WAITING_DATA_EXHAUSTED); return
-            }
-            val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
-            currentProfile = profile
-            
-            if (config.clearTabBetweenRuns && hudCompleted > 0) {
-                updateState(AutomationState.CLEARING_DATA)
-                updateStatus("Clearing tab cookies, storage & cache...")
-                clearBrowserSession(webView)
-                delay(500)
-            }
-            
-            updateState(AutomationState.NAVIGATING)
-            if (!isFirst || navigateFirstCycle) {
-                updateStatus("Loading ${config.targetUrl}...")
-                withContext(Dispatchers.Main) { webView.loadUrl(targetUri) }
-            }
-            isFirst = false
-            waitForPageReady(webView); injectScanner(); delay(600)
-
-            var stepSuccess = false
-            var counter = 0
-            while (counter < 5 && scope.isActive) {
-                counter++
-                updateState(AutomationState.SCANNING)
-                updateStatus("Scanning form fields (Step $counter)...")
-                val scanObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
-                val fieldsArr = scanObj.optJSONArray("fields") ?: JSONArray()
-                
-                if (scanObj.optBoolean("captchaDetected", false) && config.pauseOnCaptcha) {
-                    _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
-                }
-                
-                currentActionRef = scanObj.optString("actionButtonRef").takeIf { it.isNotBlank() }
-                val fillArray = JSONArray()
-                val singleFallbackValue = if (profile.fields.size == 1) profile.fields.values.firstOrNull() else null
-
-                for (i in 0 until fieldsArr.length()) {
-                    val f = fieldsArr.getJSONObject(i)
-                    val looksLike = f.optString("looksLike")
-                    val matched = if (looksLike == "termsCheckbox") "true" else profile.resolveForField(looksLike, f.optString("name"), f.optString("tag"))
-                    if (!matched.isNullOrBlank()) {
-                        fillArray.put(JSONObject().apply { put("ref", f.optString("ref")); put("index", f.optInt("index", i)); put("value", matched) })
-                    }
-                }
-                
-                if (fillArray.length() == 0) {
-                    if (counter == 1) {
-                        delay(1200); injectScanner()
-                        val retryObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
-                        if ((retryObj.optJSONArray("fields")?.length() ?: 0) > 0) { counter--; continue }
-                    }
-                    stepSuccess = counter > 1; break 
-                }
-                
-                updateState(AutomationState.FILLING)
-                updateStatus("Filling ${fillArray.length()} field(s) (Step $counter)...")
-                val fillOpts = JSONObject().apply { put("typingDelayMs", config.typingDelayMs); put("fieldDelayMs", config.fieldDelayMs) }
-                evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill(${JSONObject.quote(fillArray.toString())}, ${JSONObject.quote(fillOpts.toString())}));")
-                delay(500)
-                
-                updateState(AutomationState.CLICKING_NEXT)
-                val btnName = scanObj.optString("actionButtonName").ifBlank { "Next / Submit" }
-                updateStatus("Clicking '$btnName' & checking next step...")
-                val clickOpts = JSONObject().apply { put("actionRef", currentActionRef ?: ""); put("settleTimeoutMs", config.settleTimeoutMs); put("pauseOnCaptcha", config.pauseOnCaptcha) }
-                val settle = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationClickNextAndSettle(${JSONObject.quote(clickOpts.toString())}));")) } catch (_: Exception) { JSONObject() }
-                
-                if (settle.optString("verdict") == "captcha_blocked" && config.pauseOnCaptcha) {
-                    _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
-                }
-                
-                delay(600); waitForPageReady(webView); injectScanner(); delay(500)
-                val postNav = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
-                val postFields = postNav.optJSONArray("fields") ?: JSONArray()
-                var unfilled = 0
-                for (k in 0 until postFields.length()) {
-                    val f = postFields.getJSONObject(k)
-                    if (f.optString("looksLike", "") != "termsCheckbox" && f.optString("currentValue", "").isBlank()) unfilled++
-                }
-                
-                if (unfilled > 0 && settle.optString("verdict") != "validation_error" && settle.optString("verdict") != "no_button_found") {
-                    updateStatus("Moved to Step ${counter + 1} — continuing...")
-                    delay(400)
-                } else { stepSuccess = true; break }
-            }
-            
-            if (stepSuccess) {
-                VaultRepository.markProfileUsed(profile)
-                updateProgress(hudCompleted + 1, config.targetRepeatCount)
-                updateStatus("Completed cycle ${hudCompleted} of ${config.targetRepeatCount}")
-            } else {
-                updateStatus("No matching fields found for '${config.groupName}'.")
-                break
-            }
-            delay(1000)
-        }
-        updateState(AutomationState.COMPLETED)
-        updateStatus("Finished $hudCompleted / ${config.targetRepeatCount} automation(s)!")
-        onAutomationFinished?.invoke(hudCompleted)
-    }
-
-    // ========================================================================
     // UTILS
     // ========================================================================
 
     fun resolveFireDialogResult() {
         fireDialogContinuation?.resumeWith(Result.success(Unit))
         fireDialogContinuation = null
-    }
-
-    private fun clearBrowserSession(webView: WebView) {
-        try {
-            webView.clearCache(true)
-            webView.clearHistory()
-            webView.clearFormData()
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
-            WebStorage.getInstance().deleteAllData()
-            
-            val js = """
-                (function() {
-                    try { localStorage.clear(); } catch(_) {}
-                    try { sessionStorage.clear(); } catch(_) {}
-                    try {
-                        if (window.indexedDB && window.indexedDB.databases) {
-                            window.indexedDB.databases().then(dbs => {
-                                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name));
-                            });
-                        }
-                    } catch(_) {}
-                    try {
-                        if (navigator.serviceWorker) {
-                            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                                for(let registration of registrations) {
-                                    registration.unregister();
-                                }
-                            });
-                        }
-                    } catch(_) {}
-                    return "cleared";
-                })();
-            """.trimIndent()
-            webView.evaluateJavascript(js, null)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error clearing session: ${e.message}")
-        }
     }
 
     private fun clearTabData(webView: WebView) {
