@@ -59,6 +59,7 @@ object AutomationEngine {
     private const val TAG = "AutomationEngine"
     private const val HUD_VIEW_TAG = "ddg_automation_hud_overlay"
     private const val MAX_WAIT_MS = 300_000L
+    private const val HUD_SCROLL_THRESHOLD_DP = 100
 
     private var currentWebView: WeakReference<WebView>? = null
     private var scannerJs: String? = null
@@ -169,7 +170,6 @@ object AutomationEngine {
             webView.addJavascriptInterface(bridge, "AutomationBridge")
         } catch (e: Exception) { Log.e(TAG, "attachBridge failed: ${e.message}") }
 
-        // Re-inject recorder if we are in recording mode (handles page reloads/second grabs)
         if (hudMode == HudMode.Recording && !hudRecordingPaused) {
             webView.postDelayed({
                 loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder re-injected") } }
@@ -358,8 +358,7 @@ object AutomationEngine {
             updateStatus("Loading ${script.url}...")
             withContext(Dispatchers.Main) { webView.loadUrl(script.url) }
             waitForPageReady(webView)
-            // Fast wait: only 300ms to allow React/Vue to paint the first frame
-            delay(300) 
+            delay(300)
 
             for (step in script.steps) {
                 if (!scope.isActive) break
@@ -377,7 +376,6 @@ object AutomationEngine {
                         val qName = JSONObject.quote(step.name)
                         val qId = JSONObject.quote(step.domId)
 
-                        // Fast fill: JS waits internally for the element instead of Kotlin spinning
                         val js = """
                             (async function() {
                                 function waitForEl(selector, xpath, timeout = 3000) {
@@ -393,29 +391,21 @@ object AutomationEngine {
                                         }, 50);
                                     });
                                 }
-
                                 try {
                                     let el = null;
                                     const id = $qId;
                                     const nm = $qName;
                                     const css = $qCss;
                                     const xpath = $qXpath;
-
                                     if (id) el = document.getElementById(id);
                                     if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                     if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                     if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
-                                    
-                                    if (!el) {
-                                        el = await waitForEl(css, xpath);
-                                    }
+                                    if (!el) el = await waitForEl(css, xpath);
                                     if (!el) return {ok: false, err: 'timeout'};
-                                    
                                     el.focus();
                                     try { el.click(); } catch(_) {}
-                                    
                                     const wanted = $qVal;
-                                    
                                     try {
                                         const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
                                         const descTA = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value");
@@ -423,23 +413,18 @@ object AutomationEngine {
                                         else if (desc && desc.set) desc.set.call(el, wanted);
                                         else el.value = wanted;
                                     } catch(_) {}
-                                    
-                                    if (el.value !== wanted) {
-                                        try { el.select(); document.execCommand('insertText', false, wanted); } catch(_) {}
-                                    }
-                                    
+                                    if (el.value !== wanted) { try { el.select(); document.execCommand('insertText', false, wanted); } catch(_) {} }
+                                    if (el.value !== wanted) { try { el.value = wanted; } catch(_) {} }
                                     try {
                                         el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                                         el.dispatchEvent(new Event('change', { bubbles: true }));
                                         el.dispatchEvent(new Event('blur', { bubbles: true }));
                                     } catch(_) {}
-                                    
                                     return {ok: true};
                                 } catch(e) { return {ok: false, err: e.message}; }
                             })()
                         """.trimIndent()
                         evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
-                        // No delay here — JS already waited for the element
                     }
                     StepKind.Wait -> {
                         val safeWait = step.waitMs.coerceIn(0L, MAX_WAIT_MS)
@@ -449,22 +434,19 @@ object AutomationEngine {
                     StepKind.DeleteCookies -> {
                         updateState(AutomationState.CLEARING_DATA)
                         updateStatus("Deleting site data...")
-                        var deletionAttempted = false
                         if (onShowFireDialog != null) {
                             try {
                                 suspendCancellableCoroutine<Unit> { cont ->
                                     fireDialogContinuation = cont
                                     onShowFireDialog?.invoke(step.fieldType)
                                 }
-                                deletionAttempted = true
                             } catch (e: Exception) { Log.e(TAG, "Fire dialog failed: ${e.message}") }
                         }
                         try {
                             if (step.fieldType == "delete_all") clearAllData(webView)
                             else clearTabData(webView)
-                            deletionAttempted = true
                         } catch (e: Exception) { Log.e(TAG, "Clear data failed: ${e.message}") }
-                        delay(500) // Reduced from 1000
+                        delay(500)
                     }
                     StepKind.CaptchaWait -> {
                         _captchaState.postValue(true)
@@ -495,44 +477,34 @@ object AutomationEngine {
                                         }, 50);
                                     });
                                 }
-
                                 try {
                                     let el = null;
                                     const id = $qId;
                                     const nm = $qName;
                                     const css = $qCss;
                                     const xpath = $qXpath;
-
                                     if (id) el = document.getElementById(id);
                                     if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                     if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                     if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
-                                    
-                                    if (!el) {
-                                        el = await waitForEl(css, xpath);
-                                    }
+                                    if (!el) el = await waitForEl(css, xpath);
                                     if (!el) return {ok: false, err: 'timeout'};
-                                    
                                     try { el.scrollIntoView({block: 'center'}); } catch(_) {}
                                     await new Promise(r => setTimeout(r, 150));
-                                    
                                     const rect = el.getBoundingClientRect();
                                     const cx = rect.left + rect.width / 2;
                                     const cy = rect.top + rect.height / 2;
                                     const eventInit = { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0 };
-                                    
                                     try { el.dispatchEvent(new PointerEvent("pointerdown", eventInit)); } catch(_) {}
                                     try { el.dispatchEvent(new MouseEvent("mousedown", eventInit)); } catch(_) {}
                                     try { el.dispatchEvent(new PointerEvent("pointerup", eventInit)); } catch(_) {}
                                     try { el.dispatchEvent(new MouseEvent("mouseup", eventInit)); } catch(_) {}
                                     try { el.click(); } catch(_) {}
-                                    
                                     return {ok: true};
                                 } catch(e) { return {ok: false, err: e.message}; }
                             })()
                         """.trimIndent()
                         evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
-                        // Fast wait: only 500ms for form transition, not 1500
                         delay(500)
                     }
                 }
@@ -540,17 +512,13 @@ object AutomationEngine {
             VaultRepository.markProfileUsed(profile)
             completed++
             updateProgress(completed, config.targetRepeatCount)
-            delay(500) // Fast repeat
+            delay(500)
         }
         updateState(AutomationState.COMPLETED)
         updateStatus("Finished $completed / ${config.targetRepeatCount}")
         onAutomationFinished?.invoke(completed)
     }
 
-    // ... (Keep queueAutomationInBrowserTab, startAutomation, runAutomationLoop, clearBrowserSession, clearTabData, clearAllData, resolveFireDialogResult, waitForPageReady, evaluateJsSuspend, setActiveTab, clearActiveTab, onOmnibarBotIconClicked, closeHud, startRecording, pauseRecording, resumeRecording, onRecorderElementCaptured, removeRecordedStep, assignFieldTypeToStep, stopRecordingAndPromptSave, cancelSaveRecording, saveRecording, cancelRecording, loadRecorder, mountHudOverlayIfNeeded AS THEY WERE IN THE PREVIOUS FILE)
-    
-    // I will paste the full file including the legacy methods to ensure completeness.
-    
     fun queueAutomationInBrowserTab(config: AutomationConfig) {
         currentConfig = config
         pendingBrowserConfig = config
@@ -598,7 +566,7 @@ object AutomationEngine {
             currentProfile = profile
             if (config.clearTabBetweenRuns && hudCompleted > 0) {
                 updateState(AutomationState.CLEARING_DATA)
-                updateStatus("Clearing tab cookies, storage & cache...")
+                updateStatus("Clearing tab data...")
                 clearTabData(webView)
                 delay(500)
             }
@@ -622,7 +590,6 @@ object AutomationEngine {
                 }
                 currentActionRef = scanObj.optString("actionButtonRef").takeIf { it.isNotBlank() }
                 val fillArray = JSONArray()
-                val singleFallbackValue = if (profile.fields.size == 1) profile.fields.values.firstOrNull() else null
                 for (i in 0 until fieldsArr.length()) {
                     val f = fieldsArr.getJSONObject(i)
                     val looksLike = f.optString("looksLike")
@@ -749,7 +716,10 @@ object AutomationEngine {
     fun setActiveTab(tabId: String) {
         if (activeTabId == tabId) return
         if (hudMode == HudMode.Menu) { hudMode = HudMode.Hidden; hudVisible = false }
-        if (hudMode == HudMode.Recording && activeTabId != null) { cancelRecording(); Toast.makeText(appContext, "Recording cancelled", Toast.LENGTH_SHORT).show() }
+        if (hudMode == HudMode.Recording && activeTabId != null) {
+            cancelRecording()
+            Toast.makeText(appContext, "Recording cancelled", Toast.LENGTH_SHORT).show()
+        }
         activeTabId = tabId
         _detectedFieldCount.postValue(0)
     }
@@ -805,34 +775,62 @@ object AutomationEngine {
         currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderResume(); } catch(_) {}", null)
     }
 
+    private fun sanitizeString(s: String, maxLen: Int): String {
+        return try {
+            s.filter { c -> !c.isISOControl() || c == '\n' || c == '\t' }.take(maxLen)
+        } catch (_: Exception) { "" }
+    }
+
     fun onRecorderElementCaptured(json: String, tabId: String?) {
         if (hudMode != HudMode.Recording || hudRecordingPaused) return
         try {
             val obj = JSONObject(json)
             val kindRaw = obj.optString("kind", "Field")
-            val stepKind = when (kindRaw) { "ClickNext" -> StepKind.ClickNext; "Wait" -> StepKind.Wait; "CaptchaWait" -> StepKind.CaptchaWait; else -> StepKind.Field }
-            val looksLike = obj.optString("looksLike", "")
+            val stepKind = when (kindRaw) {
+                "ClickNext" -> StepKind.ClickNext
+                "Wait" -> StepKind.Wait
+                "CaptchaWait" -> StepKind.CaptchaWait
+                else -> StepKind.Field
+            }
+
+            val cssSelector = sanitizeString(obj.optString("cssSelector", ""), 500)
+            val xpathVal = sanitizeString(obj.optString("xpath", ""), 500)
+            val domId = sanitizeString(obj.optString("domId", ""), 100)
+            val name = sanitizeString(obj.optString("name", ""), 100)
+
+            // Reject steps that would be useless at run time
+            if (cssSelector.isBlank() && xpathVal.isBlank() && domId.isBlank() && name.isBlank()) {
+                Log.w(TAG, "Rejecting step with no identifying selector")
+                return
+            }
+
+            val looksLike = sanitizeString(obj.optString("looksLike", ""), 50)
             val canonicalType = if (stepKind == StepKind.Field) FieldTypeMapper.normalizeLooksLike(looksLike) else ""
-            val displayLabel = if (stepKind == StepKind.ClickNext) obj.optString("buttonLabel", "Next button") else FieldTypeMapper.fieldRowLabel(canonicalType, obj.optString("displayLabel", ""))
+            val rawLabel = if (stepKind == StepKind.ClickNext) obj.optString("buttonLabel", "Next button")
+                           else FieldTypeMapper.fieldRowLabel(canonicalType, obj.optString("displayLabel", ""))
+            val displayLabel = sanitizeString(rawLabel, 100)
+
             val step = RecordedStep(
                 sequenceIndex = hudRecordedSteps.size + 1,
                 kind = stepKind,
                 fieldType = canonicalType,
                 displayLabel = displayLabel,
-                tag = obj.optString("tag"),
-                domType = obj.optString("domType"),
-                name = obj.optString("name"),
-                domId = obj.optString("domId"),
-                placeholder = obj.optString("placeholder"),
-                ariaLabel = obj.optString("ariaLabel"),
-                cssSelector = obj.optString("cssSelector"),
-                xpath = obj.optString("xpath"),
+                tag = sanitizeString(obj.optString("tag"), 30),
+                domType = sanitizeString(obj.optString("domType"), 30),
+                name = name,
+                domId = domId,
+                placeholder = sanitizeString(obj.optString("placeholder"), 100),
+                ariaLabel = sanitizeString(obj.optString("ariaLabel"), 100),
+                cssSelector = cssSelector,
+                xpath = xpathVal,
                 index = obj.optInt("index", -1),
-                buttonLabel = obj.optString("buttonLabel"),
+                buttonLabel = sanitizeString(obj.optString("buttonLabel"), 100),
                 verified = stepKind != StepKind.Field || canonicalType.isNotBlank(),
             )
             hudRecordedSteps = hudRecordedSteps + step
-        } catch (e: Exception) { Log.e(TAG, "Parse fail: ${e.message}") }
+        } catch (e: Exception) {
+            Log.e(TAG, "onRecorderElementCaptured parse fail: ${e.message}")
+        }
     }
 
     fun removeRecordedStep(id: String) {
@@ -889,20 +887,80 @@ object AutomationEngine {
         appContext?.assets?.open("automation/automation_recorder.js")?.bufferedReader()?.use { it.readText() }
     } catch (e: Exception) { null }
 
+    // ========================================================================
+    // HUD MOUNT + AUTO-REPOSITION (FIX for Bug 1)
+    // ========================================================================
+
     private fun mountHudOverlayIfNeeded(webView: WebView) {
         val parent = webView.parent as? ViewGroup ?: return
         if (parent.findViewWithTag<ComposeView>(HUD_VIEW_TAG) != null) return
+
         val composeView = ComposeView(webView.context).apply {
             tag = HUD_VIEW_TAG
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            // Make sure ComposeView does not intercept touches outside its bounds
             isClickable = false
             isFocusable = false
-            setContent { AutomationThemeWrapper(isLightMode = resolveDuckDuckGoIsLight(context)) { BrowserTabAutomationHud() } }
+            setContent {
+                AutomationThemeWrapper(isLightMode = resolveDuckDuckGoIsLight(context)) {
+                    BrowserTabAutomationHud()
+                }
+            }
         }
-        parent.addView(composeView, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT // Wrap content, do not fill screen
-        ).apply { gravity = Gravity.BOTTOM })
+
+        val params = if (parent is FrameLayout) {
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.BOTTOM }
+        } else {
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        parent.addView(composeView, params)
+
+        // Attach scroll listener for auto-repositioning
+        if (parent is FrameLayout) {
+            webView.viewTreeObserver.addOnScrollChangedListener {
+                updateHudPosition(webView, composeView)
+            }
+        }
+    }
+
+    /**
+     * Auto-flip HUD between TOP and BOTTOM based on WebView scroll position.
+     * When user scrolls near the bottom of the page (which the HUD would normally cover),
+     * the HUD jumps to the TOP so the bottom content becomes clickable.
+     * When they scroll back up, HUD returns to BOTTOM.
+     */
+    private fun updateHudPosition(webView: WebView, composeView: ComposeView) {
+        try {
+            val params = composeView.layoutParams as? FrameLayout.LayoutParams ?: return
+
+            val scrollY = webView.scrollY
+            val contentHeight = (webView.contentHeight * webView.scale).toInt()
+            val viewHeight = webView.height
+            val thresholdPx = (HUD_SCROLL_THRESHOLD_DP * webView.resources.displayMetrics.density).toInt()
+
+            // Short pages never trigger flip
+            if (contentHeight <= viewHeight + thresholdPx) {
+                if (params.gravity != Gravity.BOTTOM) {
+                    params.gravity = Gravity.BOTTOM
+                    composeView.layoutParams = params
+                }
+                return
+            }
+
+            val isNearBottom = (scrollY + viewHeight) >= (contentHeight - thresholdPx)
+            val newGravity = if (isNearBottom) Gravity.TOP else Gravity.BOTTOM
+
+            if (params.gravity != newGravity) {
+                params.gravity = newGravity
+                composeView.layoutParams = params
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "updateHudPosition error: ${e.message}")
+        }
     }
 }
