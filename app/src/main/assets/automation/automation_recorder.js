@@ -63,7 +63,7 @@
       if (/\b(agree|terms|privacy|policy|accept|consent|condition|age|acepto|términos|conditions)\b/i.test(combined)) return "termsCheckbox";
       return "checkbox";
     }
-    if (type === "radio") {
+    if (type === "radio" || el.getAttribute("role") === "radio") {
       if (/\b(gender|sex|male|female|género|sexo|homme|femme)\b/i.test(combined)) return "gender";
       return "radio";
     }
@@ -202,14 +202,25 @@
   }
 
   function onFocusIn(e) {
+    e.preventDefault();
+    e.stopPropagation();
     captureField(e.target);
+  }
+
+  function onMouseDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const active = document.activeElement;
+    if (active && active !== e.target && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+        captureField(active);
+    }
   }
 
   function onClick(e) {
     const el = e.target.closest('button, a, input[type="submit"], input[type="button"], [role="button"]');
     if (!el) return;
     
-    // STOP the page from navigating or submitting while recording!
+    // CRITICAL: Stop the page from navigating or submitting while recording!
     e.preventDefault();
     e.stopPropagation();
 
@@ -226,10 +237,14 @@
   }
 
   document.addEventListener("focusin", onFocusIn, true);
+  document.addEventListener("mousedown", onMouseDown, true);
+  document.addEventListener("touchstart", onMouseDown, true);
   document.addEventListener("click", onClick, true);
 
   g.__automationRecorderStop = function () {
     document.removeEventListener("focusin", onFocusIn, true);
+    document.removeEventListener("mousedown", onMouseDown, true);
+    document.removeEventListener("touchstart", onMouseDown, true);
     document.removeEventListener("click", onClick, true);
     g.__automationRecorderActive = false;
   };

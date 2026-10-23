@@ -92,7 +92,9 @@ private fun HudRecordingPanel() {
 
     Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
         Column(
-            modifier = Modifier.fillMaxWidth().clip(shape)
+            modifier = Modifier.fillMaxWidth()
+                .heightIn(max = 350.dp) // ADD THIS LINE
+                .clip(shape)
                 .background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
                 .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
                 .padding(14.dp),
@@ -321,7 +323,10 @@ private fun HudScriptEditPanel() {
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
     Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape).border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()
+            .heightIn(max = 350.dp) // ADD THIS LINE
+            .clip(shape).background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
+            .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape).padding(14.dp)) {
             HudHeaderRow("Edit Script", script.name) { AutomationEngine.openScriptList() }
             Spacer(Modifier.height(12.dp))
 

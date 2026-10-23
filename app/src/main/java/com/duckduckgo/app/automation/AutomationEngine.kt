@@ -378,10 +378,8 @@ object AutomationEngine {
 
                         var success = false
                         for (attempt in 1..3) {
-                            // FIXED: Replaced `[name="${name}"]` template literal with string concatenation
-                            // to avoid Kotlin trying to interpolate ${name} as a Kotlin variable
                             val js = """
-                                (function() {
+                                (async function() {
                                     try {
                                         let el = null;
                                         const id = '$safeId';
@@ -422,7 +420,8 @@ object AutomationEngine {
                                     } catch(e) { return {ok: false, err: e.message}; }
                                 })();
                             """.trimIndent()
-                            val result = evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                            // FIXED: Added 'await' before the js evaluation
+                            val result = evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
                             if (result.contains("\"ok\":true") || result.contains("\"ok\": true")) {
                                 success = true
                                 break
@@ -467,9 +466,8 @@ object AutomationEngine {
 
                         var success = false
                         for (attempt in 1..3) {
-                            // FIXED: Replaced `[name="${name}"]` template literal with string concatenation
                             val js = """
-                                (function() {
+                                (async function() {
                                     try {
                                         let el = null;
                                         const id = '$safeId';
@@ -498,7 +496,8 @@ object AutomationEngine {
                                     } catch(e) { return {ok: false, err: e.message}; }
                                 })();
                             """.trimIndent()
-                            val result = evaluateJsSuspend(webView, "return JSON.stringify(${js});")
+                            // FIXED: Added 'await' before the js evaluation
+                            val result = evaluateJsSuspend(webView, "return JSON.stringify(await ${js});")
                             if (result.contains("\"ok\":true") || result.contains("\"ok\": true")) {
                                 success = true
                                 break
