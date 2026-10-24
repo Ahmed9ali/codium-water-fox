@@ -30,11 +30,6 @@
     if (!el) return false;
     if (el.disabled === true || el.inert === true) return true;
     if (el.getAttribute && el.getAttribute("aria-disabled") === "true") return true;
-    const fs = el.closest && el.closest("fieldset[disabled]");
-    if (fs) {
-      const legend = fs.querySelector(":scope > legend");
-      if (!legend || !legend.contains(el)) return true;
-    }
     return false;
   };
 
@@ -90,6 +85,8 @@
     const aria = (el.getAttribute("aria-label") || "").toLowerCase();
     const lbl = findLabel(el).toLowerCase();
     const role = (el.getAttribute("role") || "").toLowerCase();
+    
+    // Prioritize explicit types or matching placeholders
     const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto + " " + role;
 
     if (type === "checkbox" || role === "checkbox") return "termsCheckbox";
@@ -129,7 +126,6 @@
   function scanPage() {
     if (document.readyState === "loading") return { fields: [], captchaDetected: false };
 
-    // UPDATED: Comprehensive selector for fields and buttons
     const fieldSelector = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="file"]), textarea, select, [role="combobox"], [role="listbox"], [contenteditable="true"]';
     const buttonSelector = 'button, a, input[type="submit"], input[type="button"], input[type="image"], [role="button"], [onclick]';
 
@@ -157,10 +153,19 @@
         const tag = (el.tagName || "").toLowerCase();
         const type = (el.type || "text").toLowerCase();
         if (type === "search" || el.closest('[role="search"], search')) continue;
+        
         const looksLike = classify(el);
         if (looksLike === "checkbox") continue;
+
         const ref = getRef(el);
         refMap.set(ref, el);
+        
+        // Fallback for custom generic inputs with placeholders
+        let finalLooksLike = looksLike;
+        if (!finalLooksLike && (el.getAttribute("placeholder") || el.getAttribute("aria-label"))) {
+            finalLooksLike = "text";
+        }
+
         fields.push({
           index: fields.length,
           ref,
@@ -168,7 +173,7 @@
           type,
           name: el.getAttribute("name") || findLabel(el) || el.id || "",
           id: el.id || "",
-          looksLike: looksLike || "text",
+          looksLike: finalLooksLike || "text",
           currentValue: el.value || el.innerText || "",
           checked: el.checked || false
         });

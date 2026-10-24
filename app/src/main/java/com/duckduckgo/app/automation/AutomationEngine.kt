@@ -59,7 +59,6 @@ object AutomationEngine {
     private const val TAG = "AutomationEngine"
     private const val HUD_VIEW_TAG = "ddg_automation_hud_overlay"
     private const val MAX_WAIT_MS = 300_000L
-    private const val HUD_SCROLL_THRESHOLD_DP = 100
 
     private var currentWebView: WeakReference<WebView>? = null
     private var scannerJs: String? = null
@@ -87,6 +86,7 @@ object AutomationEngine {
 
     var hudVisible by mutableStateOf(false); private set
     var hudMode by mutableStateOf(HudMode.Hidden); private set
+    var hudPositionTop by mutableStateOf(false); private set
     private var activeTabId: String? = null
 
     var hudState by mutableStateOf(AutomationState.IDLE); private set
@@ -730,6 +730,10 @@ object AutomationEngine {
         _detectedFieldCount.postValue(0)
     }
 
+    fun toggleHudPosition() {
+        hudPositionTop = !hudPositionTop
+    }
+
     fun onOmnibarBotIconClicked() {
         when (hudMode) {
             HudMode.Recording -> return
@@ -798,7 +802,6 @@ object AutomationEngine {
             val domId = sanitizeString(obj.optString("domId", ""), 100)
             val name = sanitizeString(obj.optString("name", ""), 100)
 
-            // Reject steps that would be useless at run time
             if (cssSelector.isBlank() && xpathVal.isBlank() && domId.isBlank() && name.isBlank()) {
                 Log.w(TAG, "Rejecting step with no identifying selector")
                 return
@@ -887,10 +890,6 @@ object AutomationEngine {
         appContext?.assets?.open("automation/automation_recorder.js")?.bufferedReader()?.use { it.readText() }
     } catch (e: Exception) { null }
 
-    // ========================================================================
-    // HUD MOUNT + AUTO-REPOSITION (FIX for Bug 1)
-    // ========================================================================
-
     private fun mountHudOverlayIfNeeded(webView: WebView) {
         val parent = webView.parent as? ViewGroup ?: return
         if (parent.findViewWithTag<ComposeView>(HUD_VIEW_TAG) != null) return
@@ -911,7 +910,7 @@ object AutomationEngine {
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = Gravity.BOTTOM }
+            ).apply { gravity = if (hudPositionTop) Gravity.TOP else Gravity.BOTTOM }
         } else {
             ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -919,48 +918,21 @@ object AutomationEngine {
             )
         }
         parent.addView(composeView, params)
-
-        // Attach scroll listener for auto-repositioning
-        if (parent is FrameLayout) {
-            webView.viewTreeObserver.addOnScrollChangedListener {
-                updateHudPosition(webView, composeView)
-            }
-        }
-    }
-
-    /**
-     * Auto-flip HUD between TOP and BOTTOM based on WebView scroll position.
-     * When user scrolls near the bottom of the page (which the HUD would normally cover),
-     * the HUD jumps to the TOP so the bottom content becomes clickable.
-     * When they scroll back up, HUD returns to BOTTOM.
-     */
-    private fun updateHudPosition(webView: WebView, composeView: ComposeView) {
-        try {
-            val params = composeView.layoutParams as? FrameLayout.LayoutParams ?: return
-
-            val scrollY = webView.scrollY
-            val contentHeight = (webView.contentHeight * webView.scale).toInt()
-            val viewHeight = webView.height
-            val thresholdPx = (HUD_SCROLL_THRESHOLD_DP * webView.resources.displayMetrics.density).toInt()
-
-            // Short pages never trigger flip
-            if (contentHeight <= viewHeight + thresholdPx) {
-                if (params.gravity != Gravity.BOTTOM) {
-                    params.gravity = Gravity.BOTTOM
-                    composeView.layoutParams = params
+        
+        // Auto flip if page is short (non-scrollable)
+        webView.postDelayed({
+            try {
+                val contentHeight = (webView.contentHeight * webView.scale).toInt()
+                val viewHeight = webView.height
+                if (contentHeight <= viewHeight + 100) {
+                    hudPositionTop = true
+                    val p = composeView.layoutParams as? FrameLayout.LayoutParams
+                    if (p != null) {
+                        p.gravity = Gravity.TOP
+                        composeView.layoutParams = p
+                    }
                 }
-                return
-            }
-
-            val isNearBottom = (scrollY + viewHeight) >= (contentHeight - thresholdPx)
-            val newGravity = if (isNearBottom) Gravity.TOP else Gravity.BOTTOM
-
-            if (params.gravity != newGravity) {
-                params.gravity = newGravity
-                composeView.layoutParams = params
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "updateHudPosition error: ${e.message}")
-        }
+            } catch (_: Exception) {}
+        }, 500)
     }
 }
