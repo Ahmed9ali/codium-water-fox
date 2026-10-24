@@ -1,5 +1,5 @@
 /*
- * Automation Recorder (v6 - Full Keyboard Suppression)
+ * Automation Recorder (v8 - Disabled Button Fix + First Load Fix)
  */
 (function () {
   "use strict";
@@ -13,14 +13,35 @@
   let isPaused = false;
   let lastTarget = null;
   let lastClickTime = 0;
+  let justRecorded = false;
+
+  // --- BUG 2 FIX: Force disabled buttons to be clickable while recording ---
+  const styleEl = document.createElement('style');
+  styleEl.id = '__automation_recorder_style';
+  styleEl.textContent = `
+    button:disabled, input:disabled, select:disabled, textarea:disabled, [aria-disabled="true"] {
+      pointer-events: auto !important;
+      cursor: crosshair !important;
+      opacity: 0.7 !important;
+    }
+  `;
+  document.head.appendChild(styleEl);
+
+  // BUG 1 FIX: Override focus to prevent keyboard
+  const originalFocus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function(...args) {
+    if (!isPaused && g.__automationRecorderInstalled) return;
+    return originalFocus.apply(this, args);
+  };
 
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
     try {
       const st = window.getComputedStyle(el);
-      if (!st || st.display === "none" || st.visibility === "hidden" || st.opacity === "0") return false;
+      if (!st || st.display === "none" || st.visibility === "hidden") return false;
       const r = el.getBoundingClientRect();
-      return r.width > 0 || r.height > 0 || el.offsetParent !== null;
+      // Relaxed visibility for mobile layouts
+      return r.width > 0 || r.height > 0 || el.offsetParent !== null || el.getClientRects().length > 0;
     } catch (_) { return false; }
   }
 
@@ -116,87 +137,101 @@
     }
   }
 
-  // BUG 2 FIX: Suppress keyboard on touch/click while recording
-  function suppressKeyboard(e) {
-    if (isPaused) return;
-    const target = e.target;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-      e.preventDefault();
-    }
-  }
-  document.addEventListener("touchstart", suppressKeyboard, true);
-  document.addEventListener("mousedown", suppressKeyboard, true);
-
   function handleEvent(e) {
     if (isPaused) return;
     if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
+    
+    // Prevent double recording (mousedown -> click)
+    if (e.type === 'click' && justRecorded) {
+      justRecorded = false;
+      return;
+    }
 
     const path = e.composedPath ? e.composedPath() : [e.target];
     let target = path[0];
-    if (!target || target.nodeType !== Node.ELEMENT_NODE || !isVisible(target)) return;
+    if (!target || target.nodeType !== Node.ELEMENT_NODE) return;
 
-    const label = target.closest("label");
-    if (label) {
-      const innerInput = label.querySelector("input, select, textarea, [role='radio'], [role='checkbox']");
-      if (innerInput) target = innerInput;
+    // Target may be an SVG or span inside a button
+    let actualTarget = target;
+    if (!['input', 'textarea', 'select', 'button', 'a'].includes(actualTarget.tagName.toLowerCase())) {
+      const parentInteractive = actualTarget.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick], [aria-disabled="true"]');
+      if (parentInteractive) actualTarget = parentInteractive;
     }
 
-    if (!['input', 'textarea', 'select', 'button', 'a'].includes(target.tagName.toLowerCase())) {
-      const parentInteractive = target.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick]');
-      if (parentInteractive) target = parentInteractive;
+    if (!isVisible(actualTarget)) return;
+
+    const label = actualTarget.closest("label");
+    if (label) {
+      const innerInput = label.querySelector("input, select, textarea, [role='radio'], [role='checkbox']");
+      if (innerInput) actualTarget = innerInput;
     }
 
     const now = Date.now();
-    if (target === lastTarget && now - lastClickTime < 500) return;
-    lastTarget = target;
+    if (actualTarget === lastTarget && now - lastClickTime < 500) return;
+    lastTarget = actualTarget;
     lastClickTime = now;
+    justRecorded = true;
 
-    const tag = target.tagName.toLowerCase();
-    const type = (target.type || '').toLowerCase();
+    const tag = actualTarget.tagName.toLowerCase();
+    const type = (actualTarget.type || '').toLowerCase();
     let kind = "Field";
-    let displayLabel = getLabel(target);
+    let displayLabel = getLabel(actualTarget);
 
-    const isLink = tag === "a" || (tag === "button" && type === "submit") || type === "submit";
+    const isLink = tag === "a" || (tag === "button") || type === "submit" || actualTarget.getAttribute("role") === "button";
     if (isLink) {
       kind = "ClickNext";
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
+      // Block navigation if it's not disabled
+      if (!actualTarget.disabled && actualTarget.getAttribute("aria-disabled") !== "true") {
+        if (e.cancelable) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+        }
+      }
     } else {
-      // Instantly blur inputs to ensure keyboard never opens
-      try { target.blur(); } catch (_) {}
+      try { actualTarget.blur(); } catch (_) {}
     }
 
-    const oldOutline = target.style.outline;
-    target.style.outline = "3px solid #06b6d4";
-    setTimeout(() => { target.style.outline = oldOutline; }, 600);
+    const oldOutline = actualTarget.style.outline;
+    actualTarget.style.outline = "3px solid #06b6d4";
+    setTimeout(() => { actualTarget.style.outline = oldOutline; }, 600);
 
     const payload = {
       kind: kind,
       tag: tag,
       domType: type || "",
-      name: target.getAttribute("name") || "",
-      domId: target.id || "",
-      placeholder: target.getAttribute("placeholder") || "",
-      ariaLabel: target.getAttribute("aria-label") || "",
-      cssSelector: getCssSelector(target),
-      xpath: getXPath(target),
-      looksLike: classify(target),
+      name: actualTarget.getAttribute("name") || "",
+      domId: actualTarget.id || "",
+      placeholder: actualTarget.getAttribute("placeholder") || "",
+      ariaLabel: actualTarget.getAttribute("aria-label") || "",
+      cssSelector: getCssSelector(actualTarget),
+      xpath: getXPath(actualTarget),
+      looksLike: classify(actualTarget),
       displayLabel: displayLabel || "Element",
       buttonLabel: kind === "ClickNext" ? (displayLabel || "Button") : "",
       verified: true
     };
     sendToBridge(payload);
+
+    // If this was mousedown/touchstart, prevent the subsequent click just in case
+    if (e.type === 'mousedown' || e.type === 'touchstart') {
+      setTimeout(() => { justRecorded = false; }, 400);
+    }
   }
 
+  // BUG 2 FIX: Listen to mousedown and touchstart to catch disabled buttons that swallow 'click'
+  document.addEventListener("mousedown", handleEvent, true);
+  document.addEventListener("touchstart", handleEvent, true);
   document.addEventListener("click", handleEvent, true);
 
   g.__automationRecorderPause = () => { isPaused = true; };
   g.__automationRecorderResume = () => { isPaused = false; };
   g.__automationRecorderStop = () => {
+    document.removeEventListener("mousedown", handleEvent, true);
+    document.removeEventListener("touchstart", handleEvent, true);
     document.removeEventListener("click", handleEvent, true);
-    document.removeEventListener("touchstart", suppressKeyboard, true);
-    document.removeEventListener("mousedown", suppressKeyboard, true);
+    if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+    HTMLElement.prototype.focus = originalFocus;
     g.__automationRecorderInstalled = false;
   };
 })();

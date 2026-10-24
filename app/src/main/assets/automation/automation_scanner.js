@@ -1,5 +1,5 @@
 /*
- * Automation Scanner (v6 - Keyboard Block + Humanize Fix)
+ * Automation Scanner (v7 - Freeze Fix + React Humanize Fix)
  */
 (function () {
   "use strict";
@@ -14,7 +14,6 @@
   const CFG = {
     MAX_IFRAME_DEPTH: 2,
     MAX_SHADOW_DEPTH: 3,
-    THROTTLE_MS: 800,
     MIN_SIZE_PX: 2,
     MAX_BUTTONS_OUT: 25,
     MAX_LINKS_OUT: 20,
@@ -22,13 +21,27 @@
     CLICK_SETTLE_POLL_MS: 100,
   };
 
-  // BUG 1 FIX: Block soft keyboard during automation
-  g.__automationDisableKeyboard = false;
-  document.addEventListener("focusin", (e) => {
-    if (g.__automationDisableKeyboard) {
-      try { e.target.blur(); } catch (_) {}
+  // Define globally so Kotlin can toggle it
+  g.__automation_active = false;
+
+  // BUG 1 FIX: Completely block focus (keyboard) if automation is active
+  const originalFocus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function(...args) {
+    if (g.__automation_active) return;
+    return originalFocus.apply(this, args);
+  };
+  
+  // BUG 1 FIX: Block touch/click on inputs that would trigger the keyboard
+  document.addEventListener("touchstart", (e) => {
+    if (g.__automation_active && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) {
+      e.preventDefault();
     }
-  }, true);
+  }, { capture: true, passive: false });
+  document.addEventListener("mousedown", (e) => {
+    if (g.__automation_active && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) {
+      e.preventDefault();
+    }
+  }, { capture: true, passive: false });
 
   const RX = {
     otp: /\b(otp|one[-\s]?time\s*(code|password)|2fa|verification\s*code|security\s*code|sms\s*code|auth\s*code)\b/i,
@@ -335,16 +348,8 @@
     return { ref: getRef(el), text: txt(el).slice(0, 60), href: attr(el, "href"), isExternal: /^https?:/i.test(attr(el, "href")) && !attr(el, "href").startsWith(location.origin) };
   }
 
-  async function scanPage() {
-    if (document.readyState === "loading") {
-      await new Promise(r => document.addEventListener("DOMContentLoaded", r, { once: true }));
-    }
-
-    let attempts = 0;
-    while (attempts < 30 && document.querySelectorAll(FIELD_SELECTOR).length === 0) {
-      await sleep(100);
-      attempts++;
-    }
+  function scanPage() {
+    if (document.readyState === "loading") return emptyResult();
 
     const fromDoc = collectAll(document, FIELD_SELECTOR, BUTTON_SELECTOR, LINK_SELECTOR);
     const fromFrames = collectFromIframes(FIELD_SELECTOR, BUTTON_SELECTOR, LINK_SELECTOR);
@@ -414,6 +419,10 @@
     };
   }
 
+  function emptyResult() {
+    return { url: location.href, fields: [], buttons: [], links: [], actionButtonRef: "", actionButtonName: "", captchaDetected: false, captchaType: "", cookieBannerPresent: false, hasIframes: false, iframeCount: 0, crossOriginIframeCount: 0, errorMessages: [] };
+  }
+
   function sendToBridge(fields) {
     const payload = JSON.stringify(fields);
     let attempts = 0;
@@ -425,8 +434,7 @@
   }
 
   async function fillFields(fieldsJson, optsJson) {
-    // BUG 1 FIX: Disable keyboard while filling
-    g.__automationDisableKeyboard = true;
+    g.__automation_active = true;
     const items = JSON.parse(fieldsJson || "[]");
     const opts = JSON.parse(optsJson || "{}");
     const typingDelay = opts.typingDelayMs || 50;
@@ -441,7 +449,7 @@
       } catch (e) { results.push({ ref: item.ref, ok: false, err: String(e) }); }
       if (fieldDelay) await sleep(fieldDelay);
     }
-    g.__automationDisableKeyboard = false;
+    // Do not set g.__automation_active = false here. Kotlin will handle it when automation finishes.
     return { filled: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results };
   }
 
@@ -466,28 +474,37 @@
       } catch (_) { return false; }
     }
     if (tag === "input" || tag === "textarea") {
-      try { el.focus(); } catch (_) {}
+      try { originalFocus.call(el); } catch (_) {}
       const proto = el.tagName.toLowerCase() === "textarea" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
       const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      
       if (!opts.humanize) {
         try { if (setter) setter.call(el, value); else el.value = value; } catch (_) { el.value = value; }
         el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
       } else {
-        // BUG 3 FIX: Use native setter for every character so React/Vue detect the change
+        // BUG 2 FIX: Native setter for every character + React tracker update
         let currentText = "";
         for (let i = 0; i < value.length; i++) {
           currentText += value[i];
-          try { if (setter) setter.call(el, currentText); else el.value = currentText; } catch (_) { el.value = currentText; }
+          try {
+            if (setter) setter.call(el, currentText);
+            else el.value = currentText;
+          } catch (_) { el.value = currentText; }
+          
           el.dispatchEvent(new Event("input", { bubbles: true }));
-          el.dispatchEvent(new Event("change", { bubbles: true }));
+          
+          // React specific: update the value tracker so React doesn't clear the field
+          if (el._valueTracker) el._valueTracker.setValue(currentText);
+          
           await sleep(opts.typingDelay * (0.5 + Math.random()));
         }
+        el.dispatchEvent(new Event("change", { bubbles: true }));
       }
       try { el.blur(); } catch (_) {}
       return true;
     }
     if (el.isContentEditable) {
-      try { el.focus(); el.innerText = value; el.dispatchEvent(new InputEvent("input", { bubbles: true, data: value, inputType: "insertText" })); } catch (_) { el.textContent = value; el.dispatchEvent(new Event("input", { bubbles: true })); }
+      try { originalFocus.call(el); el.innerText = value; el.dispatchEvent(new InputEvent("input", { bubbles: true, data: value, inputType: "insertText" })); } catch (_) { el.textContent = value; el.dispatchEvent(new Event("input", { bubbles: true })); }
       return true;
     }
     if (isCustomSelectTrigger(el)) {
@@ -557,21 +574,15 @@
     try { simulateClick(banner.acceptBtn); return { dismissed: true }; } catch (_) { return { dismissed: false }; }
   }
 
-  let throttleTimer = null;
-  let lastScanAt = 0;
+  // BUG 3 FIX: Debounced observer to prevent freezing
+  let scanTimeout = null;
   function scheduleScan() {
-    const now = Date.now();
-    const elapsed = now - lastScanAt;
-    if (elapsed >= CFG.THROTTLE_MS) {
-      lastScanAt = now;
+    if (g.__automation_active) return; // Don't scan while filling to save CPU
+    if (scanTimeout) return;
+    scanTimeout = setTimeout(() => {
+      scanTimeout = null;
       try { scanPage(); } catch (_) {}
-    } else if (!throttleTimer) {
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null;
-        lastScanAt = Date.now();
-        try { scanPage(); } catch (_) {}
-      }, CFG.THROTTLE_MS - elapsed);
-    }
+    }, 500);
   }
 
   try {

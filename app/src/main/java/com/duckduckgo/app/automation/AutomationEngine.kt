@@ -30,6 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -298,6 +299,7 @@ object AutomationEngine {
         automationJob?.cancel()
         updateState(AutomationState.PAUSED)
         updateStatus("Automation paused.")
+        currentWebView?.get()?.evaluateJavascript("try { window.__automation_active = false; } catch(_) {}", null)
     }
 
     fun resumeAutomation() {
@@ -305,6 +307,7 @@ object AutomationEngine {
         val config = currentConfig ?: return
         updateState(AutomationState.NAVIGATING)
         automationJob?.cancel()
+        currentWebView?.get()?.evaluateJavascript("try { window.__automation_active = true; } catch(_) {}", null)
         automationJob = scope.launch { runScriptExecution(script, config) }
     }
 
@@ -321,6 +324,7 @@ object AutomationEngine {
         updateStatus("")
         hudMode = HudMode.Hidden
         hudVisible = false
+        currentWebView?.get()?.evaluateJavascript("try { window.__automation_active = false; } catch(_) {}", null)
     }
 
     fun continueAfterCaptchaResolution() {
@@ -336,6 +340,7 @@ object AutomationEngine {
             VaultRepository.resetUsed(config.groupName)
             updateState(AutomationState.NAVIGATING)
             automationJob?.cancel()
+            currentWebView?.get()?.evaluateJavascript("try { window.__automation_active = true; } catch(_) {}", null)
             automationJob = scope.launch { runScriptExecution(script, config) }
         } else {
             stopAutomation()
@@ -418,18 +423,18 @@ object AutomationEngine {
                                     if (!el) return {ok: false, err: 'timeout'};
                                     
                                     el.scrollIntoView({block: 'center'});
-                                    el.focus();
-                                    try { el.click(); } catch(_) {}
                                     
                                     const wanted = $qVal;
                                     const humanize = $doHumanize;
                                     
                                     if (humanize && wanted.length > 0) {
-                                        el.value = '';
+                                        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                        let currentText = "";
                                         for (let i = 0; i < wanted.length; i++) {
-                                            el.value += wanted[i];
+                                            currentText += wanted[i];
+                                            try { if (setter) setter.call(el, currentText); else el.value = currentText; } catch(_) { el.value = currentText; }
                                             el.dispatchEvent(new Event('input', { bubbles: true }));
-                                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                                            if (el._valueTracker) el._valueTracker.setValue(currentText);
                                             await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
                                         }
                                     } else {
@@ -556,6 +561,7 @@ object AutomationEngine {
         }
         updateState(AutomationState.COMPLETED)
         updateStatus("Finished $completed / ${config.targetRepeatCount}")
+        webView.evaluateJavascript("try { window.__automation_active = false; } catch(_) {}", null)
         onAutomationFinished?.invoke(completed)
     }
 
@@ -591,6 +597,7 @@ object AutomationEngine {
         }
         mountHudOverlayIfNeeded(webView)
         automationJob?.cancel()
+        webView.evaluateJavascript("try { window.__automation_active = true; } catch(_) {}", null)
         automationJob = scope.launch { runAutomationLoop(config, navigateFirstCycle) }
     }
 
@@ -624,7 +631,6 @@ object AutomationEngine {
                 updateState(AutomationState.SCANNING)
                 updateStatus("Scanning form fields (Step $counter)...")
                 
-                // BUG FIX: Added 'await' before __automationScan() so Kotlin waits for async React/Vue fields to render
                 val scanObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationScan());")) } catch (_: Exception) { JSONObject() }
                 val fieldsArr = scanObj.optJSONArray("fields") ?: JSONArray()
                 
@@ -644,7 +650,6 @@ object AutomationEngine {
                 if (fillArray.length() == 0) {
                     if (counter == 1) {
                         delay(1200); injectScanner()
-                        // BUG FIX: Added 'await' before __automationScan()
                         val retryObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationScan());")) } catch (_: Exception) { JSONObject() }
                         if ((retryObj.optJSONArray("fields")?.length() ?: 0) > 0) { counter--; continue }
                     }
@@ -652,7 +657,7 @@ object AutomationEngine {
                 }
                 updateState(AutomationState.FILLING)
                 updateStatus("Filling ${fillArray.length()} field(s) (Step $counter)...")
-                val fillOpts = JSONObject().apply { put("typingDelayMs", config.typingDelayMs); put("fieldDelayMs", config.fieldDelayMs) }
+                val fillOpts = JSONObject().apply { put("typingDelayMs", config.typingDelayMs); put("fieldDelayMs", config.fieldDelayMs); put("humanize", config.humanize) }
                 evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill(${JSONObject.quote(fillArray.toString())}, ${JSONObject.quote(fillOpts.toString())}));")
                 delay(500)
                 updateState(AutomationState.CLICKING_NEXT)
@@ -665,7 +670,6 @@ object AutomationEngine {
                 }
                 delay(600); waitForPageReady(webView); injectScanner(); delay(500)
                 
-                // BUG FIX: Added 'await' before __automationScan()
                 val postNav = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationScan());")) } catch (_: Exception) { JSONObject() }
                 val postFields = postNav.optJSONArray("fields") ?: JSONArray()
                 var unfilled = 0
@@ -690,6 +694,7 @@ object AutomationEngine {
         }
         updateState(AutomationState.COMPLETED)
         updateStatus("Finished $hudCompleted / ${config.targetRepeatCount} automation(s)!")
+        webView.evaluateJavascript("try { window.__automation_active = false; } catch(_) {}", null)
         onAutomationFinished?.invoke(hudCompleted)
     }
 
@@ -750,16 +755,18 @@ object AutomationEngine {
     }
 
     private suspend fun evaluateJsSuspend(webView: WebView, script: String): String =
-        suspendCancellableCoroutine { cont ->
-            Handler(Looper.getMainLooper()).post {
-                val wrapped = "(async () => { try { ${script.trim()} } catch(e) { return JSON.stringify({error: e.message}); } })();"
-                webView.evaluateJavascript(wrapped) { result ->
-                    val clean = if (result.isNullOrEmpty() || result == "null") "{}" else result
-                    val unquoted = try { if (clean.startsWith("\"") && clean.endsWith("\"")) JSONTokener(clean).nextValue() as? String ?: clean else clean } catch (_: Exception) { clean }
-                    cont.resume(unquoted) { _, _, _ -> }
+        withTimeoutOrNull(8000L) { // 8 second timeout prevents freezing
+            suspendCancellableCoroutine { cont ->
+                Handler(Looper.getMainLooper()).post {
+                    val wrapped = "(async () => { try { ${script.trim()} } catch(e) { return JSON.stringify({error: e.message}); } })();"
+                    webView.evaluateJavascript(wrapped) { result ->
+                        val clean = if (result.isNullOrEmpty() || result == "null") "{}" else result
+                        val unquoted = try { if (clean.startsWith("\"") && clean.endsWith("\"")) JSONTokener(clean).nextValue() as? String ?: clean else clean } catch (_: Exception) { clean }
+                        cont.resume(unquoted) { _, _, _ -> }
+                    }
                 }
             }
-        }
+        } ?: "{}"
 
     fun setActiveTab(tabId: String) {
         if (activeTabId == tabId) return
@@ -805,10 +812,11 @@ object AutomationEngine {
         hudVisible = false
     }
 
-    fun startRecording() {
+        fun startRecording() {
         if (hudMode == HudMode.Recording) return
         val webView = currentWebView?.get() ?: return
         webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
+        webView.evaluateJavascript("try { window.__automation_active = false; } catch(_) {}", null)
         val url = webView.url.orEmpty()
         hudRecordingHost = AutomationScriptRepository.hostOfUrl(url)
         hudRecordingUrl = url
@@ -817,9 +825,16 @@ object AutomationEngine {
         hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Recording
         hudVisible = true
+        
+        // Inject immediately
+        loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (immediate)") } }
+        
+        // Inject again after 500ms in case the page was still loading
         webView.postDelayed({
-            loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected") } }
-        }, 150)
+            if (hudMode == HudMode.Recording) {
+                loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (delayed)") } }
+            }
+        }, 500)
     }
 
     fun pauseRecording() {
