@@ -86,7 +86,6 @@
     const lbl = findLabel(el).toLowerCase();
     const role = (el.getAttribute("role") || "").toLowerCase();
     
-    // Reordered: ph and aria FIRST so they take precedence over name
     const combined = ph + " " + aria + " " + lbl + " " + name + " " + id + " " + auto + " " + role;
 
     if (type === "checkbox" || role === "checkbox") return "termsCheckbox";

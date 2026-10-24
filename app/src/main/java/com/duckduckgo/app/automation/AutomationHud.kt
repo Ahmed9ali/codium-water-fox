@@ -6,12 +6,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,7 +47,6 @@ internal fun BrowserTabAutomationHud() {
 
 @Composable
 private fun HudContainer(
-    maxHeight: Int = 320,
     title: String,
     subtitle: String,
     onClose: (() -> Unit)?,
@@ -53,14 +55,18 @@ private fun HudContainer(
     val shape = RoundedCornerShape(16.dp)
     val isTop = AutomationEngine.hudPositionTop
 
+    // Enforce a strict height limit so buttons never get pushed off screen
     Box(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.65f) // Use at most 65% of screen height
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = if (isTop) Alignment.TopCenter else Alignment.BottomCenter
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = maxHeight.dp)
+                .fillMaxHeight() // Fill the 65% box
                 .clip(shape)
                 .background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
                 .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
@@ -86,6 +92,7 @@ private fun HudContainer(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            // Inner content will use weight(1f) to fill remaining space
             content()
         }
     }
@@ -98,8 +105,8 @@ private fun HudContainer(
 @Composable
 private fun HudMenuPanel() {
     val context = LocalContext.current
-    HudContainer(maxHeight = 320, title = "Automation", subtitle = "Ready on this page", onClose = { AutomationEngine.closeHud() }) {
-        Spacer(Modifier.height(8.dp))
+    HudContainer(title = "Automation", subtitle = "Ready on this page", onClose = { AutomationEngine.closeHud() }) {
+        Spacer(Modifier.weight(1f)) // Push buttons down
         DdgPrimaryButton(text = "Create Automation", onClick = { AutomationEngine.startRecording() })
         Spacer(Modifier.height(8.dp))
         DdgSecondaryButton(text = "Run Automation", onClick = { AutomationEngine.openScriptList() })
@@ -128,7 +135,6 @@ private fun HudRecordingPanel() {
     val isPaused = AutomationEngine.hudRecordingPaused
 
     HudContainer(
-        maxHeight = 340,
         title = if (isPaused) "⏸ Paused" else "● Recording",
         subtitle = if (isPaused) "Website unlocked." else "${steps.size} step(s) captured",
         onClose = null
@@ -143,30 +149,15 @@ private fun HudRecordingPanel() {
 
 @Composable
 private fun RecordingCapturePanel(steps: List<RecordedStep>, isPaused: Boolean) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         if (steps.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text("No steps yet — tap a field above.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
             }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 150.dp) // FIX: Hardcoded max height instead of weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() } // Block pull-to-refresh
-                            }
-                        }
-                    }
-            ) {
-                steps.forEach { step ->
-                    key(step.id) {
-                        RecordingStepRow(step)
-                    }
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                items(steps, key = { it.id }) { step ->
+                    RecordingStepRow(step)
                 }
             }
         }
@@ -214,11 +205,11 @@ private fun FieldTypePickerDialog(stepId: String, onDismiss: () -> Unit) {
 @Composable
 private fun RecordingSavePanel(host: String, stepCount: Int) {
     var nameInput by remember { mutableStateOf("$host Script") }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Text("Save Automation", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         Text("$stepCount step(s) captured for $host", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.weight(1f)) // Push inputs to bottom
         OutlinedTextField(value = nameInput, onValueChange = { nameInput = it }, label = { Text("Script name", fontFamily = VarelaRound, fontSize = 12.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -244,25 +235,14 @@ private fun RecordingChip(text: String, compact: Boolean = false, onClick: () ->
 @Composable
 private fun HudScriptListPanel() {
     val scripts = AutomationEngine.hudAvailableScripts
-    HudContainer(maxHeight = 380, title = "Run Automation", subtitle = "Select a script for this page", onClose = { AutomationEngine.closeHud() }) {
+    HudContainer(title = "Run Automation", subtitle = "Select a script for this page", onClose = { AutomationEngine.closeHud() }) {
         if (scripts.isEmpty()) {
-            Text("No scripts found for this website. Create one first.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text("No scripts found for this website. Create one first.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 13.sp)
+            }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 220.dp) // FIX: Hardcoded max height
-                    .verticalScroll(rememberScrollState())
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() } // Block pull-to-refresh
-                            }
-                        }
-                    }
-            ) {
-                scripts.forEach { script ->
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                items(scripts, key = { it.id }) { script ->
                     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                         DdgCard(onClick = { AutomationEngine.openRunSetup(script) }) {
                             Text(script.name, color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -296,57 +276,45 @@ private fun HudScriptEditPanel() {
     var customSelector by remember { mutableStateOf("") }
     var customValue by remember { mutableStateOf("") }
     
-    // Drag State
+    // Continuous Drag State
     var draggedId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
-    HudContainer(maxHeight = 360, title = "Edit Script", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 160.dp) // FIX: Hardcoded max height
-                .verticalScroll(rememberScrollState())
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            event.changes.forEach { it.consume() } // Block pull-to-refresh
-                        }
-                    }
-                }
-        ) {
-            script.steps.forEachIndexed { index, step ->
-                key(step.id) {
-                    val isDragging = draggedId == step.id
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).zIndex(if (isDragging) 1f else 0f)
-                            .offset { IntOffset(0, if (isDragging) dragOffset.roundToInt() else 0) }
-                            .pointerInput(script.steps.size, index) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = { draggedId = step.id; dragOffset = 0f },
-                                    onDrag = { change, dragAmount ->
-                                        change.consume()
-                                        dragOffset += dragAmount.y
-                                    },
-                                    onDragEnd = {
-                                        val threshold = 50.dp.toPx()
-                                        val itemsMoved = (dragOffset / threshold).roundToInt()
-                                        val targetIndex = (index + itemsMoved).coerceIn(0, script.steps.size - 1)
-                                        if (targetIndex != index) {
-                                            AutomationEngine.moveStepTo(step.id, targetIndex)
-                                        }
-                                        draggedId = null
-                                        dragOffset = 0f
-                                    },
-                                    onDragCancel = { draggedId = null; dragOffset = 0f }
-                                )
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("☰", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
-                        Text("${step.sequenceIndex}. ${step.displayLabel}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                        Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(8.dp))
-                    }
+    HudContainer(title = "Edit Script", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            itemsIndexed(script.steps, key = { _, step -> step.id }) { index, step ->
+                val isDragging = draggedId == step.id
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .offset { IntOffset(0, if (isDragging) dragOffset.roundToInt() else 0) }
+                        .pointerInput(script.steps.size, index) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { draggedId = step.id; dragOffset = 0f },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    dragOffset += dragAmount.y
+                                },
+                                onDragEnd = {
+                                    val threshold = 50.dp.toPx()
+                                    val itemsMoved = (dragOffset / threshold).roundToInt()
+                                    val targetIndex = (index + itemsMoved).coerceIn(0, script.steps.size - 1)
+                                    if (targetIndex != index) {
+                                        AutomationEngine.moveStepTo(step.id, targetIndex)
+                                    }
+                                    draggedId = null
+                                    dragOffset = 0f
+                                },
+                                onDragCancel = { draggedId = null; dragOffset = 0f }
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("☰", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                    Text("${step.sequenceIndex}. ${step.displayLabel}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(8.dp))
                 }
             }
         }
@@ -442,27 +410,16 @@ private fun HudRunSetupPanel() {
     val selectedGroup = AutomationEngine.hudSelectedGroup
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
-    HudContainer(maxHeight = 360, title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
+    HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
         Text("Select Data Group", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         if (groups.isEmpty()) {
-            Text("No groups available. Create one first.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text("No groups available. Create one first.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
+            }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 120.dp) // FIX: Hardcoded max height
-                    .verticalScroll(rememberScrollState())
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() } // Block pull-to-refresh
-                            }
-                        }
-                    }
-            ) {
-                groups.forEach { group ->
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                items(groups, key = { it.name }) { group ->
                     Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = selectedGroup == group.name, onClick = { AutomationEngine.updateRunGroup(group.name) })
                         Text(group.name, fontFamily = VarelaRound, fontSize = 13.sp)
@@ -498,8 +455,8 @@ private fun HudRunningPanel() {
     val status = AutomationEngine.hudStatus
     val unusedLeft = VaultRepository.unusedProfileCount(AutomationEngine.hudGroupName)
 
-    HudContainer(maxHeight = 300, title = "Automation · ${AutomationEngine.hudGroupName}", subtitle = status.ifBlank { "Running..." }, onClose = null) {
-        Spacer(Modifier.height(8.dp))
+    HudContainer(title = "Automation · ${AutomationEngine.hudGroupName}", subtitle = status.ifBlank { "Running..." }, onClose = null) {
+        Spacer(Modifier.weight(1f))
         LinearProgressIndicator(progress = { if (total <= 0) 0f else (completed.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)),
             color = DuckDuckGoTheme.colors.brand.accentBlue, trackColor = DuckDuckGoTheme.colors.backgrounds.background)

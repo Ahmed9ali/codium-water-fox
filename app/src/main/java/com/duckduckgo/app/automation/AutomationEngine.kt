@@ -193,6 +193,7 @@ object AutomationEngine {
         appContext?.assets?.open("automation/automation_scanner.js")?.bufferedReader()?.use { it.readText() }?.also { scannerJs = it }
     } catch (e: Exception) { null }
 
+    // FIXED: Removed tabId check. If the bridge fires, it's a valid detection.
     fun onFieldsDetected(json: String, tabId: String?) {
         try {
             if (json.contains("\"debug\"")) return
@@ -233,21 +234,6 @@ object AutomationEngine {
         val current = hudEditingScript ?: return
         val updatedSteps = current.steps.filterNot { it.id == id }.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
         hudEditingScript = current.copy(steps = updatedSteps)
-    }
-
-    fun moveStep(id: String, up: Boolean) {
-        val current = hudEditingScript ?: return
-        val steps = current.steps.toMutableList()
-        val idx = steps.indexOfFirst { it.id == id }
-        if (idx == -1) return
-        val targetIdx = if (up) idx - 1 else idx + 1
-        if (targetIdx in steps.indices) {
-            val temp = steps[idx]
-            steps[idx] = steps[targetIdx]
-            steps[targetIdx] = temp
-            val reindexed = steps.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
-            hudEditingScript = current.copy(steps = reindexed)
-        }
     }
 
     // NEW: Moves a step directly to a new index (used by drag-and-drop)
@@ -745,6 +731,7 @@ object AutomationEngine {
         _detectedFieldCount.postValue(0)
     }
 
+    // FIXED: Actually moves the ComposeView UI
     fun toggleHudPosition() {
         hudPositionTop = !hudPositionTop
         val webView = currentWebView?.get() ?: return
