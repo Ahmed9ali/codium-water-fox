@@ -88,9 +88,21 @@ object AutomationScriptRepository {
         save()
     }
 
-    /** Look up a single script by id. Returns null if it doesn't exist. */
     fun getScript(id: String): AutomationScript? =
         scripts.value.firstOrNull { it.id == id }
+
+    /**
+     * Renames the script with [id] to [newName].
+     * Returns true if the rename was applied, false if the id is unknown,
+     * the new name is blank after trimming, or the name didn't change.
+     */
+    fun renameScript(id: String, newName: String): Boolean {
+        val existing = scripts.value.firstOrNull { it.id == id } ?: return false
+        val trimmed = newName.trim()
+        if (trimmed.isBlank() || trimmed == existing.name) return false
+        saveScript(existing.copy(name = trimmed))
+        return true
+    }
 
     fun scriptsForHost(host: String): List<AutomationScript> =
         scripts.value
