@@ -54,29 +54,21 @@ private fun HudContainer(
     val shape = RoundedCornerShape(16.dp)
     val isTop = AutomationEngine.hudPositionTop
 
-    // FIX: Reduced HUD size using wrapContentHeight and heightIn(max)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight(align = if (isTop) Alignment.Top else Alignment.Bottom)
-            .heightIn(max = 420.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = if (isTop) Alignment.TopCenter else Alignment.BottomCenter
     ) {
-        // FIX: Added an invisible clickable layer to swallow touches and stop pull-to-refresh
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(enabled = true, onClick = {})
-        )
-        
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .wrapContentHeight()
+                .heightIn(max = 420.dp) // Strict max height for the whole HUD
                 .clip(shape)
                 .background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
                 .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
+                .clickable(enabled = true, onClick = {}) // Prevent click-through ONLY on the HUD surface
                 .padding(14.dp),
         ) {
             // Header with manual toggle
@@ -99,6 +91,7 @@ private fun HudContainer(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            // Inner content that can use weight(1f)
             content()
         }
     }
@@ -164,15 +157,8 @@ private fun RecordingCapturePanel(steps: List<RecordedStep>, isPaused: Boolean) 
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false) // Take available space, but don't force fill if not needed
                     .heightIn(max = 150.dp)
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() } // Block pull-to-refresh
-                            }
-                        }
-                    }
             ) {
                 items(steps, key = { it.id }) { step ->
                     RecordingStepRow(step)
@@ -262,15 +248,8 @@ private fun HudScriptListPanel() {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
                     .heightIn(max = 200.dp)
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() } // Block pull-to-refresh
-                            }
-                        }
-                    }
             ) {
                 items(scripts, key = { it.id }) { script ->
                     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -306,7 +285,7 @@ private fun HudScriptEditPanel() {
     var customSelector by remember { mutableStateOf("") }
     var customValue by remember { mutableStateOf("") }
     
-    // FIX: Continuous Drag State using onDragEnd
+    // Smooth Drag State
     var draggedId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
@@ -314,15 +293,8 @@ private fun HudScriptEditPanel() {
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f, fill = false)
                 .heightIn(max = 200.dp)
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            event.changes.forEach { it.consume() } // Block pull-to-refresh
-                        }
-                    }
-                }
         ) {
             itemsIndexed(script.steps, key = { _, step -> step.id }) { index, step ->
                 val isDragging = draggedId == step.id
@@ -340,7 +312,7 @@ private fun HudScriptEditPanel() {
                                     dragOffset += dragAmount.y
                                 },
                                 onDragEnd = {
-                                    // FIX: Calculate target index and apply change only on drop
+                                    // Calculate target index based on drag offset
                                     val threshold = 50.dp.toPx()
                                     val itemsMoved = (dragOffset / threshold).roundToInt()
                                     val targetIndex = (index + itemsMoved).coerceIn(0, script.steps.size - 1)
@@ -464,15 +436,8 @@ private fun HudRunSetupPanel() {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
                     .heightIn(max = 150.dp)
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() } // Block pull-to-refresh
-                            }
-                        }
-                    }
             ) {
                 items(groups, key = { it.name }) { group ->
                     Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {

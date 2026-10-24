@@ -505,8 +505,9 @@ object AutomationEngine {
                         """.trimIndent()
                         evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
                         
-                        // FIX: Wait for page to load after clicking!
+                        // FIX: 1.5s delay to allow the new page to start loading before checking readiness
                         updateStatus("Waiting for page transition...")
+                        delay(1500)
                         waitForPageReady(webView)
                         delay(1000)
                     }
