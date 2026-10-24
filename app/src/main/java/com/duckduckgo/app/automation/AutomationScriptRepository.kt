@@ -13,7 +13,8 @@ data class AutomationScript(
     val url: String,
     val host: String,
     val name: String,
-    val groupName: String = "", // Persisted data group
+    val groupName: String = "",
+    val humanize: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
     val steps: List<RecordedStep>,
@@ -24,6 +25,7 @@ data class AutomationScript(
         put("host", host)
         put("name", name)
         put("groupName", groupName)
+        put("humanize", humanize)
         put("createdAt", createdAt)
         put("updatedAt", updatedAt)
         put("steps", JSONArray().apply { steps.forEach { put(it.toJson()) } })
@@ -41,6 +43,7 @@ data class AutomationScript(
                 host = json.optString("host"),
                 name = json.optString("name"),
                 groupName = json.optString("groupName"),
+                humanize = json.optBoolean("humanize", false),
                 createdAt = json.optLong("createdAt", System.currentTimeMillis()),
                 updatedAt = json.optLong("updatedAt", System.currentTimeMillis()),
                 steps = steps,
@@ -84,15 +87,6 @@ object AutomationScriptRepository {
         scripts.value = scripts.value.filterNot { it.id == id }
         save()
     }
-    
-    fun renameScript(id: String, newName: String) {
-        scripts.value = scripts.value.map { 
-            if (it.id == id) it.copy(name = newName) else it 
-        }
-        save()
-    }
-
-    fun getScript(id: String): AutomationScript? = scripts.value.firstOrNull { it.id == id }
 
     fun scriptsForHost(host: String): List<AutomationScript> =
         scripts.value

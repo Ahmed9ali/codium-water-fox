@@ -1,9 +1,13 @@
 package com.duckduckgo.app.automation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,14 +43,15 @@ fun ScriptDetailScreen(
 
     var scriptName by remember { mutableStateOf(originalScript.name) }
     var selectedGroup by remember { mutableStateOf(originalScript.groupName) }
+    var humanize by remember { mutableStateOf(originalScript.humanize) }
     var steps by remember { mutableStateOf(originalScript.steps) }
 
     var showAddStepDialog by remember { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
 
-    // Drag state
-    var draggedIndex by remember { mutableStateOf(-1) }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
+    // Drag State
+    var draggedItemId by remember { mutableStateOf<String?>(null) }
+    var draggedOffset by remember { mutableFloatStateOf(0f) }
 
     val groups = VaultRepository.groups.value
 
@@ -108,9 +113,19 @@ fun ScriptDetailScreen(
                 }
             }
 
+            Spacer(Modifier.height(16.dp))
+
+            // Humanize Toggle
+            DdgSwitchRow(
+                title = "Humanize Behavior",
+                subtitle = "Random small waits, letter-by-letter typing, and scrolls into view",
+                checked = humanize,
+                onCheckedChange = { humanize = it }
+            )
+
             Spacer(Modifier.height(24.dp))
 
-            // Skeleton Steps (now draggable)
+            // Skeleton Steps (now LazyColumn for smooth drag)
             Text("Web Skeleton Steps", color = DuckDuckGoTheme.colors.text.primary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
             Text("Long-press ☰ to reorder", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 11.sp)
@@ -121,88 +136,86 @@ fun ScriptDetailScreen(
                     Text("No steps yet. Add a function below.", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 13.sp)
                 }
             } else {
-                steps.forEachIndexed { index, step ->
-                    val isDragging = draggedIndex == index
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                            .zIndex(if (isDragging) 1f else 0f)
-                            .offset { IntOffset(0, if (isDragging) dragOffset.roundToInt() else 0) }
-                    ) {
-                        DdgCard {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .pointerInput(steps.size) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                draggedIndex = index
-                                                dragOffset = 0f
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                dragOffset += dragAmount.y
-                                                val threshold = 60.dp.toPx()
-
-                                                if (dragOffset > threshold && index < steps.size - 1) {
-                                                    steps = steps.toMutableList().apply {
-                                                        val temp = this[index]
-                                                        this[index] = this[index + 1]
-                                                        this[index + 1] = temp
-                                                    }.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
-                                                    draggedIndex = index + 1
-                                                    dragOffset -= threshold
-                                                } else if (dragOffset < -threshold && index > 0) {
-                                                    steps = steps.toMutableList().apply {
-                                                        val temp = this[index]
-                                                        this[index] = this[index - 1]
-                                                        this[index - 1] = temp
-                                                    }.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
-                                                    draggedIndex = index - 1
-                                                    dragOffset += threshold
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = (steps.size * 90).dp, max = 600.dp) // Ensure LazyColumn gets enough height
+                ) {
+                    itemsIndexed(steps, key = { _, step -> step.id }) { index, step ->
+                        val isDragging = draggedItemId == step.id
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .offset { IntOffset(0, if (isDragging) draggedOffset.roundToInt() else 0) }
+                        ) {
+                            DdgCard {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .pointerInput(steps.size, index) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    draggedItemId = step.id
+                                                    draggedOffset = 0f
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    draggedOffset += dragAmount.y
+                                                },
+                                                onDragEnd = {
+                                                    // Calculate how many positions to move based on drag offset
+                                                    val threshold = 80.dp.toPx()
+                                                    val itemsMoved = (draggedOffset / threshold).roundToInt()
+                                                    val targetIndex = (index + itemsMoved).coerceIn(0, steps.size - 1)
+                                                    
+                                                    if (targetIndex != index) {
+                                                        val mutable = steps.toMutableList()
+                                                        val item = mutable.removeAt(index)
+                                                        mutable.add(targetIndex, item)
+                                                        steps = mutable.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
+                                                    }
+                                                    draggedItemId = null
+                                                    draggedOffset = 0f
+                                                },
+                                                onDragCancel = {
+                                                    draggedItemId = null
+                                                    draggedOffset = 0f
                                                 }
-                                            },
-                                            onDragEnd = {
-                                                draggedIndex = -1
-                                                dragOffset = 0f
-                                            },
-                                            onDragCancel = {
-                                                draggedIndex = -1
-                                                dragOffset = 0f
-                                            }
-                                        )
-                                    },
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    "☰",
-                                    color = DuckDuckGoTheme.colors.text.secondary,
-                                    fontSize = 20.sp,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
+                                            )
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
                                     Text(
-                                        "${index + 1}. ${step.displayLabel}",
-                                        color = DuckDuckGoTheme.colors.text.primary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        "Type: ${step.kind.name}",
+                                        "☰",
                                         color = DuckDuckGoTheme.colors.text.secondary,
-                                        fontSize = 12.sp
+                                        fontSize = 20.sp,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
                                     )
-                                }
-                                IconButton(onClick = {
-                                    steps = steps.filterIndexed { i, _ -> i != index }
-                                        .mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
-                                }) {
-                                    Icon(
-                                        painterResource(drawable.ic_fire_24),
-                                        contentDescription = "Delete step",
-                                        tint = DuckDuckGoTheme.colors.text.destructive
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "${index + 1}. ${step.displayLabel}",
+                                            color = DuckDuckGoTheme.colors.text.primary,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            "Type: ${step.kind.name}",
+                                            color = DuckDuckGoTheme.colors.text.secondary,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        steps = steps.filterIndexed { i, _ -> i != index }
+                                            .mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
+                                    }) {
+                                        Icon(
+                                            painterResource(drawable.ic_fire_24),
+                                            contentDescription = "Delete step",
+                                            tint = DuckDuckGoTheme.colors.text.destructive
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -222,7 +235,7 @@ fun ScriptDetailScreen(
             DdgPrimaryButton(
                 text = "Save Script",
                 onClick = {
-                    val updated = originalScript.copy(name = scriptName, groupName = selectedGroup, steps = steps)
+                    val updated = originalScript.copy(name = scriptName, groupName = selectedGroup, humanize = humanize, steps = steps)
                     AutomationScriptRepository.saveScript(updated)
                     onBack()
                 }

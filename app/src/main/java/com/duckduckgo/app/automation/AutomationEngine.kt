@@ -35,12 +35,14 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.lang.ref.WeakReference
 import java.util.UUID
+import kotlin.random.Random
 
 data class AutomationConfig(
     val targetUrl: String,
     val groupName: String,
     val mode: String,
     val targetRepeatCount: Int = 1,
+    val humanize: Boolean = false,
     val typingDelayMs: Long = 60,
     val fieldDelayMs: Long = 100,
     val settleTimeoutMs: Long = 2000,
@@ -272,7 +274,13 @@ object AutomationEngine {
             Toast.makeText(appContext, "Select a group first", Toast.LENGTH_SHORT).show()
             return
         }
-        val config = AutomationConfig(script.url, hudSelectedGroup, "series", hudRunRepeatCount)
+        val config = AutomationConfig(
+            targetUrl = script.url,
+            groupName = hudSelectedGroup,
+            mode = "series",
+            targetRepeatCount = hudRunRepeatCount,
+            humanize = script.humanize
+        )
         hudMode = HudMode.Running
         hudVisible = true
         currentConfig = config
@@ -357,7 +365,7 @@ object AutomationEngine {
             updateStatus("Loading ${script.url}...")
             withContext(Dispatchers.Main) { webView.loadUrl(script.url) }
             waitForPageReady(webView)
-            delay(1000)
+            delay(500)
 
             for (step in script.steps) {
                 if (!scope.isActive) break
@@ -369,15 +377,21 @@ object AutomationEngine {
                         val valToFill = if (step.customValue.isNotBlank()) step.customValue
                                          else profile.resolveForField(step.fieldType, step.name, step.tag) ?: ""
 
+                        // HUMANIZE: Random wait before interacting
+                        if (config.humanize) {
+                            delay(Random.nextLong(500, 3000))
+                        }
+
                         val qVal = JSONObject.quote(valToFill)
                         val qCss = JSONObject.quote(step.cssSelector)
                         val qXpath = JSONObject.quote(step.xpath)
                         val qName = JSONObject.quote(step.name)
                         val qId = JSONObject.quote(step.domId)
+                        val doHumanize = if (config.humanize) "true" else "false"
 
                         val js = """
                             (async function() {
-                                function waitForEl(selector, xpath, timeout = 3000) {
+                                function waitForEl(selector, xpath, timeout = 5000) {
                                     return new Promise(resolve => {
                                         let elapsed = 0;
                                         const interval = setInterval(() => {
@@ -402,28 +416,44 @@ object AutomationEngine {
                                     if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
                                     if (!el) el = await waitForEl(css, xpath);
                                     if (!el) return {ok: false, err: 'timeout'};
+                                    
+                                    el.scrollIntoView({block: 'center'});
                                     el.focus();
                                     try { el.click(); } catch(_) {}
+                                    
                                     const wanted = $qVal;
-                                    try {
-                                        const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
-                                        const descTA = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value");
-                                        if (el.tagName === 'TEXTAREA' && descTA && descTA.set) descTA.set.call(el, wanted);
-                                        else if (desc && desc.set) desc.set.call(el, wanted);
-                                        else el.value = wanted;
-                                    } catch(_) {}
-                                    if (el.value !== wanted) { try { el.select(); document.execCommand('insertText', false, wanted); } catch(_) {} }
-                                    if (el.value !== wanted) { try { el.value = wanted; } catch(_) {} }
-                                    try {
-                                        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                        el.dispatchEvent(new Event('change', { bubbles: true }));
-                                        el.dispatchEvent(new Event('blur', { bubbles: true }));
-                                    } catch(_) {}
+                                    const humanize = $doHumanize;
+                                    
+                                    if (humanize && wanted.length > 0) {
+                                        el.value = '';
+                                        for (let i = 0; i < wanted.length; i++) {
+                                            el.value += wanted[i];
+                                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                                            await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+                                        }
+                                    } else {
+                                        try {
+                                            const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+                                            const descTA = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value");
+                                            if (el.tagName === 'TEXTAREA' && descTA && descTA.set) descTA.set.call(el, wanted);
+                                            else if (desc && desc.set) desc.set.call(el, wanted);
+                                            else el.value = wanted;
+                                        } catch(_) {}
+                                        if (el.value !== wanted) { try { el.select(); document.execCommand('insertText', false, wanted); } catch(_) {} }
+                                        if (el.value !== wanted) { try { el.value = wanted; } catch(_) {} }
+                                    }
+                                    
+                                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                    el.dispatchEvent(new Event('blur', { bubbles: true }));
                                     return {ok: true};
                                 } catch(e) { return {ok: false, err: e.message}; }
                             })()
                         """.trimIndent()
                         evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
+                        
+                        if (config.humanize) delay(Random.nextLong(100, 500))
                     }
                     StepKind.Wait -> {
                         val safeWait = step.waitMs.coerceIn(0L, MAX_WAIT_MS)
@@ -456,6 +486,11 @@ object AutomationEngine {
                         updateState(AutomationState.CLICKING_NEXT)
                         updateStatus("Clicking ${step.displayLabel}...")
 
+                        // HUMANIZE: Random wait before clicking
+                        if (config.humanize) {
+                            delay(Random.nextLong(500, 3000))
+                        }
+
                         val qCss = JSONObject.quote(step.cssSelector)
                         val qXpath = JSONObject.quote(step.xpath)
                         val qName = JSONObject.quote(step.name)
@@ -463,7 +498,7 @@ object AutomationEngine {
 
                         val js = """
                             (async function() {
-                                function waitForEl(selector, xpath, timeout = 3000) {
+                                function waitForEl(selector, xpath, timeout = 5000) {
                                     return new Promise(resolve => {
                                         let elapsed = 0;
                                         const interval = setInterval(() => {
@@ -488,8 +523,10 @@ object AutomationEngine {
                                     if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
                                     if (!el) el = await waitForEl(css, xpath);
                                     if (!el) return {ok: false, err: 'timeout'};
-                                    try { el.scrollIntoView({block: 'center'}); } catch(_) {}
+                                    
+                                    el.scrollIntoView({block: 'center'});
                                     await new Promise(r => setTimeout(r, 150));
+                                    
                                     const rect = el.getBoundingClientRect();
                                     const cx = rect.left + rect.width / 2;
                                     const cy = rect.top + rect.height / 2;
@@ -505,11 +542,10 @@ object AutomationEngine {
                         """.trimIndent()
                         evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
                         
-                        // FIX: 1.5s delay to allow the new page to start loading before checking readiness
                         updateStatus("Waiting for page transition...")
-                        delay(1500)
+                        delay(500)
                         waitForPageReady(webView)
-                        delay(1000)
+                        delay(500)
                     }
                 }
             }
@@ -695,13 +731,15 @@ object AutomationEngine {
         fireDialogContinuation = null
     }
 
+    // FASTER PAGE LOAD WAIT
     private suspend fun waitForPageReady(webView: WebView) {
         var waited = 0L
-        while (waited < 10000L) {
+        while (waited < 5000L) { // 5 sec max
             val progress = withContext(Dispatchers.Main) { webView.progress }
             val state = evaluateJsSuspend(webView, "return document.readyState;")
-            if (progress >= 90 && (state.contains("interactive") || state.contains("complete"))) break
-            delay(250); waited += 250
+            if (progress >= 80 && (state.contains("interactive") || state.contains("complete"))) break
+            delay(100)
+            waited += 100
         }
     }
 
@@ -876,7 +914,7 @@ object AutomationEngine {
         val finalName = name.trim().ifBlank { "${hudRecordingHost} Script" }
         val script = AutomationScript(
             id = UUID.randomUUID().toString(), url = hudRecordingUrl, host = hudRecordingHost,
-            name = finalName, groupName = "", createdAt = System.currentTimeMillis(),
+            name = finalName, groupName = "", humanize = false, createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(), steps = hudRecordedSteps
         )
         AutomationScriptRepository.saveScript(script)

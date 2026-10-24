@@ -22,8 +22,6 @@ data class RecordedStep(
     val xpath: String = "",
     val index: Int = -1,
 
-    // NEW: Value for custom-added Field steps. When non-blank, takes priority
-    // over profile.resolveForField at execution time.
     val customValue: String = "",
 
     val waitMs: Long = 0L,
