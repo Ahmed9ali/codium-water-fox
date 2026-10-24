@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -55,18 +54,26 @@ private fun HudContainer(
     val shape = RoundedCornerShape(16.dp)
     val isTop = AutomationEngine.hudPositionTop
 
-    // Enforce a strict height limit so buttons never get pushed off screen
+    // FIX: Reduced HUD size using wrapContentHeight and heightIn(max)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.65f) // Use at most 65% of screen height
+            .wrapContentHeight(align = if (isTop) Alignment.Top else Alignment.Bottom)
+            .heightIn(max = 420.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = if (isTop) Alignment.TopCenter else Alignment.BottomCenter
     ) {
+        // FIX: Added an invisible clickable layer to swallow touches and stop pull-to-refresh
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(enabled = true, onClick = {})
+        )
+        
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight() // Fill the 65% box
+                .wrapContentHeight()
                 .clip(shape)
                 .background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
                 .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
@@ -92,7 +99,6 @@ private fun HudContainer(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            // Inner content will use weight(1f) to fill remaining space
             content()
         }
     }
@@ -106,7 +112,7 @@ private fun HudContainer(
 private fun HudMenuPanel() {
     val context = LocalContext.current
     HudContainer(title = "Automation", subtitle = "Ready on this page", onClose = { AutomationEngine.closeHud() }) {
-        Spacer(Modifier.weight(1f)) // Push buttons down
+        Spacer(Modifier.height(8.dp))
         DdgPrimaryButton(text = "Create Automation", onClick = { AutomationEngine.startRecording() })
         Spacer(Modifier.height(8.dp))
         DdgSecondaryButton(text = "Run Automation", onClick = { AutomationEngine.openScriptList() })
@@ -149,13 +155,25 @@ private fun HudRecordingPanel() {
 
 @Composable
 private fun RecordingCapturePanel(steps: List<RecordedStep>, isPaused: Boolean) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         if (steps.isEmpty()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                 Text("No steps yet — tap a field above.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 150.dp)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() } // Block pull-to-refresh
+                            }
+                        }
+                    }
+            ) {
                 items(steps, key = { it.id }) { step ->
                     RecordingStepRow(step)
                 }
@@ -205,11 +223,11 @@ private fun FieldTypePickerDialog(stepId: String, onDismiss: () -> Unit) {
 @Composable
 private fun RecordingSavePanel(host: String, stepCount: Int) {
     var nameInput by remember { mutableStateOf("$host Script") }
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text("Save Automation", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         Text("$stepCount step(s) captured for $host", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
-        Spacer(Modifier.weight(1f)) // Push inputs to bottom
+        Spacer(Modifier.height(10.dp))
         OutlinedTextField(value = nameInput, onValueChange = { nameInput = it }, label = { Text("Script name", fontFamily = VarelaRound, fontSize = 12.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -237,11 +255,23 @@ private fun HudScriptListPanel() {
     val scripts = AutomationEngine.hudAvailableScripts
     HudContainer(title = "Run Automation", subtitle = "Select a script for this page", onClose = { AutomationEngine.closeHud() }) {
         if (scripts.isEmpty()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                 Text("No scripts found for this website. Create one first.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 13.sp)
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() } // Block pull-to-refresh
+                            }
+                        }
+                    }
+            ) {
                 items(scripts, key = { it.id }) { script ->
                     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                         DdgCard(onClick = { AutomationEngine.openRunSetup(script) }) {
@@ -276,12 +306,24 @@ private fun HudScriptEditPanel() {
     var customSelector by remember { mutableStateOf("") }
     var customValue by remember { mutableStateOf("") }
     
-    // Continuous Drag State
+    // FIX: Continuous Drag State using onDragEnd
     var draggedId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
     HudContainer(title = "Edit Script", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
-        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 200.dp)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { it.consume() } // Block pull-to-refresh
+                        }
+                    }
+                }
+        ) {
             itemsIndexed(script.steps, key = { _, step -> step.id }) { index, step ->
                 val isDragging = draggedId == step.id
                 Row(
@@ -298,6 +340,7 @@ private fun HudScriptEditPanel() {
                                     dragOffset += dragAmount.y
                                 },
                                 onDragEnd = {
+                                    // FIX: Calculate target index and apply change only on drop
                                     val threshold = 50.dp.toPx()
                                     val itemsMoved = (dragOffset / threshold).roundToInt()
                                     val targetIndex = (index + itemsMoved).coerceIn(0, script.steps.size - 1)
@@ -414,11 +457,23 @@ private fun HudRunSetupPanel() {
         Text("Select Data Group", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         if (groups.isEmpty()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                 Text("No groups available. Create one first.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
             }
         } else {
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 150.dp)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() } // Block pull-to-refresh
+                            }
+                        }
+                    }
+            ) {
                 items(groups, key = { it.name }) { group ->
                     Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = selectedGroup == group.name, onClick = { AutomationEngine.updateRunGroup(group.name) })
@@ -456,7 +511,7 @@ private fun HudRunningPanel() {
     val unusedLeft = VaultRepository.unusedProfileCount(AutomationEngine.hudGroupName)
 
     HudContainer(title = "Automation · ${AutomationEngine.hudGroupName}", subtitle = status.ifBlank { "Running..." }, onClose = null) {
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(8.dp))
         LinearProgressIndicator(progress = { if (total <= 0) 0f else (completed.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)),
             color = DuckDuckGoTheme.colors.brand.accentBlue, trackColor = DuckDuckGoTheme.colors.backgrounds.background)

@@ -193,7 +193,6 @@ object AutomationEngine {
         appContext?.assets?.open("automation/automation_scanner.js")?.bufferedReader()?.use { it.readText() }?.also { scannerJs = it }
     } catch (e: Exception) { null }
 
-    // FIXED: Removed tabId check. If the bridge fires, it's a valid detection.
     fun onFieldsDetected(json: String, tabId: String?) {
         try {
             if (json.contains("\"debug\"")) return
@@ -236,7 +235,6 @@ object AutomationEngine {
         hudEditingScript = current.copy(steps = updatedSteps)
     }
 
-    // NEW: Moves a step directly to a new index (used by drag-and-drop)
     fun moveStepTo(id: String, newIndex: Int) {
         val current = hudEditingScript ?: return
         val steps = current.steps.toMutableList()
@@ -359,7 +357,7 @@ object AutomationEngine {
             updateStatus("Loading ${script.url}...")
             withContext(Dispatchers.Main) { webView.loadUrl(script.url) }
             waitForPageReady(webView)
-            delay(300)
+            delay(1000)
 
             for (step in script.steps) {
                 if (!scope.isActive) break
@@ -506,7 +504,11 @@ object AutomationEngine {
                             })()
                         """.trimIndent()
                         evaluateJsSuspend(webView, "return JSON.stringify(await $js);")
-                        delay(500)
+                        
+                        // FIX: Wait for page to load after clicking!
+                        updateStatus("Waiting for page transition...")
+                        waitForPageReady(webView)
+                        delay(1000)
                     }
                 }
             }
@@ -731,7 +733,6 @@ object AutomationEngine {
         _detectedFieldCount.postValue(0)
     }
 
-    // FIXED: Actually moves the ComposeView UI
     fun toggleHudPosition() {
         hudPositionTop = !hudPositionTop
         val webView = currentWebView?.get() ?: return
@@ -927,20 +928,5 @@ object AutomationEngine {
             )
         }
         parent.addView(composeView, params)
-        
-        webView.postDelayed({
-            try {
-                val contentHeight = (webView.contentHeight * webView.scale).toInt()
-                val viewHeight = webView.height
-                if (contentHeight <= viewHeight + 100) {
-                    hudPositionTop = true
-                    val p = composeView.layoutParams as? FrameLayout.LayoutParams
-                    if (p != null) {
-                        p.gravity = Gravity.TOP
-                        composeView.layoutParams = p
-                    }
-                }
-            } catch (_: Exception) {}
-        }, 500)
     }
 }
