@@ -1,24 +1,21 @@
 /*
- * Automation Recorder
- * Listens to clicks and sends structured payloads to the AutomationBridge
- * for the Kotlin engine to record as steps.
+ * Automation Recorder (v3)
+ * Captures clicks, maps to inputs, blocks navigation while active.
  */
 (function () {
   "use strict";
   const g = globalThis;
 
-  // Prevent double-injection
-  if (g.__automationRecorderInstalled) return;
+  // Clean up previous instance if re-injected
+  if (g.__automationRecorderStop) {
+    try { g.__automationRecorderStop(); } catch (_) {}
+  }
   g.__automationRecorderInstalled = true;
 
   let isPaused = false;
   let lastTarget = null;
   let lastClickTime = 0;
 
-  // ===========================================================================
-  // DOM UTILITIES
-  // ===========================================================================
-  
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
     try {
@@ -44,7 +41,6 @@
       }
       
       let parent = current.parentElement;
-      // Handle Shadow DOM parents
       if (!parent && current.getRootNode() instanceof ShadowRoot) {
         parent = current.getRootNode().host;
       }
@@ -64,7 +60,6 @@
   function getXPath(el) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
     if (el.id) return `//*[@id="${el.id}"]`;
-    
     let path = [];
     let current = el;
     while (current && current.nodeType === Node.ELEMENT_NODE) {
@@ -98,16 +93,12 @@
     const type = (el.type || "").toLowerCase();
     const role = (el.getAttribute("role") || "").toLowerCase();
     const ac = (el.getAttribute("autocomplete") || "").toLowerCase();
-    
     const combined = `${getLabel(el)} ${el.name || ""} ${el.id || ""}`.toLowerCase();
 
-    // 1. Checkbox / Radio / Switch
     if (type === "checkbox" || type === "radio" || role === "checkbox" || role === "radio" || role === "switch") {
       if (/\b(gender|sex|male|female)\b/i.test(combined)) return "gender";
       return "termscheckbox";
     }
-    
-    // 2. Autocomplete
     if (ac) {
       if (ac.includes("email")) return "email";
       if (ac.includes("tel")) return "phone";
@@ -119,14 +110,11 @@
       if (ac.includes("street")) return "address";
       if (ac.includes("postal")) return "zip";
     }
-    
-    // 3. Input type
     if (type === "email") return "email";
     if (type === "tel") return "phone";
     if (type === "password") return "password";
     if (type === "date") return "dob";
     
-    // 4. Keyword matching
     if (/\b(first|given)\s*name\b|\bfname\b/.test(combined)) return "firstName";
     if (/\b(last|family|sur)\s*name\b|\blname\b/.test(combined)) return "lastName";
     if (/\b(full\s*name|your\s*name|name)\b/.test(combined)) return "fullName";
@@ -138,51 +126,38 @@
     if (/\b(zip|postal)\b/.test(combined)) return "zip";
     if (/\b(country)\b/.test(combined)) return "country";
     if (tag === "textarea" || /\b(message|comment|description)\b/.test(combined)) return "message";
-    
     return "text";
   }
 
   function sendToBridge(data) {
     if (window.AutomationBridge && window.AutomationBridge.onElementRecorded) {
-      try {
-        window.AutomationBridge.onElementRecorded(JSON.stringify(data));
-      } catch (e) {
-        console.error("Recorder bridge error", e);
-      }
+      try { window.AutomationBridge.onElementRecorded(JSON.stringify(data)); } catch (_) {}
     }
   }
 
-  // ===========================================================================
-  // CORE RECORDING LOGIC
-  // ===========================================================================
-  
   function handleEvent(e) {
     if (isPaused) return;
     
-    // Ignore events from the native HUD
+    // Ignore clicks on the DuckDuckGo HUD
     if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
 
-    // composedPath() ensures we see the click even if it happened inside a Shadow DOM
     const path = e.composedPath();
     let target = path[0];
+    if (!target || target.nodeType !== Node.ELEMENT_NODE || !isVisible(target)) return;
 
-    if (!target || target.nodeType !== Node.ELEMENT_NODE) return;
-    if (!isVisible(target)) return;
-
-    // Resolve labels/span clicks to their inner inputs
+    // Resolve label clicks to inputs
     const label = target.closest("label");
     if (label) {
       const innerInput = label.querySelector("input, select, textarea, [role='radio'], [role='checkbox']");
       if (innerInput) target = innerInput;
     }
 
-    // Climb up to interactive elements if we clicked an inner icon or span
+    // Climb up if we clicked an icon inside a button/link
     if (!['input', 'textarea', 'select', 'button', 'a'].includes(target.tagName.toLowerCase())) {
       const parentInteractive = target.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick]');
       if (parentInteractive) target = parentInteractive;
     }
 
-    // Debounce (prevent 2 clicks on the same element within 500ms)
     const now = Date.now();
     if (target === lastTarget && now - lastClickTime < 500) return;
     lastTarget = target;
@@ -190,16 +165,25 @@
 
     const tag = target.tagName.toLowerCase();
     const type = (target.type || '').toLowerCase();
-    
     let kind = "Field";
     let displayLabel = getLabel(target);
 
-    // If it's a button, link, or submit input, it's a "ClickNext" step
+    // Detect navigation elements
     if (tag === "button" || tag === "a" || type === "submit" || type === "button" || target.getAttribute("role") === "button") {
       kind = "ClickNext";
+      
+      // BUG 3 FIX: Block navigation/action while recording.
+      // Only block links and actual submits, so dropdowns still open.
+      if (tag === "a" && target.hasAttribute("href")) {
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (type === "submit") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     }
 
-    // Visual feedback (flashes cyan)
+    // Visual feedback
     const oldOutline = target.style.outline;
     target.style.outline = "3px solid #06b6d4";
     setTimeout(() => { target.style.outline = oldOutline; }, 600);
@@ -219,16 +203,9 @@
       buttonLabel: kind === "ClickNext" ? (displayLabel || "Button") : "",
       verified: true
     };
-
     sendToBridge(payload);
   }
 
-  // ===========================================================================
-  // LIFECYCLE HOOKS
-  // ===========================================================================
-  
-  // "true" at the end is CRITICAL: it listens in the capture phase, preventing
-  // websites from using stopPropagation() to break the recorder.
   document.addEventListener("click", handleEvent, true);
 
   g.__automationRecorderPause = () => { isPaused = true; };
@@ -237,6 +214,4 @@
     document.removeEventListener("click", handleEvent, true);
     g.__automationRecorderInstalled = false;
   };
-
-  console.log("Automation Recorder successfully injected.");
 })();
