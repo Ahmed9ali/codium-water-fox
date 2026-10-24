@@ -1,5 +1,5 @@
 /*
- * Automation Scanner (v5 - Async, Fast, Reliable)
+ * Automation Scanner (v6 - Keyboard Block + Humanize Fix)
  */
 (function () {
   "use strict";
@@ -21,6 +21,14 @@
     FILL_DELAY_MS: 50,
     CLICK_SETTLE_POLL_MS: 100,
   };
+
+  // BUG 1 FIX: Block soft keyboard during automation
+  g.__automationDisableKeyboard = false;
+  document.addEventListener("focusin", (e) => {
+    if (g.__automationDisableKeyboard) {
+      try { e.target.blur(); } catch (_) {}
+    }
+  }, true);
 
   const RX = {
     otp: /\b(otp|one[-\s]?time\s*(code|password)|2fa|verification\s*code|security\s*code|sms\s*code|auth\s*code)\b/i,
@@ -417,6 +425,8 @@
   }
 
   async function fillFields(fieldsJson, optsJson) {
+    // BUG 1 FIX: Disable keyboard while filling
+    g.__automationDisableKeyboard = true;
     const items = JSON.parse(fieldsJson || "[]");
     const opts = JSON.parse(optsJson || "{}");
     const typingDelay = opts.typingDelayMs || 50;
@@ -431,6 +441,7 @@
       } catch (e) { results.push({ ref: item.ref, ok: false, err: String(e) }); }
       if (fieldDelay) await sleep(fieldDelay);
     }
+    g.__automationDisableKeyboard = false;
     return { filled: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results };
   }
 
@@ -462,9 +473,15 @@
         try { if (setter) setter.call(el, value); else el.value = value; } catch (_) { el.value = value; }
         el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
       } else {
-        el.value = "";
-        for (let i = 0; i < value.length; i++) { el.value += value[i]; el.dispatchEvent(new Event("input", { bubbles: true })); await sleep(opts.typingDelay * (0.5 + Math.random())); }
-        el.dispatchEvent(new Event("change", { bubbles: true }));
+        // BUG 3 FIX: Use native setter for every character so React/Vue detect the change
+        let currentText = "";
+        for (let i = 0; i < value.length; i++) {
+          currentText += value[i];
+          try { if (setter) setter.call(el, currentText); else el.value = currentText; } catch (_) { el.value = currentText; }
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          await sleep(opts.typingDelay * (0.5 + Math.random()));
+        }
       }
       try { el.blur(); } catch (_) {}
       return true;

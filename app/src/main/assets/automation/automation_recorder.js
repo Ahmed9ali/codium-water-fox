@@ -1,5 +1,5 @@
 /*
- * Automation Recorder (v5 - Reliable Link Blocking)
+ * Automation Recorder (v6 - Full Keyboard Suppression)
  */
 (function () {
   "use strict";
@@ -116,6 +116,17 @@
     }
   }
 
+  // BUG 2 FIX: Suppress keyboard on touch/click while recording
+  function suppressKeyboard(e) {
+    if (isPaused) return;
+    const target = e.target;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+      e.preventDefault();
+    }
+  }
+  document.addEventListener("touchstart", suppressKeyboard, true);
+  document.addEventListener("mousedown", suppressKeyboard, true);
+
   function handleEvent(e) {
     if (isPaused) return;
     if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
@@ -148,10 +159,12 @@
     const isLink = tag === "a" || (tag === "button" && type === "submit") || type === "submit";
     if (isLink) {
       kind = "ClickNext";
-      // BUG FIX: Prevent ANY navigation or form submission while recording
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+    } else {
+      // Instantly blur inputs to ensure keyboard never opens
+      try { target.blur(); } catch (_) {}
     }
 
     const oldOutline = target.style.outline;
@@ -182,6 +195,8 @@
   g.__automationRecorderResume = () => { isPaused = false; };
   g.__automationRecorderStop = () => {
     document.removeEventListener("click", handleEvent, true);
+    document.removeEventListener("touchstart", suppressKeyboard, true);
+    document.removeEventListener("mousedown", suppressKeyboard, true);
     g.__automationRecorderInstalled = false;
   };
 })();

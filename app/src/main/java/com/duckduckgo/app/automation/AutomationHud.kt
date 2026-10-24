@@ -450,10 +450,34 @@ private fun HudRunSetupPanel() {
         Spacer(Modifier.height(8.dp))
         Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            DdgSecondaryButton(text = "-1", onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) }, modifier = Modifier.width(60.dp))
-            Text("$repeatCount", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontFamily = VarelaRound, fontSize = 16.sp)
-            DdgSecondaryButton(text = "+1", onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) }, modifier = Modifier.width(60.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // BUG FIX: Redesigned buttons to look cleaner and compact
+            OutlinedIconButton(
+                onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) },
+                modifier = Modifier.size(36.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+            Text(
+                "$repeatCount",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                fontFamily = VarelaRound,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = DuckDuckGoTheme.colors.text.primary
+            )
+            OutlinedIconButton(
+                onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) },
+                modifier = Modifier.size(36.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
         }
         Spacer(Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
