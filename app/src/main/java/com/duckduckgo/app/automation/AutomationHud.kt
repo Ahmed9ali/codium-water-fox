@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -151,20 +152,22 @@ private fun RecordingCapturePanel(steps: List<RecordedStep>, isPaused: Boolean) 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .heightIn(max = 140.dp)
+                    .heightIn(max = 150.dp) // FIX: Hardcoded max height instead of weight(1f)
                     .verticalScroll(rememberScrollState())
                     .pointerInput(Unit) {
-                        // Consume drag to prevent pull-to-refresh
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() }
+                                event.changes.forEach { it.consume() } // Block pull-to-refresh
                             }
                         }
                     }
             ) {
-                steps.forEach { step -> RecordingStepRow(step) }
+                steps.forEach { step ->
+                    key(step.id) {
+                        RecordingStepRow(step)
+                    }
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -248,14 +251,13 @@ private fun HudScriptListPanel() {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .heightIn(max = 220.dp)
+                    .heightIn(max = 220.dp) // FIX: Hardcoded max height
                     .verticalScroll(rememberScrollState())
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() }
+                                event.changes.forEach { it.consume() } // Block pull-to-refresh
                             }
                         }
                     }
@@ -294,58 +296,57 @@ private fun HudScriptEditPanel() {
     var customSelector by remember { mutableStateOf("") }
     var customValue by remember { mutableStateOf("") }
     
-    // Continuous Drag State
-    var draggedIndex by remember { mutableStateOf(-1) }
+    // Drag State
+    var draggedId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
     HudContainer(maxHeight = 360, title = "Edit Script", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f, fill = false)
-                .heightIn(max = 150.dp)
+                .heightIn(max = 160.dp) // FIX: Hardcoded max height
                 .verticalScroll(rememberScrollState())
                 .pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
-                            event.changes.forEach { it.consume() }
+                            event.changes.forEach { it.consume() } // Block pull-to-refresh
                         }
                     }
                 }
         ) {
             script.steps.forEachIndexed { index, step ->
-                val isDragging = draggedIndex == index
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).zIndex(if (isDragging) 1f else 0f)
-                        .offset { IntOffset(0, if (isDragging) dragOffset.roundToInt() else 0) }
-                        .pointerInput(script.steps.size, index) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { draggedIndex = index; dragOffset = 0f },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    dragOffset += dragAmount.y
-                                    val threshold = 50.dp.toPx()
-                                    
-                                    // Instead of moving immediately, we just track offset.
-                                    // We commit the move when crossing the threshold.
-                                    val targetIndex = index + (dragOffset / threshold).toInt()
-                                    
-                                    if (targetIndex != index && targetIndex in script.steps.indices) {
-                                        AutomationEngine.moveStep(step.id, up = (targetIndex < index))
-                                        draggedIndex = targetIndex
-                                        dragOffset -= (targetIndex - index) * threshold
-                                    }
-                                },
-                                onDragEnd = { draggedIndex = -1; dragOffset = 0f },
-                                onDragCancel = { draggedIndex = -1; dragOffset = 0f }
-                            )
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("☰", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
-                    Text("${step.sequenceIndex}. ${step.displayLabel}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                    Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(8.dp))
+                key(step.id) {
+                    val isDragging = draggedId == step.id
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).zIndex(if (isDragging) 1f else 0f)
+                            .offset { IntOffset(0, if (isDragging) dragOffset.roundToInt() else 0) }
+                            .pointerInput(script.steps.size, index) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { draggedId = step.id; dragOffset = 0f },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        dragOffset += dragAmount.y
+                                    },
+                                    onDragEnd = {
+                                        val threshold = 50.dp.toPx()
+                                        val itemsMoved = (dragOffset / threshold).roundToInt()
+                                        val targetIndex = (index + itemsMoved).coerceIn(0, script.steps.size - 1)
+                                        if (targetIndex != index) {
+                                            AutomationEngine.moveStepTo(step.id, targetIndex)
+                                        }
+                                        draggedId = null
+                                        dragOffset = 0f
+                                    },
+                                    onDragCancel = { draggedId = null; dragOffset = 0f }
+                                )
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("☰", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                        Text("${step.sequenceIndex}. ${step.displayLabel}", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text("×", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 16.sp, modifier = Modifier.clickable { AutomationEngine.removeStepFromEditingScript(step.id) }.padding(8.dp))
+                    }
                 }
             }
         }
@@ -450,14 +451,13 @@ private fun HudRunSetupPanel() {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .heightIn(max = 140.dp)
+                    .heightIn(max = 120.dp) // FIX: Hardcoded max height
                     .verticalScroll(rememberScrollState())
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() }
+                                event.changes.forEach { it.consume() } // Block pull-to-refresh
                             }
                         }
                     }

@@ -250,6 +250,21 @@ object AutomationEngine {
         }
     }
 
+    // NEW: Moves a step directly to a new index (used by drag-and-drop)
+    fun moveStepTo(id: String, newIndex: Int) {
+        val current = hudEditingScript ?: return
+        val steps = current.steps.toMutableList()
+        val idx = steps.indexOfFirst { it.id == id }
+        if (idx == -1 || idx == newIndex) return
+        if (newIndex !in steps.indices) return
+        
+        val step = steps.removeAt(idx)
+        steps.add(newIndex, step)
+        
+        val reindexed = steps.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
+        hudEditingScript = current.copy(steps = reindexed)
+    }
+
     fun updateWaitStep(id: String, newWaitMs: Long) {
         val current = hudEditingScript ?: return
         val cappedMs = newWaitMs.coerceIn(0L, MAX_WAIT_MS)
@@ -732,6 +747,13 @@ object AutomationEngine {
 
     fun toggleHudPosition() {
         hudPositionTop = !hudPositionTop
+        val webView = currentWebView?.get() ?: return
+        val parent = webView.parent as? ViewGroup ?: return
+        val composeView = parent.findViewWithTag<ComposeView>(HUD_VIEW_TAG) ?: return
+        val params = composeView.layoutParams as? FrameLayout.LayoutParams ?: return
+        params.gravity = if (hudPositionTop) Gravity.TOP else Gravity.BOTTOM
+        composeView.layoutParams = params
+        composeView.requestLayout()
     }
 
     fun onOmnibarBotIconClicked() {
@@ -919,7 +941,6 @@ object AutomationEngine {
         }
         parent.addView(composeView, params)
         
-        // Auto flip if page is short (non-scrollable)
         webView.postDelayed({
             try {
                 val contentHeight = (webView.contentHeight * webView.scale).toInt()

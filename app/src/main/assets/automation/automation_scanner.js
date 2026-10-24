@@ -86,8 +86,8 @@
     const lbl = findLabel(el).toLowerCase();
     const role = (el.getAttribute("role") || "").toLowerCase();
     
-    // Prioritize explicit types or matching placeholders
-    const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto + " " + role;
+    // Reordered: ph and aria FIRST so they take precedence over name
+    const combined = ph + " " + aria + " " + lbl + " " + name + " " + id + " " + auto + " " + role;
 
     if (type === "checkbox" || role === "checkbox") return "termsCheckbox";
     if (type === "radio" || role === "radio") return "gender";
@@ -160,7 +160,6 @@
         const ref = getRef(el);
         refMap.set(ref, el);
         
-        // Fallback for custom generic inputs with placeholders
         let finalLooksLike = looksLike;
         if (!finalLooksLike && (el.getAttribute("placeholder") || el.getAttribute("aria-label"))) {
             finalLooksLike = "text";
