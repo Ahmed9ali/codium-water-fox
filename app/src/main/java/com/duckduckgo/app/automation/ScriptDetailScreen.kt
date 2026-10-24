@@ -1,13 +1,27 @@
+/*
+ * Copyright (c) 2024 DuckDuckGo
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.duckduckgo.app.automation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -15,17 +29,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
-import com.duckduckgo.app.browser.R
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import com.duckduckgo.mobile.android.R.drawable
 import kotlin.math.roundToInt
@@ -35,16 +46,26 @@ fun ScriptDetailScreen(
     scriptId: String,
     onBack: () -> Unit,
 ) {
-    val originalScript = AutomationScriptRepository.getScript(scriptId)
+    // Explicit type is critical: it forces the compiler to resolve
+    // AutomationScriptRepository.getScript(...)'s return type on THIS line,
+    // instead of letting an error type cascade into every `.name` / `.steps`
+    // reference below. If getScript is missing or returns the wrong type,
+    // the error will now be reported here with a clear message.
+    val originalScript: AutomationScript? = AutomationScriptRepository.getScript(scriptId)
+
     if (originalScript == null) {
-        onBack()
+        // Do not call onBack() directly from composition — it is a side effect
+        // and may run multiple times / mid-frame. LaunchedEffect defers it.
+        LaunchedEffect(Unit) { onBack() }
         return
     }
 
-    var scriptName by remember { mutableStateOf(originalScript.name) }
-    var selectedGroup by remember { mutableStateOf(originalScript.groupName) }
-    var humanize by remember { mutableStateOf(originalScript.humanize) }
-    var steps by remember { mutableStateOf(originalScript.steps) }
+    // `originalScript` is smart-cast to AutomationScript for the rest of the body.
+    // Key on scriptId so state resets if the caller swaps scripts in place.
+    var scriptName by remember(scriptId) { mutableStateOf(originalScript.name) }
+    var selectedGroup by remember(scriptId) { mutableStateOf(originalScript.groupName) }
+    var humanize by remember(scriptId) { mutableStateOf(originalScript.humanize) }
+    var steps by remember(scriptId) { mutableStateOf(originalScript.steps) }
 
     var showAddStepDialog by remember { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
@@ -70,7 +91,11 @@ fun ScriptDetailScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(painterResource(drawable.ic_arrow_left_24), contentDescription = "Back", tint = DuckDuckGoTheme.colors.icons.primary)
+                Icon(
+                    painterResource(drawable.ic_arrow_left_24),
+                    contentDescription = "Back",
+                    tint = DuckDuckGoTheme.colors.icons.primary,
+                )
             }
             Text(
                 text = scriptName,
@@ -80,7 +105,11 @@ fun ScriptDetailScreen(
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = { showNameDialog = true }) {
-                Icon(painterResource(drawable.ic_edit_24), contentDescription = "Edit Name", tint = DuckDuckGoTheme.colors.icons.primary)
+                Icon(
+                    painterResource(drawable.ic_edit_24),
+                    contentDescription = "Edit Name",
+                    tint = DuckDuckGoTheme.colors.icons.primary,
+                )
             }
         }
 
@@ -92,11 +121,20 @@ fun ScriptDetailScreen(
                 .padding(16.dp),
         ) {
             // Data Group Selection
-            Text("Assigned Data Group", color = DuckDuckGoTheme.colors.text.primary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Assigned Data Group",
+                color = DuckDuckGoTheme.colors.text.primary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.height(8.dp))
             DdgCard {
                 if (groups.isEmpty()) {
-                    Text("No groups available. Create one in My Data.", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 13.sp)
+                    Text(
+                        "No groups available. Create one in My Data.",
+                        color = DuckDuckGoTheme.colors.text.secondary,
+                        fontSize = 13.sp,
+                    )
                 } else {
                     groups.forEach { group ->
                         Row(
@@ -106,7 +144,10 @@ fun ScriptDetailScreen(
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = selectedGroup == group.name, onClick = { selectedGroup = group.name })
+                            RadioButton(
+                                selected = selectedGroup == group.name,
+                                onClick = { selectedGroup = group.name },
+                            )
                             Text(group.name, fontFamily = VarelaRound, fontSize = 14.sp)
                         }
                     }
@@ -120,26 +161,44 @@ fun ScriptDetailScreen(
                 title = "Humanize Behavior",
                 subtitle = "Random small waits, letter-by-letter typing, and scrolls into view",
                 checked = humanize,
-                onCheckedChange = { humanize = it }
+                onCheckedChange = { humanize = it },
             )
 
             Spacer(Modifier.height(24.dp))
 
-            // Skeleton Steps (now LazyColumn for smooth drag)
-            Text("Web Skeleton Steps", color = DuckDuckGoTheme.colors.text.primary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            // Skeleton Steps
+            Text(
+                "Web Skeleton Steps",
+                color = DuckDuckGoTheme.colors.text.primary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.height(4.dp))
-            Text("Long-press ☰ to reorder", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 11.sp)
+            Text(
+                "Long-press ☰ to reorder",
+                color = DuckDuckGoTheme.colors.text.secondary,
+                fontSize = 11.sp,
+            )
             Spacer(Modifier.height(8.dp))
 
             if (steps.isEmpty()) {
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    Text("No steps yet. Add a function below.", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 13.sp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "No steps yet. Add a function below.",
+                        color = DuckDuckGoTheme.colors.text.secondary,
+                        fontSize = 13.sp,
+                    )
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = (steps.size * 90).dp, max = 600.dp) // Ensure LazyColumn gets enough height
+                        .heightIn(min = (steps.size * 90).dp, max = 600.dp),
                 ) {
                     itemsIndexed(steps, key = { _, step -> step.id }) { index, step ->
                         val isDragging = draggedItemId == step.id
@@ -148,7 +207,7 @@ fun ScriptDetailScreen(
                                 .fillMaxWidth()
                                 .padding(bottom = 8.dp)
                                 .zIndex(if (isDragging) 1f else 0f)
-                                .offset { IntOffset(0, if (isDragging) draggedOffset.roundToInt() else 0) }
+                                .offset { IntOffset(0, if (isDragging) draggedOffset.roundToInt() else 0) },
                         ) {
                             DdgCard {
                                 Row(
@@ -165,16 +224,17 @@ fun ScriptDetailScreen(
                                                     draggedOffset += dragAmount.y
                                                 },
                                                 onDragEnd = {
-                                                    // Calculate how many positions to move based on drag offset
                                                     val threshold = 80.dp.toPx()
                                                     val itemsMoved = (draggedOffset / threshold).roundToInt()
                                                     val targetIndex = (index + itemsMoved).coerceIn(0, steps.size - 1)
-                                                    
+
                                                     if (targetIndex != index) {
                                                         val mutable = steps.toMutableList()
                                                         val item = mutable.removeAt(index)
                                                         mutable.add(targetIndex, item)
-                                                        steps = mutable.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
+                                                        steps = mutable.mapIndexed { i, s ->
+                                                            s.copy(sequenceIndex = i + 1)
+                                                        }
                                                     }
                                                     draggedItemId = null
                                                     draggedOffset = 0f
@@ -182,7 +242,7 @@ fun ScriptDetailScreen(
                                                 onDragCancel = {
                                                     draggedItemId = null
                                                     draggedOffset = 0f
-                                                }
+                                                },
                                             )
                                         },
                                     verticalAlignment = Alignment.CenterVertically,
@@ -191,29 +251,30 @@ fun ScriptDetailScreen(
                                         "☰",
                                         color = DuckDuckGoTheme.colors.text.secondary,
                                         fontSize = 20.sp,
-                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                        modifier = Modifier.padding(horizontal = 8.dp),
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             "${index + 1}. ${step.displayLabel}",
                                             color = DuckDuckGoTheme.colors.text.primary,
                                             fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold
+                                            fontWeight = FontWeight.SemiBold,
                                         )
                                         Text(
                                             "Type: ${step.kind.name}",
                                             color = DuckDuckGoTheme.colors.text.secondary,
-                                            fontSize = 12.sp
+                                            fontSize = 12.sp,
                                         )
                                     }
                                     IconButton(onClick = {
-                                        steps = steps.filterIndexed { i, _ -> i != index }
+                                        steps = steps
+                                            .filterIndexed { i, _ -> i != index }
                                             .mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
                                     }) {
                                         Icon(
                                             painterResource(drawable.ic_fire_24),
                                             contentDescription = "Delete step",
-                                            tint = DuckDuckGoTheme.colors.text.destructive
+                                            tint = DuckDuckGoTheme.colors.text.destructive,
                                         )
                                     }
                                 }
@@ -227,7 +288,7 @@ fun ScriptDetailScreen(
             DdgSecondaryButton(
                 text = "+ Add Step / Function",
                 iconRes = drawable.ic_add_24,
-                onClick = { showAddStepDialog = true }
+                onClick = { showAddStepDialog = true },
             )
 
             Spacer(Modifier.height(24.dp))
@@ -235,10 +296,15 @@ fun ScriptDetailScreen(
             DdgPrimaryButton(
                 text = "Save Script",
                 onClick = {
-                    val updated = originalScript.copy(name = scriptName, groupName = selectedGroup, humanize = humanize, steps = steps)
+                    val updated = originalScript.copy(
+                        name = scriptName,
+                        groupName = selectedGroup,
+                        humanize = humanize,
+                        steps = steps,
+                    )
                     AutomationScriptRepository.saveScript(updated)
                     onBack()
-                }
+                },
             )
         }
     }
@@ -269,30 +335,61 @@ fun ScriptDetailScreen(
                 Text("Add Function", fontFamily = VarelaRound, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     ScriptChip("Wait 2s") {
-                        steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.Wait, waitMs = 2000, displayLabel = "Wait 2s")
+                        steps = steps + RecordedStep(
+                            sequenceIndex = steps.size + 1,
+                            kind = StepKind.Wait,
+                            waitMs = 2000,
+                            displayLabel = "Wait 2s",
+                        )
                         showAddStepDialog = false
                     }
                     ScriptChip("Delete Tab Data") {
-                        steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, fieldType = "delete_tab", displayLabel = "Delete This Tab Data")
+                        steps = steps + RecordedStep(
+                            sequenceIndex = steps.size + 1,
+                            kind = StepKind.DeleteCookies,
+                            fieldType = "delete_tab",
+                            displayLabel = "Delete This Tab Data",
+                        )
                         showAddStepDialog = false
                     }
                     ScriptChip("Delete All Data") {
-                        steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, fieldType = "delete_all", displayLabel = "Delete All Data")
+                        steps = steps + RecordedStep(
+                            sequenceIndex = steps.size + 1,
+                            kind = StepKind.DeleteCookies,
+                            fieldType = "delete_all",
+                            displayLabel = "Delete All Data",
+                        )
                         showAddStepDialog = false
                     }
                     ScriptChip("Wait CAPTCHA") {
-                        steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.CaptchaWait, displayLabel = "Wait for CAPTCHA")
+                        steps = steps + RecordedStep(
+                            sequenceIndex = steps.size + 1,
+                            kind = StepKind.CaptchaWait,
+                            displayLabel = "Wait for CAPTCHA",
+                        )
                         showAddStepDialog = false
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Text("Web Fields (Skeleton)", fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Web Fields (Skeleton)",
+                    fontFamily = VarelaRound,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
                 Spacer(Modifier.height(8.dp))
 
-                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                ) {
                     FieldTypeMapper.assignOptions.forEach { opt ->
                         Text(
                             text = opt.label,
@@ -303,7 +400,7 @@ fun ScriptDetailScreen(
                                         sequenceIndex = steps.size + 1,
                                         kind = StepKind.Field,
                                         fieldType = opt.canonical,
-                                        displayLabel = FieldTypeMapper.fieldRowLabel(opt.canonical, "")
+                                        displayLabel = FieldTypeMapper.fieldRowLabel(opt.canonical, ""),
                                     )
                                     showAddStepDialog = false
                                 }
@@ -322,10 +419,18 @@ fun ScriptDetailScreen(
 private fun ScriptChip(text: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+            .background(
+                DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f),
+                RoundedCornerShape(8.dp),
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
-        Text(text, color = DuckDuckGoTheme.colors.brand.accentBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            text,
+            color = DuckDuckGoTheme.colors.brand.accentBlue,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }

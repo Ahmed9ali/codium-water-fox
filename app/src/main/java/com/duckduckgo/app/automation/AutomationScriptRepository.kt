@@ -88,6 +88,10 @@ object AutomationScriptRepository {
         save()
     }
 
+    /** Look up a single script by id. Returns null if it doesn't exist. */
+    fun getScript(id: String): AutomationScript? =
+        scripts.value.firstOrNull { it.id == id }
+
     fun scriptsForHost(host: String): List<AutomationScript> =
         scripts.value
             .filter { it.host.equals(host, ignoreCase = true) }
