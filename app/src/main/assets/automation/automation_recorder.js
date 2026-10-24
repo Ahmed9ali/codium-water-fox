@@ -1,12 +1,10 @@
 /*
- * Automation Recorder (v3)
- * Captures clicks, maps to inputs, blocks navigation while active.
+ * Automation Recorder (v5 - Reliable Link Blocking)
  */
 (function () {
   "use strict";
   const g = globalThis;
 
-  // Clean up previous instance if re-injected
   if (g.__automationRecorderStop) {
     try { g.__automationRecorderStop(); } catch (_) {}
   }
@@ -29,28 +27,16 @@
   function getCssSelector(el) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
     if (el.id) return "#" + CSS.escape(el.id);
-    
     let path = [];
     let current = el;
-    
     while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
       let name = current.nodeName.toLowerCase();
-      if (current.id) {
-        path.unshift("#" + CSS.escape(current.id));
-        break;
-      }
-      
+      if (current.id) { path.unshift("#" + CSS.escape(current.id)); break; }
       let parent = current.parentElement;
-      if (!parent && current.getRootNode() instanceof ShadowRoot) {
-        parent = current.getRootNode().host;
-      }
+      if (!parent && current.getRootNode() instanceof ShadowRoot) parent = current.getRootNode().host;
       if (!parent) break;
-      
       const siblings = Array.from(parent.children).filter(c => c.nodeName === current.nodeName);
-      if (siblings.length > 1) {
-        const idx = siblings.indexOf(current) + 1;
-        name += `:nth-of-type(${idx})`;
-      }
+      if (siblings.length > 1) name += `:nth-of-type(${siblings.indexOf(current) + 1})`;
       path.unshift(name);
       current = parent;
     }
@@ -63,8 +49,7 @@
     let path = [];
     let current = el;
     while (current && current.nodeType === Node.ELEMENT_NODE) {
-      let idx = 1;
-      let sib = current.previousSibling;
+      let idx = 1, sib = current.previousSibling;
       while (sib) {
         if (sib.nodeType === Node.ELEMENT_NODE && sib.nodeName === current.nodeName) idx++;
         sib = sib.previousSibling;
@@ -78,13 +63,9 @@
   function getLabel(el) {
     if (!el) return "";
     let label = "";
-    if (el.labels && el.labels.length) {
-      label = el.labels[0].innerText || el.labels[0].textContent;
-    } else if (el.closest && el.closest("label")) {
-      label = el.closest("label").innerText || el.closest("label").textContent;
-    } else {
-      label = el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || el.id;
-    }
+    if (el.labels && el.labels.length) label = el.labels[0].innerText || el.labels[0].textContent;
+    else if (el.closest && el.closest("label")) label = el.closest("label").innerText || el.closest("label").textContent;
+    else label = el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || el.id;
     return (label || "").replace(/\s+/g, " ").trim().slice(0, 100);
   }
 
@@ -137,22 +118,18 @@
 
   function handleEvent(e) {
     if (isPaused) return;
-    
-    // Ignore clicks on the DuckDuckGo HUD
     if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
 
-    const path = e.composedPath();
+    const path = e.composedPath ? e.composedPath() : [e.target];
     let target = path[0];
     if (!target || target.nodeType !== Node.ELEMENT_NODE || !isVisible(target)) return;
 
-    // Resolve label clicks to inputs
     const label = target.closest("label");
     if (label) {
       const innerInput = label.querySelector("input, select, textarea, [role='radio'], [role='checkbox']");
       if (innerInput) target = innerInput;
     }
 
-    // Climb up if we clicked an icon inside a button/link
     if (!['input', 'textarea', 'select', 'button', 'a'].includes(target.tagName.toLowerCase())) {
       const parentInteractive = target.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick]');
       if (parentInteractive) target = parentInteractive;
@@ -168,22 +145,15 @@
     let kind = "Field";
     let displayLabel = getLabel(target);
 
-    // Detect navigation elements
-    if (tag === "button" || tag === "a" || type === "submit" || type === "button" || target.getAttribute("role") === "button") {
+    const isLink = tag === "a" || (tag === "button" && type === "submit") || type === "submit";
+    if (isLink) {
       kind = "ClickNext";
-      
-      // BUG 3 FIX: Block navigation/action while recording.
-      // Only block links and actual submits, so dropdowns still open.
-      if (tag === "a" && target.hasAttribute("href")) {
-        e.preventDefault();
-        e.stopPropagation();
-      } else if (type === "submit") {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      // BUG FIX: Prevent ANY navigation or form submission while recording
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
     }
 
-    // Visual feedback
     const oldOutline = target.style.outline;
     target.style.outline = "3px solid #06b6d4";
     setTimeout(() => { target.style.outline = oldOutline; }, 600);

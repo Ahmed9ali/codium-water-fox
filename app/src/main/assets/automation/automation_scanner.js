@@ -1,13 +1,12 @@
 /*
- * Automation Scanner (v3)
- * Highly optimized. Removed heavy MutationObserver attributes.
+ * Automation Scanner (v5 - Async, Fast, Reliable)
  */
 (function () {
   "use strict";
   const g = globalThis;
 
   if (g.__automationScannerInstalled) {
-    try { if (g.__automationScan) g.__automationScan(); } catch (_) {}
+    try { g.__automationScan(); } catch (_) {}
     return;
   }
   g.__automationScannerInstalled = true;
@@ -24,32 +23,32 @@
   };
 
   const RX = {
-    otp: /\b(otp|one[-\s]?time\s*(code|password)|2fa|verification\s*code|security\s*code|sms\s*code|auth\s*code|код\s*подтверждения|인증\s*번호|验证码|認証コード|رمز\s*التحقق)\b/i,
-    confirm_password: /\b(confirm|repeat|re-?enter|verify)\b.*\b(password|pass)\b|\b(password|pass)\b.*\b(confirm|repeat)\b|повтор|подтверд.*пароль|비밀번호\s*확인|确认密码/i,
-    confirm_email: /\b(confirm|repeat|re-?enter|verify)\b.*\b(e-?mail)\b|\b(e-?mail)\b.*\b(confirm|repeat)\b|подтверд.*почт|이메일\s*확인|确认邮箱/i,
-    password: /\b(password|passwd|passcode|pwd)\b|пароль|비밀번호|密码|パスワード|كلمة\s*المرور|contrasena|mot\s*de\s*passe|passwort|senha|parola/i,
-    email: /\b(e-?mail|mail)\b|почт|электр|이메일|邮箱|メール|بريد|correo|courriel|email|e-?mail/i,
-    phone: /\b(phone|mobile|cell|tel|whatsapp|contact\s*number)\b|телефон|моб|핸드폰|전화|휴대폰|手机|电话|電話|هاتف|جوال|tel[eé]fono|t[eé]l[eé]phone|telefon|telefone|cellulare/i,
-    firstname: /\b(first|given)\s*name\b|\bfname\b|\bforename\b|имя|이름|名|nombre|pr[eé]nom|vorname|nome/i,
-    lastname: /\b(last|family|sur)\s*name\b|\blname\b|\bsurname\b|фамил|성|姓|apellido|nom\s*de\s*famille|nachname|sobrenome|cognome/i,
-    middlename: /\b(middle|mid)\s*name\b|отчество|가운데\s*이름/i,
-    fullname: /\b(full\s*name|your\s*name|display\s*name|name)\b|полное\s*имя|이름|姓名|名前|nombre\s*completo|nom\s*complet|vollständiger\s*name|nome\s*completo/i,
-    username: /\b(user[\s_-]?name|user[\s_-]?id|login|handle|screen[\s_-]?name)\b|логин|아이디|用户名|ユーザー名|اسم\s*المستخدم|usuario|identifiant|benutzername|usuário|nome\s*utente/i,
-    message: /\b(message|comment|feedback|description|bio|notes?|details?)\b|сообщени|коммент|메시지|댓글|내용|消息|评论|メッセージ|رسالة|mensaje|commentaire|nachricht|mensagem|messaggio/i,
-    dob: /\b(dob|date\s*of\s*birth|birth[\s_-]?date|birthday|bday)\b|дата\s*рождения|생년월일|생일|出生|生日|生年月日|تاريخ\s*الميلاد|fecha\s*de\s*nacimiento|date\s*de\s*naissance|geburtsdatum|data\s*de\s*nascimento|data\s*di\s*nascita/i,
-    zip: /\b(zip|postal|post[\s_-]?code|pin\s*code|pincode)\b|почтов|индекс|우편번호|邮政编码|郵便番号|الرمز\s*البريدي|c[oó]digo\s*postal|code\s*postal|postleitzahl|cep|cap/i,
-    city: /\b(city|town|ville)\b|город|도시|城市|市|مدينة|ciudad|ville|stadt|cidade|città/i,
-    state: /\b(state|province|region|county)\b|област|주|省|州|منطقة|provincia|région|bundesland|estado|regione/i,
-    country: /\b(country|nation)\b|стран|국가|国家|国|بلد|pa[ií]s|pays|land|paese/i,
-    address: /\b(address|street|line\s*1|line\s*2|apartment|apt)\b|адрес|улиц|주소|地址|住所|عنوان|direcci[oó]n|adresse|adresse|endereço|indirizzo/i,
-    company: /\b(company|organi[sz]ation|employer|business)\b|компани|организац|회사|公司|会社|شركة|empresa|entreprise|unternehmen/i,
-    jobtitle: /\b(job\s*title|position|role|occupation|designation)\b|должност|직책|직업|职位|職業|منصب|puesto|cargo|poste|beruf|cargo|ruolo/i,
-    gender: /\b(gender|sex)\b|пол|성별|性别|性別|جنس|g[eé]nero|sexe|geschlecht|g[eê]nero|sesso/i,
-    terms: /\b(terms|agree|consent|privacy|policy|accept|conditions)\b|соглас|принима|동의|약관|同意|条款|規約|أوافق|acepto|j'accepte|akzeptiere|aceito|accetto/i,
+    otp: /\b(otp|one[-\s]?time\s*(code|password)|2fa|verification\s*code|security\s*code|sms\s*code|auth\s*code)\b/i,
+    confirm_password: /\b(confirm|repeat|re-?enter|verify)\b.*\b(password|pass)\b|\b(password|pass)\b.*\b(confirm|repeat)\b/i,
+    confirm_email: /\b(confirm|repeat|re-?enter|verify)\b.*\b(e-?mail)\b|\b(e-?mail)\b.*\b(confirm|repeat)\b/i,
+    password: /\b(password|passwd|passcode|pwd)\b/i,
+    email: /\b(e-?mail|mail)\b/i,
+    phone: /\b(phone|mobile|cell|tel|whatsapp|contact\s*number)\b/i,
+    firstname: /\b(first|given)\s*name\b|\bfname\b|\bforename\b/i,
+    lastname: /\b(last|family|sur)\s*name\b|\blname\b|\bsurname\b/i,
+    middlename: /\b(middle|mid)\s*name\b/i,
+    fullname: /\b(full\s*name|your\s*name|display\s*name|name)\b/i,
+    username: /\b(user[\s_-]?name|user[\s_-]?id|login|handle|screen[\s_-]?name)\b/i,
+    message: /\b(message|comment|feedback|description|bio|notes?|details?)\b/i,
+    dob: /\b(dob|date\s*of\s*birth|birth[\s_-]?date|birthday|bday)\b/i,
+    zip: /\b(zip|postal|post[\s_-]?code|pin\s*code|pincode)\b/i,
+    city: /\b(city|town|ville)\b/i,
+    state: /\b(state|province|region|county)\b/i,
+    country: /\b(country|nation)\b/i,
+    address: /\b(address|street|line\s*1|line\s*2|apartment|apt)\b/i,
+    company: /\b(company|organi[sz]ation|employer|business)\b/i,
+    jobtitle: /\b(job\s*title|position|role|occupation|designation)\b/i,
+    gender: /\b(gender|sex)\b/i,
+    terms: /\b(terms|agree|consent|privacy|policy|accept|conditions)\b/i,
   };
 
-  const BTN_POS = /\b(next|continue|submit|sign\s*up|signup|register|create|join|proceed|verify|confirm|finish|done|save|send|login|log\s*in|sign\s*in|accept|agree|i\s*agree|i\s*accept|allow|approve|apply|checkout|pay)\b|далее|продолж|отправ|войти|вход|зарегистр|принять|соглас|다음|계속|제출|로그인|가입|동의|下一步|继续|提交|登录|注册|同意|次へ|続ける|送信|ログイン|登録|同意する|التالي|متابعة|إرسال|تسجيل\s*الدخول|تسجيل|أوافق|siguiente|continuar|enviar|iniciar\s*sesi[oó]n|registrar|aceptar|suivant|continuer|envoyer|connexion|s\\'inscrire|accepter|weiter|absenden|anmelden|registrieren|akzeptieren|avancar|enviar|entrar|registrar|aceitar|avanti|invia|accedi|registrati|accetta/i;
-  const BTN_NEG = /\b(back|previous|prev|cancel|close|dismiss|reset|clear|delete|remove|log\s*out|sign\s*out|logout|skip|forgot|resend|no\s*thanks|not\s*now|decline|reject|deny)\b|назад|отмена|закрыть|удал|выход|이전|취소|닫기|삭제|로그아웃|返回|取消|关闭|删除|退出|戻る|キャンセル|閉じる|削除|ログアウト|رجوع|إلغاء|إغلاق|حذف|atr[aá]s|cancelar|cerrar|eliminar|salir|retour|annuler|fermer|supprimer|d[eé]connexion|zur[uü]ck|abbrechen|schlie[ßs]en|l[oö]schen|voltar|cancelar|fechar|excluir|sair|indietro|annulla|chiudi|elimina|esci/i;
+  const BTN_POS = /\b(next|continue|submit|sign\s*up|signup|register|create|join|proceed|verify|confirm|finish|done|save|send|login|log\s*in|sign\s*in|apply)\b/i;
+  const BTN_NEG = /\b(back|previous|prev|cancel|close|dismiss|reset|clear|delete|remove|log\s*out|sign\s*out|logout|skip|forgot|resend|no\s*thanks|not\s*now|decline|reject|deny)\b/i;
 
   let refCounter = 0;
   const elToRef = new WeakMap();
@@ -86,7 +85,7 @@
       if (st.display === "none" || st.visibility === "hidden" || st.visibility === "collapse") return false;
       if (parseFloat(st.opacity) === 0) return false;
       const r = el.getBoundingClientRect();
-      if (r.width < CFG.MIN_SIZE_PX && r.height < CFG.MIN_SIZE_PX) return false;
+      if (r.width < CFG.MIN_SIZE_PX && r.height < CFG.MIN_SIZE_PX && el.offsetParent === null) return false;
       if (r.right < -2000 || r.bottom < -2000) return false;
       return true;
     } catch (_) { return false; }
@@ -169,7 +168,7 @@
     if (RX.jobtitle.test(c)) return "jobtitle";
     if (RX.gender.test(c)) return "gender";
     if (tag === "textarea" || role === "textbox" || RX.message.test(c)) return "message";
-    return "";
+    return "text";
   }
 
   function isCustomSelectTrigger(el) {
@@ -187,7 +186,7 @@
     const par = el.parentElement;
     if (par) {
       const sel = par.querySelector("select");
-      if (sel && /(\+\d|country|code)/i.test(sel.options[0]?.textContent || "")) return true;
+      if (sel && /(\+\d|country|code)/i.test((sel.options[0] && sel.options[0].textContent) || "")) return true;
     }
     return false;
   }
@@ -212,9 +211,7 @@
           if (!isVisible(n)) continue;
           for (const b of n.querySelectorAll('button, [role=button], a')) {
             const t = txt(b).toLowerCase();
-            if (/^(accept|agree|allow|ok|got it|i agree|continue|accept all|accept cookies)$/i.test(t) || /принять|соглас|приемам|수락|동의|同意|接受|同意する|أوافق|aceptar|accepter|akzeptieren|aceitar|accetta/i.test(t)) {
-              return { node: n, acceptBtn: b };
-            }
+            if (/^(accept|agree|allow|ok|got it|i agree|continue|accept all|accept cookies)$/i.test(t)) return { node: n, acceptBtn: b };
           }
         }
       } catch (_) {}
@@ -222,7 +219,7 @@
     return null;
   }
 
-  const FIELD_SELECTOR = 'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]):not([type=file]), textarea, select, [role=combobox], [role=textbox], [contenteditable="true"], [contenteditable=""]';
+  const FIELD_SELECTOR = 'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=image]):not([type=file]), textarea, select, [role=combobox], [role=textbox], [contenteditable="true"], [contenteditable=""], .dd, .ctl, .select-trigger, [data-dropdown], [data-select]';
   const BUTTON_SELECTOR = 'button, a[role=button], input[type=submit], input[type=button], input[type=image], [role=button]:not(a), [onclick]';
   const LINK_SELECTOR = 'a[href]';
 
@@ -232,7 +229,6 @@
     try { out.buttons = Array.from(doc.querySelectorAll(buttonSelector)); } catch (_) {}
     try { out.links = Array.from(doc.querySelectorAll(linkSelector)); } catch (_) {}
 
-    // Safely walk Shadow DOMs
     let count = 0;
     function walk(root, depth) {
       if (!root || depth > CFG.MAX_SHADOW_DEPTH || count >= 3000) return;
@@ -331,8 +327,17 @@
     return { ref: getRef(el), text: txt(el).slice(0, 60), href: attr(el, "href"), isExternal: /^https?:/i.test(attr(el, "href")) && !attr(el, "href").startsWith(location.origin) };
   }
 
-  function scanPage() {
-    if (document.readyState === "loading") return emptyResult();
+  async function scanPage() {
+    if (document.readyState === "loading") {
+      await new Promise(r => document.addEventListener("DOMContentLoaded", r, { once: true }));
+    }
+
+    let attempts = 0;
+    while (attempts < 30 && document.querySelectorAll(FIELD_SELECTOR).length === 0) {
+      await sleep(100);
+      attempts++;
+    }
+
     const fromDoc = collectAll(document, FIELD_SELECTOR, BUTTON_SELECTOR, LINK_SELECTOR);
     const fromFrames = collectFromIframes(FIELD_SELECTOR, BUTTON_SELECTOR, LINK_SELECTOR);
 
@@ -376,14 +381,13 @@
     const captchaType = detectCaptcha(document);
     const cookieBanner = detectCookieBanner(document);
 
-    // Strictly check for visible error messages (Fix for Bug 4)
     const errorMessages = [];
     try {
-      const errEls = document.querySelectorAll('.error, [class*="error" i]:not([class*="no-error"]), [class*="invalid" i], [role=alert], .Mui-error, .ant-form-item-explain-error, [aria-invalid="true"]');
+      const errEls = document.querySelectorAll('[role=alert], .error, [class*="error" i]:not([class*="no-error"]), [class*="invalid" i], .Mui-error, .ant-form-item-explain-error, [aria-invalid="true"]');
       for (const e of errEls) {
         if (isVisible(e)) {
           const t = txt(e).slice(0, 120);
-          if (t) errorMessages.push(t);
+          if (t && t.length > 2 && !errorMessages.includes(t)) errorMessages.push(t);
         }
         if (errorMessages.length >= 5) break;
       }
@@ -400,10 +404,6 @@
       hasIframes: fromFrames.iframeCount > 0, iframeCount: fromFrames.iframeCount,
       crossOriginIframeCount: fromFrames.crossOriginCount, errorMessages, timestamp: Date.now(),
     };
-  }
-
-  function emptyResult() {
-    return { url: location.href, fields: [], buttons: [], links: [], actionButtonRef: "", actionButtonName: "", captchaDetected: false, captchaType: "", cookieBannerPresent: false, hasIframes: false, iframeCount: 0, crossOriginIframeCount: 0, errorMessages: [] };
   }
 
   function sendToBridge(fields) {
@@ -457,7 +457,7 @@
     if (tag === "input" || tag === "textarea") {
       try { el.focus(); } catch (_) {}
       const proto = el.tagName.toLowerCase() === "textarea" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
       if (!opts.humanize) {
         try { if (setter) setter.call(el, value); else el.value = value; } catch (_) { el.value = value; }
         el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -557,7 +557,6 @@
     }
   }
 
-  // BUG 1 FIX: Removed attributes:true and setInterval to drastically improve load speed
   try {
     new MutationObserver(scheduleScan).observe(document.documentElement || document, { subtree: true, childList: true });
   } catch (_) {}

@@ -623,8 +623,11 @@ object AutomationEngine {
                 counter++
                 updateState(AutomationState.SCANNING)
                 updateStatus("Scanning form fields (Step $counter)...")
-                val scanObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
+                
+                // BUG FIX: Added 'await' before __automationScan() so Kotlin waits for async React/Vue fields to render
+                val scanObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationScan());")) } catch (_: Exception) { JSONObject() }
                 val fieldsArr = scanObj.optJSONArray("fields") ?: JSONArray()
+                
                 if (scanObj.optBoolean("captchaDetected", false) && config.pauseOnCaptcha) {
                     _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
                 }
@@ -641,7 +644,8 @@ object AutomationEngine {
                 if (fillArray.length() == 0) {
                     if (counter == 1) {
                         delay(1200); injectScanner()
-                        val retryObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
+                        // BUG FIX: Added 'await' before __automationScan()
+                        val retryObj = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationScan());")) } catch (_: Exception) { JSONObject() }
                         if ((retryObj.optJSONArray("fields")?.length() ?: 0) > 0) { counter--; continue }
                     }
                     stepSuccess = counter > 1; break
@@ -660,7 +664,9 @@ object AutomationEngine {
                     _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
                 }
                 delay(600); waitForPageReady(webView); injectScanner(); delay(500)
-                val postNav = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(__automationScan());")) } catch (_: Exception) { JSONObject() }
+                
+                // BUG FIX: Added 'await' before __automationScan()
+                val postNav = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationScan());")) } catch (_: Exception) { JSONObject() }
                 val postFields = postNav.optJSONArray("fields") ?: JSONArray()
                 var unfilled = 0
                 for (k in 0 until postFields.length()) {
