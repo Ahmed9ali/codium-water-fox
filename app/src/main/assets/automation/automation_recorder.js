@@ -1,358 +1,242 @@
+/*
+ * Automation Recorder
+ * Listens to clicks and sends structured payloads to the AutomationBridge
+ * for the Kotlin engine to record as steps.
+ */
 (function () {
   "use strict";
   const g = globalThis;
 
-  if (typeof g.__automationRecorderStop === "function" && g.__automationRecorderActive) {
-    try { g.__automationRecorderStop(); } catch (_) {}
-  }
+  // Prevent double-injection
+  if (g.__automationRecorderInstalled) return;
+  g.__automationRecorderInstalled = true;
 
-  // Time-based dedup: prevents double-capture (focus+click) but allows retry after 800 ms
-  const recentlySent = new WeakMap();
-  const DEDUP_MS = 800;
+  let isPaused = false;
+  let lastTarget = null;
+  let lastClickTime = 0;
 
-  function shouldSkip(el) {
-    try {
-      const now = Date.now();
-      const last = recentlySent.get(el);
-      if (last && now - last < DEDUP_MS) return true;
-      return false;
-    } catch (_) { return false; }
-  }
-
-  function markSent(el) {
-    try { recentlySent.set(el, Date.now()); } catch (_) {}
-  }
-
+  // ===========================================================================
+  // DOM UTILITIES
+  // ===========================================================================
+  
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
     try {
-      if (el.getAttribute("aria-hidden") === "true") return false;
       const st = window.getComputedStyle(el);
       if (!st || st.display === "none" || st.visibility === "hidden" || st.opacity === "0") return false;
       const r = el.getBoundingClientRect();
-      if (r.width <= 0 && r.height <= 0 && el.offsetParent === null) return false;
-      return true;
+      return r.width > 0 || r.height > 0 || el.offsetParent !== null;
     } catch (_) { return false; }
   }
 
-  function shownText(el, max) {
-    if (!el) return "";
-    try {
-      const limit = max || 100;
-      const t = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
-      return t.length > limit ? t.slice(0, limit - 1) : t;
-    } catch (_) { return ""; }
+  function getCssSelector(el) {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
+    if (el.id) return "#" + CSS.escape(el.id);
+    
+    let path = [];
+    let current = el;
+    
+    while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
+      let name = current.nodeName.toLowerCase();
+      if (current.id) {
+        path.unshift("#" + CSS.escape(current.id));
+        break;
+      }
+      
+      let parent = current.parentElement;
+      // Handle Shadow DOM parents
+      if (!parent && current.getRootNode() instanceof ShadowRoot) {
+        parent = current.getRootNode().host;
+      }
+      if (!parent) break;
+      
+      const siblings = Array.from(parent.children).filter(c => c.nodeName === current.nodeName);
+      if (siblings.length > 1) {
+        const idx = siblings.indexOf(current) + 1;
+        name += `:nth-of-type(${idx})`;
+      }
+      path.unshift(name);
+      current = parent;
+    }
+    return path.length ? path.join(" > ") : "";
   }
 
-  function findLabel(el) {
-    const parts = [];
-    try {
-      if (el.labels && el.labels.length) {
-        for (let i = 0; i < el.labels.length; i++) {
-          const t = shownText(el.labels[i], 100);
-          if (t) parts.push(t);
-        }
+  function getXPath(el) {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
+    if (el.id) return `//*[@id="${el.id}"]`;
+    
+    let path = [];
+    let current = el;
+    while (current && current.nodeType === Node.ELEMENT_NODE) {
+      let idx = 1;
+      let sib = current.previousSibling;
+      while (sib) {
+        if (sib.nodeType === Node.ELEMENT_NODE && sib.nodeName === current.nodeName) idx++;
+        sib = sib.previousSibling;
       }
-      if (el.id) {
-        try {
-          const explicit = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
-          if (explicit) {
-            const t = shownText(explicit, 100);
-            if (t && !parts.includes(t)) parts.push(t);
-          }
-        } catch (_) {}
-      }
-      const wrapping = el.closest && el.closest("label");
-      if (wrapping) {
-        const t = shownText(wrapping, 100);
-        if (t && !parts.includes(t)) parts.push(t);
-      }
-    } catch (_) {}
-    return parts.join(" ").trim().slice(0, 100);
+      path.unshift(`${current.nodeName.toLowerCase()}[${idx}]`);
+      current = current.parentElement;
+    }
+    return "/" + path.join("/");
+  }
+
+  function getLabel(el) {
+    if (!el) return "";
+    let label = "";
+    if (el.labels && el.labels.length) {
+      label = el.labels[0].innerText || el.labels[0].textContent;
+    } else if (el.closest && el.closest("label")) {
+      label = el.closest("label").innerText || el.closest("label").textContent;
+    } else {
+      label = el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || el.id;
+    }
+    return (label || "").replace(/\s+/g, " ").trim().slice(0, 100);
   }
 
   function classify(el) {
-    try {
-      const tag = (el.tagName || "").toLowerCase();
-      const type = (el.type || "text").toLowerCase();
-      const auto = (el.getAttribute("autocomplete") || "").toLowerCase();
-      const name = (el.getAttribute("name") || "").toLowerCase();
-      const id = (el.id || "").toLowerCase();
-      const ph = (el.getAttribute("placeholder") || "").toLowerCase();
-      const aria = (el.getAttribute("aria-label") || "").toLowerCase();
-      const lbl = findLabel(el).toLowerCase();
-      const role = (el.getAttribute("role") || "").toLowerCase();
-      const combined = name + " " + id + " " + ph + " " + aria + " " + lbl + " " + auto + " " + role;
+    const tag = (el.tagName || "").toLowerCase();
+    const type = (el.type || "").toLowerCase();
+    const role = (el.getAttribute("role") || "").toLowerCase();
+    const ac = (el.getAttribute("autocomplete") || "").toLowerCase();
+    
+    const combined = `${getLabel(el)} ${el.name || ""} ${el.id || ""}`.toLowerCase();
 
-      if (type === "checkbox" || role === "checkbox") return "termsCheckbox";
-      if (type === "radio" || role === "radio") return "gender";
-      if (type === "password" || auto === "new-password" || auto === "current-password") return "password";
-      if (type === "email" || auto === "email" || /\b(e-?mail|correo)\b/i.test(combined)) return "email";
-      if (auto === "one-time-code" || /\b(otp|verification\s*code|security\s*code|2fa|pin\s*code|código)\b/i.test(combined)) return "otp";
-      if (type === "tel" || auto.indexOf("tel") >= 0 || /\b(phone|mobile|cell|whatsapp|tel|telefono|celular)\b/i.test(combined)) return "phone";
-      if (auto === "given-name" || /\b(first\s*name|fname|given\s*name|nombre)\b/i.test(combined)) return "firstName";
-      if (auto === "family-name" || /\b(last\s*name|lname|surname|nom|apellido)\b/i.test(combined)) return "lastName";
-      if (auto === "name" || /\b(full\s*name|your\s*name|name|nom|nombre)\b/i.test(combined)) return "fullName";
-      if (auto === "username" || /\b(user\s*name|userid|login|handle|usuario)\b/i.test(combined)) return "username";
-      if (tag === "textarea" || role === "textbox" || /\b(message|comment|feedback|description|bio|mensaje)\b/i.test(combined)) return "message";
-      if (type === "date" || auto.indexOf("bday") >= 0 || /\b(dob|date\s*of\s*birth|birth\s*date|birthday|fecha)\b/i.test(combined)) return "dob";
-      if (auto === "postal-code" || /\b(zip|postal|pin\s*code|pincode|postal|código postal)\b/i.test(combined)) return "zip";
-      if (auto === "address-level2" || /\b(city|town|ville|ciudad)\b/i.test(combined)) return "city";
-      if (auto === "address-level1" || /\b(state|province|region|estado)\b/i.test(combined)) return "state";
-      if (auto.indexOf("country") >= 0 || /\b(country|nation|pays|país)\b/i.test(combined)) return "country";
-      if (auto.indexOf("address") >= 0 || auto.indexOf("street") >= 0 || /\b(address|street|apartment|adresse|dirección)\b/i.test(combined)) return "address";
-      return "";
-    } catch (_) { return ""; }
-  }
-
-  function cssPath(el) {
-    try {
-      if (!el || el.nodeType !== 1) return "";
-      if (el.id) return ("#" + CSS.escape(el.id)).slice(0, 500);
-      const parts = [];
-      let cur = el;
-      let depth = 0;
-      while (cur && cur.nodeType === 1 && depth < 6) {
-        let sel = cur.tagName.toLowerCase();
-        const nameAttr = cur.getAttribute && cur.getAttribute("name");
-        if (nameAttr) { sel += '[name="' + String(nameAttr).slice(0, 60) + '"]'; }
-        else {
-          const parent = cur.parentElement;
-          if (parent) {
-            const sameTag = Array.from(parent.children).filter(c => c.tagName === cur.tagName);
-            if (sameTag.length > 1) sel += ':nth-of-type(' + (sameTag.indexOf(cur) + 1) + ')';
-          }
-        }
-        parts.unshift(sel);
-        cur = cur.parentElement;
-        depth++;
-      }
-      return parts.join(" > ").slice(0, 500);
-    } catch (_) { return ""; }
-  }
-
-  function xpath(el) {
-    try {
-      if (!el || el.nodeType !== 1) return "";
-      if (el.id) return ('//*[@id="' + String(el.id).slice(0, 60) + '"]').slice(0, 500);
-      const parts = [];
-      let cur = el;
-      while (cur && cur.nodeType === 1) {
-        const tag = cur.tagName.toLowerCase();
-        const nameAttr = cur.getAttribute && cur.getAttribute("name");
-        if (nameAttr) { parts.unshift(tag + '[@name="' + String(nameAttr).slice(0, 60) + '"]'); break; }
-        let idx = 1;
-        let sib = cur.previousElementSibling;
-        while (sib) { if (sib.tagName === cur.tagName) idx++; sib = sib.previousElementSibling; }
-        parts.unshift(tag + "[" + idx + "]");
-        cur = cur.parentElement;
-      }
-      return ("/" + parts.join("/")).slice(0, 500);
-    } catch (_) { return ""; }
-  }
-
-  function send(payload) {
-    try {
-      if (window.AutomationBridge && typeof window.AutomationBridge.onElementRecorded === "function") {
-        window.AutomationBridge.onElementRecorded(JSON.stringify(payload));
-        return true;
-      }
-    } catch (e) {
-      console.warn("[Automation] send failed:", e);
+    // 1. Checkbox / Radio / Switch
+    if (type === "checkbox" || type === "radio" || role === "checkbox" || role === "radio" || role === "switch") {
+      if (/\b(gender|sex|male|female)\b/i.test(combined)) return "gender";
+      return "termscheckbox";
     }
-    return false;
+    
+    // 2. Autocomplete
+    if (ac) {
+      if (ac.includes("email")) return "email";
+      if (ac.includes("tel")) return "phone";
+      if (ac.includes("name")) {
+        if (ac.includes("given")) return "firstName";
+        if (ac.includes("family")) return "lastName";
+        return "fullName";
+      }
+      if (ac.includes("street")) return "address";
+      if (ac.includes("postal")) return "zip";
+    }
+    
+    // 3. Input type
+    if (type === "email") return "email";
+    if (type === "tel") return "phone";
+    if (type === "password") return "password";
+    if (type === "date") return "dob";
+    
+    // 4. Keyword matching
+    if (/\b(first|given)\s*name\b|\bfname\b/.test(combined)) return "firstName";
+    if (/\b(last|family|sur)\s*name\b|\blname\b/.test(combined)) return "lastName";
+    if (/\b(full\s*name|your\s*name|name)\b/.test(combined)) return "fullName";
+    if (/\b(e-?mail)\b/.test(combined)) return "email";
+    if (/\b(phone|mobile|tel)\b/.test(combined)) return "phone";
+    if (/\b(password|pass)\b/.test(combined)) return "password";
+    if (/\b(city)\b/.test(combined)) return "city";
+    if (/\b(state)\b/.test(combined)) return "state";
+    if (/\b(zip|postal)\b/.test(combined)) return "zip";
+    if (/\b(country)\b/.test(combined)) return "country";
+    if (tag === "textarea" || /\b(message|comment|description)\b/.test(combined)) return "message";
+    
+    return "text";
   }
 
-  function captureField(el) {
-    try {
-      if (!el || el.nodeType !== 1) return;
-
-      let target = el;
-      if (target.tagName === "DIV" || target.tagName === "SPAN" || target.tagName === "LABEL") {
-        try {
-          const inner = target.querySelector('input, textarea, select, [role="combobox"]');
-          if (inner) target = inner;
-        } catch (_) {}
-      }
-
-      const tag = (target.tagName || "").toLowerCase();
-      const role = (target.getAttribute("role") || "").toLowerCase();
-      const isEditable = target.isContentEditable === true;
-      if (tag !== "input" && tag !== "textarea" && tag !== "select" && !isEditable && role !== "combobox") return;
-
-      if (tag === "input") {
-        const t = (target.type || "text").toLowerCase();
-        if (["hidden", "submit", "button", "reset", "image", "file", "search"].indexOf(t) >= 0) return;
-      }
-      if (!isVisible(target)) return;
-      if (shouldSkip(target)) return;
-
-      // Each sub-step is isolated so partial failure still yields a step
-      let looksLike = "";
-      try { looksLike = classify(target); } catch (_) {}
-
-      let label = "";
+  function sendToBridge(data) {
+    if (window.AutomationBridge && window.AutomationBridge.onElementRecorded) {
       try {
-        label = findLabel(target)
-          || target.getAttribute("aria-label")
-          || target.getAttribute("placeholder")
-          || target.getAttribute("name")
-          || target.id
-          || "";
-      } catch (_) {}
-
-      let css = "";
-      try { css = cssPath(target); } catch (_) {}
-
-      let xpathVal = "";
-      try { xpathVal = xpath(target); } catch (_) {}
-
-      let absIndex = -1;
-      try {
-        const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select, [role="combobox"], [contenteditable="true"]'));
-        absIndex = allInputs.indexOf(target);
-      } catch (_) {}
-
-      const payload = {
-        kind: "Field",
-        looksLike: String(looksLike || "").slice(0, 50),
-        tag: String(tag || "").slice(0, 30),
-        domType: String(target.type || "").slice(0, 30),
-        name: String(target.getAttribute("name") || "").slice(0, 100),
-        domId: String(target.id || "").slice(0, 100),
-        placeholder: String(target.getAttribute("placeholder") || "").slice(0, 100),
-        ariaLabel: String(target.getAttribute("aria-label") || "").slice(0, 100),
-        displayLabel: String(label || "").slice(0, 100),
-        cssSelector: css,
-        xpath: xpathVal,
-        index: absIndex
-      };
-
-      const ok = send(payload);
-      if (ok) markSent(target);
-    } catch (e) {
-      console.warn("[Automation] captureField error:", e);
+        window.AutomationBridge.onElementRecorded(JSON.stringify(data));
+      } catch (e) {
+        console.error("Recorder bridge error", e);
+      }
     }
   }
 
-  function isNavigationTrigger(el) {
-    try {
-      const tag = el.tagName.toLowerCase();
-      const type = (el.type || "").toLowerCase();
-      const role = (el.getAttribute("role") || "").toLowerCase();
-      const href = el.getAttribute("href");
-      const ariaHaspopup = el.getAttribute("aria-haspopup");
-      const ariaExpanded = el.getAttribute("aria-expanded");
+  // ===========================================================================
+  // CORE RECORDING LOGIC
+  // ===========================================================================
+  
+  function handleEvent(e) {
+    if (isPaused) return;
+    
+    // Ignore events from the native HUD
+    if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
 
-      if (ariaHaspopup !== null) return false;
-      if (ariaExpanded !== null) return false;
-      if (role === "combobox" || role === "listbox" || role === "tab") return false;
-      if (tag === "a" && href && !href.startsWith("#") && !href.startsWith("javascript:")) return true;
-      if (tag === "button" && (type === "submit" || type === "")) return !!el.form;
-      if (tag === "input" && (type === "submit" || type === "image")) return true;
-      return false;
-    } catch (_) { return false; }
-  }
+    // composedPath() ensures we see the click even if it happened inside a Shadow DOM
+    const path = e.composedPath();
+    let target = path[0];
 
-  function onClick(e) {
-    try {
-      const el = e.target.closest('button, a, input[type="submit"], input[type="button"], input[type="image"], [role="button"]');
-      if (!el) return;
+    if (!target || target.nodeType !== Node.ELEMENT_NODE) return;
+    if (!isVisible(target)) return;
 
-      if (isNavigationTrigger(el)) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-
-      if (shouldSkip(el)) return;
-
-      const label = ((el.innerText || el.value || "") + "").trim().slice(0, 60);
-      const payload = {
-        kind: "ClickNext",
-        buttonLabel: label,
-        cssSelector: cssPath(el),
-        xpath: xpath(el),
-      };
-      const ok = send(payload);
-      if (ok) markSent(el);
-    } catch (e) {
-      console.warn("[Automation] onClick error:", e);
+    // Resolve labels/span clicks to their inner inputs
+    const label = target.closest("label");
+    if (label) {
+      const innerInput = label.querySelector("input, select, textarea, [role='radio'], [role='checkbox']");
+      if (innerInput) target = innerInput;
     }
+
+    // Climb up to interactive elements if we clicked an inner icon or span
+    if (!['input', 'textarea', 'select', 'button', 'a'].includes(target.tagName.toLowerCase())) {
+      const parentInteractive = target.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick]');
+      if (parentInteractive) target = parentInteractive;
+    }
+
+    // Debounce (prevent 2 clicks on the same element within 500ms)
+    const now = Date.now();
+    if (target === lastTarget && now - lastClickTime < 500) return;
+    lastTarget = target;
+    lastClickTime = now;
+
+    const tag = target.tagName.toLowerCase();
+    const type = (target.type || '').toLowerCase();
+    
+    let kind = "Field";
+    let displayLabel = getLabel(target);
+
+    // If it's a button, link, or submit input, it's a "ClickNext" step
+    if (tag === "button" || tag === "a" || type === "submit" || type === "button" || target.getAttribute("role") === "button") {
+      kind = "ClickNext";
+    }
+
+    // Visual feedback (flashes cyan)
+    const oldOutline = target.style.outline;
+    target.style.outline = "3px solid #06b6d4";
+    setTimeout(() => { target.style.outline = oldOutline; }, 600);
+
+    const payload = {
+      kind: kind,
+      tag: tag,
+      domType: type || "",
+      name: target.getAttribute("name") || "",
+      domId: target.id || "",
+      placeholder: target.getAttribute("placeholder") || "",
+      ariaLabel: target.getAttribute("aria-label") || "",
+      cssSelector: getCssSelector(target),
+      xpath: getXPath(target),
+      looksLike: classify(target),
+      displayLabel: displayLabel || "Element",
+      buttonLabel: kind === "ClickNext" ? (displayLabel || "Button") : "",
+      verified: true
+    };
+
+    sendToBridge(payload);
   }
 
-  function onFormSubmit(e) {
-    try {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-    } catch (_) {}
-  }
+  // ===========================================================================
+  // LIFECYCLE HOOKS
+  // ===========================================================================
+  
+  // "true" at the end is CRITICAL: it listens in the capture phase, preventing
+  // websites from using stopPropagation() to break the recorder.
+  document.addEventListener("click", handleEvent, true);
 
-  function onKeyDown(e) {
-    try {
-      if (e.key === "Enter") {
-        const tag = (e.target.tagName || "").toLowerCase();
-        if (tag === "input" || tag === "textarea") {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }
-    } catch (_) {}
-  }
-
-  function attach() {
-    try {
-      document.addEventListener("focusin", onFocusIn, true);
-      document.addEventListener("click", onClick, true);
-      document.addEventListener("submit", onFormSubmit, true);
-      document.addEventListener("keydown", onKeyDown, true);
-    } catch (_) {}
-  }
-
-  function onFocusIn(e) {
-    try { captureField(e.target); } catch (_) {}
-  }
-
-  function detach() {
-    try {
-      document.removeEventListener("focusin", onFocusIn, true);
-      document.removeEventListener("click", onClick, true);
-      document.removeEventListener("submit", onFormSubmit, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    } catch (_) {}
-  }
-
-  g.__automationRecorderActive = true;
-  g.__automationRecorderPaused = false;
-  attach();
-
-  // Health check: log if bridge disappears while recording
-  try {
-    setInterval(() => {
-      if (g.__automationRecorderActive && !g.__automationRecorderPaused) {
-        if (!window.AutomationBridge || typeof window.AutomationBridge.onElementRecorded !== "function") {
-          console.warn("[Automation] bridge missing during recording — will auto-recover on next page load");
-        }
-      }
-    }, 5000);
-  } catch (_) {}
-
-  g.__automationRecorderStop = function () {
-    detach();
-    g.__automationRecorderActive = false;
-    g.__automationRecorderPaused = false;
+  g.__automationRecorderPause = () => { isPaused = true; };
+  g.__automationRecorderResume = () => { isPaused = false; };
+  g.__automationRecorderStop = () => {
+    document.removeEventListener("click", handleEvent, true);
+    g.__automationRecorderInstalled = false;
   };
 
-  g.__automationRecorderPause = function () {
-    if (!g.__automationRecorderActive || g.__automationRecorderPaused) return;
-    detach();
-    g.__automationRecorderPaused = true;
-  };
-
-  g.__automationRecorderResume = function () {
-    if (!g.__automationRecorderActive || !g.__automationRecorderPaused) return;
-    attach();
-    g.__automationRecorderPaused = false;
-  };
+  console.log("Automation Recorder successfully injected.");
 })();
