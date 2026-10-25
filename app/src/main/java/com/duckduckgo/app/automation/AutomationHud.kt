@@ -534,12 +534,25 @@ private fun HudRunningPanel() {
                 Spacer(Modifier.height(6.dp))
                 DdgSecondaryButton(text = "Stop Automation", onClick = { AutomationEngine.stopAutomation() })
             }
-            AutomationState.WAITING_DATA_EXHAUSTED -> {
-                Text("Group data finished! Repeat with same data or add new?", fontFamily = VarelaRound, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        AutomationState.WAITING_DATA_EXHAUSTED -> {
+                Text(
+                    text = "Recurring data finished! Repeat with the same data or add new profiles?", 
+                    fontFamily = VarelaRound, 
+                    fontSize = 12.sp, 
+                    fontWeight = FontWeight.SemiBold
+                )
                 Spacer(Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DdgPrimaryButton(text = "Repeat Data", onClick = { AutomationEngine.handleDataExhaustedChoice("repeat_same") }, modifier = Modifier.weight(1f))
-                    DdgSecondaryButton(text = "Add Data", onClick = { AutomationEngine.handleDataExhaustedChoice("add_new") }, modifier = Modifier.weight(1f))
+                    DdgPrimaryButton(
+                        text = "Repeat Data", 
+                        onClick = { AutomationEngine.handleDataExhaustedChoice("repeat_same") }, 
+                        modifier = Modifier.weight(1f)
+                    )
+                    DdgSecondaryButton(
+                        text = "Add Data", 
+                        onClick = { AutomationEngine.handleDataExhaustedChoice("add_new") }, 
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
             AutomationState.COMPLETED -> DdgPrimaryButton(text = "Automation Finished", onClick = { AutomationEngine.stopAutomation() })

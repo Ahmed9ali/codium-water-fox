@@ -64,7 +64,7 @@ object AutomationEngine {
     private const val HUD_VIEW_TAG = "ddg_automation_hud_overlay"
     private const val MAX_WAIT_MS = 300_000L
 
-    // Fields that should fetch from the Recurring Data Group
+    // Fields that should fetch from the Recurring Data Group (Emails, Phones, etc.)
     private val DYNAMIC_FIELDS = setOf("email", "confirmemail", "phone", "confirmphone", "username", "otp")
 
     private var currentWebView: WeakReference<WebView>? = null
@@ -350,6 +350,7 @@ object AutomationEngine {
             updateState(AutomationState.NAVIGATING)
             automationJob?.cancel()
             currentWebView?.get()?.evaluateJavascript("try { window.__automation_active = true; } catch(_) {}", null)
+            // FIXED: Do NOT reset hudCompleted here. Resume exactly where it left off.
             automationJob = scope.launch { runScriptExecution(script, config) }
         } else {
             stopAutomation()
@@ -369,7 +370,7 @@ object AutomationEngine {
         val looksLike = step.fieldType.lowercase()
         val isDynamic = DYNAMIC_FIELDS.contains(looksLike)
         
-        // Dynamic fields (email, phone) prioritize recurring profile
+        // Dynamic fields (email, phone, username) prioritize recurring profile
         // Static fields (password, dob) prioritize default profile
         val primary = if (isDynamic) recurringProfile else defaultProfile
         val fallback = if (isDynamic) defaultProfile else recurringProfile
@@ -382,12 +383,16 @@ object AutomationEngine {
 
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
-        var completed = 0
+        
+        // FIXED: Resume from current progress, do not reset to 0
+        var completed = hudCompleted
 
         while (completed < config.targetRepeatCount && scope.isActive) {
             if (!VaultRepository.hasUnusedData(config.groupName)) {
+                // Clear message: Recurring data is done.
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
+                updateStatus("Recurring data exhausted after $completed runs.")
                 return
             }
             val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
@@ -586,7 +591,11 @@ object AutomationEngine {
             }
             VaultRepository.markProfileUsed(profile)
             completed++
+            
+            // FIXED: Update HUD so it remembers the progress
+            hudCompleted = completed
             updateProgress(completed, config.targetRepeatCount)
+            
             delay(500)
         }
         updateState(AutomationState.COMPLETED)

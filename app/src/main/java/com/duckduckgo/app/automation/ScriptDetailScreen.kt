@@ -1,5 +1,6 @@
 package com.duckduckgo.app.automation
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -47,13 +50,42 @@ fun ScriptDetailScreen(
     var humanize by remember(scriptId) { mutableStateOf(originalScript.humanize) }
     var steps by remember(scriptId) { mutableStateOf(originalScript.steps) }
 
+    // Dialog States
     var showAddStepDialog by remember { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
     var stepToEdit by remember { mutableStateOf<RecordedStep?>(null) }
+    
+    // Wait Step Dialog State
+    var showWaitDialog by remember { mutableStateOf(false) }
+    var waitInput by remember { mutableStateOf("2") }
 
-    // Drag State
+    // --- IMPROVED DRAG & DROP STATE ---
+    val listState = rememberLazyListState()
     var draggedItemId by remember { mutableStateOf<String?>(null) }
-    var draggedOffset by remember { mutableFloatStateOf(0f) }
+    var draggedIndex by remember { mutableIntStateOf(-1) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var dropTargetIndex by remember { mutableIntStateOf(-1) }
+
+    // Auto-scroll logic while dragging
+    LaunchedEffect(draggedItemId, dragOffset) {
+        if (draggedItemId != null && draggedIndex != -1) {
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            val draggedItemInfo = visibleItems.find { it.index == draggedIndex }
+            if (draggedItemInfo != null) {
+                val currentTop = draggedItemInfo.offset + dragOffset
+                val currentBottom = currentTop + draggedItemInfo.size
+                val viewportStart = listState.layoutInfo.viewportStartOffset
+                val viewportEnd = listState.layoutInfo.viewportEndOffset
+                val threshold = 120f // Pixels from edge to trigger scroll
+
+                if (currentBottom > viewportEnd - threshold) {
+                    listState.scrollBy(15f)
+                } else if (currentTop < viewportStart + threshold) {
+                    listState.scrollBy(-15f)
+                }
+            }
+        }
+    }
 
     val recurringGroups = VaultRepository.getRecurringGroups()
     val defaultGroups = VaultRepository.getDefaultGroups()
@@ -206,7 +238,7 @@ fun ScriptDetailScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Long-press the handle ☰ to reorder",
+                "Long-press the handle ☰ to drag and reorder",
                 color = DuckDuckGoTheme.colors.text.secondary,
                 fontSize = 11.sp,
             )
@@ -227,24 +259,31 @@ fun ScriptDetailScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = (steps.size * 76).dp, max = 600.dp),
                 ) {
                     itemsIndexed(steps, key = { _, step -> step.id }) { index, step ->
                         val isDragging = draggedItemId == step.id
-                        
+                        val isDropTarget = dropTargetIndex == index && !isDragging
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 8.dp)
+                                // Only the dragged item follows the finger
+                                .offset { IntOffset(0, if (isDragging) dragOffset.roundToInt() else 0) }
                                 .zIndex(if (isDragging) 1f else 0f)
-                                .offset { IntOffset(0, if (isDragging) draggedOffset.roundToInt() else 0) }
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = DuckDuckGoTheme.colors.backgrounds.surface,
-                                modifier = Modifier.fillMaxWidth()
+                                color = if (isDropTarget) DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f) else DuckDuckGoTheme.colors.backgrounds.surface,
+                                border = if (isDropTarget) BorderStroke(2.dp, DuckDuckGoTheme.colors.brand.accentBlue) else null,
+                                shadowElevation = if (isDragging) 8.dp else 0.dp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .alpha(if (isDragging) 0.9f else 1f)
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -290,31 +329,43 @@ fun ScriptDetailScreen(
                                                 detectDragGesturesAfterLongPress(
                                                     onDragStart = {
                                                         draggedItemId = step.id
-                                                        draggedOffset = 0f
+                                                        draggedIndex = index
+                                                        dragOffset = 0f
                                                     },
                                                     onDrag = { change, dragAmount ->
                                                         change.consume()
-                                                        draggedOffset += dragAmount.y
+                                                        dragOffset += dragAmount.y
+                                                        
+                                                        // Calculate target drop position
+                                                        val draggedInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == draggedIndex }
+                                                        if (draggedInfo != null) {
+                                                            val currentCenterY = draggedInfo.offset + dragOffset + draggedInfo.size / 2f
+                                                            
+                                                            // Find the item we are currently hovering over
+                                                            val target = listState.layoutInfo.visibleItemsInfo.find {
+                                                                currentCenterY >= it.offset && currentCenterY <= it.offset + it.size
+                                                            }
+                                                            dropTargetIndex = target?.index ?: -1
+                                                        }
                                                     },
                                                     onDragEnd = {
-                                                        val threshold = 76.dp.toPx()
-                                                        val itemsMoved = (draggedOffset / threshold).roundToInt()
-                                                        val targetIndex = (index + itemsMoved).coerceIn(0, steps.size - 1)
-
-                                                        if (targetIndex != index) {
+                                                        // Perform the actual swap
+                                                        if (dropTargetIndex != -1 && dropTargetIndex != draggedIndex) {
                                                             val mutable = steps.toMutableList()
-                                                            val item = mutable.removeAt(index)
-                                                            mutable.add(targetIndex, item)
-                                                            steps = mutable.mapIndexed { i, s ->
-                                                                s.copy(sequenceIndex = i + 1)
-                                                            }
+                                                            val item = mutable.removeAt(draggedIndex)
+                                                            mutable.add(dropTargetIndex, item)
+                                                            steps = mutable.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
                                                         }
                                                         draggedItemId = null
-                                                        draggedOffset = 0f
+                                                        draggedIndex = -1
+                                                        dragOffset = 0f
+                                                        dropTargetIndex = -1
                                                     },
                                                     onDragCancel = {
                                                         draggedItemId = null
-                                                        draggedOffset = 0f
+                                                        draggedIndex = -1
+                                                        dragOffset = 0f
+                                                        dropTargetIndex = -1
                                                     }
                                                 )
                                             },
@@ -341,7 +392,7 @@ fun ScriptDetailScreen(
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = DuckDuckGoTheme.colors.backgrounds.surface),
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DuckDuckGoTheme.colors.backgrounds.surface)
+                border = BorderStroke(1.dp, DuckDuckGoTheme.colors.backgrounds.surface)
             ) {
                 Icon(painterResource(drawable.ic_add_24), contentDescription = null, tint = DuckDuckGoTheme.colors.brand.accentBlue)
                 Spacer(Modifier.width(8.dp))
@@ -367,7 +418,7 @@ fun ScriptDetailScreen(
         }
     }
 
-    // Dialogs remain the same (Rename, Add Step, Step Options)...
+    // Rename Dialog
     if (showNameDialog) {
         InAppInputDialog(
             title = "Script Name",
@@ -380,6 +431,30 @@ fun ScriptDetailScreen(
         )
     }
 
+    // Custom Wait Dialog
+    if (showWaitDialog) {
+        InAppInputDialog(
+            title = "Wait Time (seconds)",
+            value = waitInput,
+            onValueChange = { waitInput = it.filter { c -> c.isDigit() }.take(3) },
+            confirmLabel = "Add",
+            cancelLabel = "Cancel",
+            onConfirm = {
+                val secs = (waitInput.toLongOrNull() ?: 2L).coerceIn(1L, 300L)
+                steps = steps + RecordedStep(
+                    sequenceIndex = steps.size + 1, 
+                    kind = StepKind.Wait, 
+                    waitMs = secs * 1000, 
+                    displayLabel = "Wait ${secs}s"
+                )
+                showWaitDialog = false
+                showAddStepDialog = false
+            },
+            onDismiss = { showWaitDialog = false }
+        )
+    }
+
+    // Redesigned Add Step Dialog
     if (showAddStepDialog) {
         Dialog(onDismissRequest = { showAddStepDialog = false }) {
             Surface(
@@ -390,6 +465,7 @@ fun ScriptDetailScreen(
                 color = DuckDuckGoTheme.colors.backgrounds.surface
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
+                    // Header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -403,31 +479,68 @@ fun ScriptDetailScreen(
                         }
                     }
 
-                    Text("Actions", fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp), color = DuckDuckGoTheme.colors.text.secondary)
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ActionChip("Wait 2s") {
-                            steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.Wait, waitMs = 2000, displayLabel = "Wait 2s")
-                            showAddStepDialog = false
+                    // ACTIONS SECTION
+                    Text(
+                        "Actions", 
+                        fontFamily = VarelaRound, 
+                        fontSize = 14.sp, 
+                        fontWeight = FontWeight.Bold, 
+                        modifier = Modifier.padding(horizontal = 20.dp), 
+                        color = DuckDuckGoTheme.colors.text.secondary
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    
+                    // Grid of Action Cards
+                    Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            ActionCard(
+                                title = "Wait", 
+                                icon = "⏳",
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                waitInput = "2"
+                                showWaitDialog = true
+                            }
+                            ActionCard(
+                                title = "CAPTCHA", 
+                                icon = "🛡️",
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.CaptchaWait, displayLabel = "Wait for CAPTCHA")
+                                showAddStepDialog = false
+                            }
                         }
-                        ActionChip("Clear Data") {
-                            steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, fieldType = "delete_tab", displayLabel = "Delete Tab Data")
-                            showAddStepDialog = false
-                        }
-                        ActionChip("CAPTCHA") {
-                            steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.CaptchaWait, displayLabel = "Wait CAPTCHA")
-                            showAddStepDialog = false
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            ActionCard(
+                                title = "Clear Tab Data", 
+                                icon = "🧹",
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, fieldType = "delete_tab", displayLabel = "Delete Tab Data")
+                                showAddStepDialog = false
+                            }
+                            ActionCard(
+                                title = "Clear All Data", 
+                                icon = "🔥",
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, fieldType = "delete_all", displayLabel = "Delete All Data")
+                                showAddStepDialog = false
+                            }
                         }
                     }
 
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(24.dp))
                     
-                    Text("Web Fields", fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp), color = DuckDuckGoTheme.colors.text.secondary)
+                    // WEB FIELDS SECTION
+                    Text(
+                        "Web Fields", 
+                        fontFamily = VarelaRound, 
+                        fontSize = 14.sp, 
+                        fontWeight = FontWeight.Bold, 
+                        modifier = Modifier.padding(horizontal = 20.dp), 
+                        color = DuckDuckGoTheme.colors.text.secondary
+                    )
                     Spacer(Modifier.height(8.dp))
                     
                     LazyColumn(
@@ -451,7 +564,9 @@ fun ScriptDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
-                                    modifier = Modifier.size(36.dp).background(DuckDuckGoTheme.colors.backgrounds.background, CircleShape),
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(DuckDuckGoTheme.colors.backgrounds.background, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(opt.canonical.take(1).uppercase(), fontWeight = FontWeight.Bold, color = DuckDuckGoTheme.colors.brand.accentBlue)
@@ -467,6 +582,7 @@ fun ScriptDetailScreen(
         }
     }
 
+    // Step Options Dialog (Delete)
     stepToEdit?.let { step ->
         Dialog(onDismissRequest = { stepToEdit = null }) {
             Surface(shape = RoundedCornerShape(16.dp), color = DuckDuckGoTheme.colors.backgrounds.surface) {
@@ -494,13 +610,27 @@ fun ScriptDetailScreen(
 }
 
 @Composable
-private fun ActionChip(text: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+private fun ActionCard(
+    title: String,
+    icon: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = modifier
+            .background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text, color = DuckDuckGoTheme.colors.brand.accentBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(icon, fontSize = 20.sp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            title, 
+            color = DuckDuckGoTheme.colors.text.primary, 
+            fontSize = 13.sp, 
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = VarelaRound
+        )
     }
 }

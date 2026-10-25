@@ -1,5 +1,5 @@
 /*
- * Automation Scanner (v9 - Keyboard Readonly Block + Calendar Bypass)
+ * Automation Scanner (v10 - Calendar Date Fix)
  */
 (function () {
   "use strict";
@@ -23,7 +23,6 @@
 
   g.__automation_active = false;
 
-  // Block keyboard if automation is active
   const originalFocus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function(...args) {
     if (g.__automation_active) return;
@@ -310,22 +309,28 @@
     const tag = (el.tagName || "").toLowerCase();
     const type = (el.type || "").toLowerCase();
     
-    // BUG 2 FIX: Bypass Custom Calendar (DOB)
+    // BUG FIX: Handle Date inputs properly (e.g. 15/05/1990 -> 1990-05-15)
     const isDate = type === "date" || type === "datetime-local" || classify(el) === "dob";
     if (isDate) {
       const wasReadonly = el.hasAttribute('readonly');
       if (wasReadonly) el.removeAttribute('readonly');
       
+      let finalValue = value.trim();
+      if (type === "date" && /^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(finalValue)) {
+          const parts = finalValue.split(/[\/\-]/);
+          finalValue = `${parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD
+      }
+      
       try {
-        el.focus(); // Original focus, bypass blocked focus
+        originalFocus.call(el);
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-        if (setter) setter.call(el, value);
-        else el.value = value;
+        if (setter) setter.call(el, finalValue);
+        else el.value = finalValue;
         
         el.dispatchEvent(new Event("input", { bubbles: true }));
         el.dispatchEvent(new Event("change", { bubbles: true }));
         el.dispatchEvent(new Event("blur", { bubbles: true }));
-        if (el._valueTracker) el._valueTracker.setValue(value);
+        if (el._valueTracker) el._valueTracker.setValue(finalValue);
       } catch (_) {}
       
       if (wasReadonly) el.setAttribute('readonly', 'true');
@@ -344,7 +349,6 @@
       return true;
     }
     if (tag === "input" || tag === "textarea") {
-      // BUG 1 FIX: Use readonly trick to prevent keyboard
       const wasReadonly = el.hasAttribute('readonly');
       el.setAttribute('readonly', 'true');
       try { originalFocus.call(el); } catch (_) {}

@@ -1,5 +1,5 @@
 /*
- * Automation Recorder (v9 - Readonly Block + Disabled Force)
+ * Automation Recorder (v10 - Scroll Fix)
  */
 (function () {
   "use strict";
@@ -14,6 +14,28 @@
   let lastTarget = null;
   let lastClickTime = 0;
   let justRecorded = false;
+  let isScrolling = false;
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  // Detect scrolls to prevent accidental captures
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 0) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      isScrolling = false;
+    }
+  }, { capture: true, passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 0) {
+      const diffX = Math.abs(e.touches[0].clientX - touchStartX);
+      const diffY = Math.abs(e.touches[0].clientY - touchStartY);
+      if (diffX > 10 || diffY > 10) {
+        isScrolling = true;
+      }
+    }
+  }, { capture: true, passive: true });
 
   // Force disabled buttons to be clickable
   const styleEl = document.createElement('style');
@@ -137,7 +159,7 @@
   }
 
   function handleEvent(e) {
-    if (isPaused) return;
+    if (isPaused || isScrolling) return;
     if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
     
     if (e.type === 'click' && justRecorded) {
@@ -185,7 +207,6 @@
         }
       }
     } else {
-      // BUG 1 FIX: Apply readonly trick to prevent keyboard on click
       const wasReadonly = actualTarget.hasAttribute('readonly');
       actualTarget.setAttribute('readonly', 'true');
       try { actualTarget.blur(); } catch (_) {}
