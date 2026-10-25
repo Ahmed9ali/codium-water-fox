@@ -40,7 +40,8 @@ import kotlin.random.Random
 
 data class AutomationConfig(
     val targetUrl: String,
-    val groupName: String,
+    val groupName: String, // Recurring Data
+    val defaultGroupName: String? = null, // Default Data (Optional)
     val mode: String,
     val targetRepeatCount: Int = 1,
     val humanize: Boolean = false,
@@ -62,6 +63,9 @@ object AutomationEngine {
     private const val TAG = "AutomationEngine"
     private const val HUD_VIEW_TAG = "ddg_automation_hud_overlay"
     private const val MAX_WAIT_MS = 300_000L
+
+    // Fields that should fetch from the Recurring Data Group
+    private val DYNAMIC_FIELDS = setOf("email", "confirmemail", "phone", "confirmphone", "username", "otp")
 
     private var currentWebView: WeakReference<WebView>? = null
     private var scannerJs: String? = null
@@ -111,7 +115,8 @@ object AutomationEngine {
 
     var hudAvailableScripts by mutableStateOf<List<AutomationScript>>(emptyList()); private set
     var hudSelectedScript by mutableStateOf<AutomationScript?>(null); private set
-    var hudSelectedGroup by mutableStateOf(""); private set
+    var hudSelectedGroup by mutableStateOf(""); private set // Recurring
+    var hudSelectedDefaultGroup by mutableStateOf(""); private set // Default
     var hudRunRepeatCount by mutableIntStateOf(1); private set
 
     var hudEditingScript by mutableStateOf<AutomationScript?>(null); private set
@@ -214,11 +219,13 @@ object AutomationEngine {
     fun openRunSetup(script: AutomationScript) {
         hudSelectedScript = script
         hudSelectedGroup = VaultRepository.groups.value.firstOrNull()?.name ?: ""
+        hudSelectedDefaultGroup = "" // Default to None
         hudRunRepeatCount = 1
         hudMode = HudMode.RunSetup
     }
 
     fun updateRunGroup(group: String) { hudSelectedGroup = group }
+    fun updateRunDefaultGroup(group: String) { hudSelectedDefaultGroup = group }
     fun updateRunRepeat(count: Int) { hudRunRepeatCount = count.coerceIn(1, 999) }
 
     fun openScriptEditor(script: AutomationScript) {
@@ -272,12 +279,13 @@ object AutomationEngine {
     fun startSelectedScriptRun() {
         val script = hudSelectedScript ?: return
         if (hudSelectedGroup.isBlank()) {
-            Toast.makeText(appContext, "Select a group first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, "Select a recurring data group first", Toast.LENGTH_SHORT).show()
             return
         }
         val config = AutomationConfig(
             targetUrl = script.url,
             groupName = hudSelectedGroup,
+            defaultGroupName = hudSelectedDefaultGroup.takeIf { it.isNotBlank() },
             mode = "series",
             targetRepeatCount = hudRunRepeatCount,
             humanize = script.humanize
@@ -354,6 +362,23 @@ object AutomationEngine {
         }
     }
 
+    private fun resolveFieldValue(step: RecordedStep, recurringProfile: ActiveAutomationProfile, defaultProfile: ActiveAutomationProfile?): String {
+        if (step.customValue.isNotBlank()) return step.customValue
+        
+        val looksLike = step.fieldType.lowercase()
+        val isDynamic = DYNAMIC_FIELDS.contains(looksLike)
+        
+        // Dynamic fields (email, phone) prioritize recurring profile
+        // Static fields (password, dob) prioritize default profile
+        val primary = if (isDynamic) recurringProfile else defaultProfile
+        val fallback = if (isDynamic) defaultProfile else recurringProfile
+        
+        val val1 = primary?.resolveForField(step.fieldType, step.name, step.tag)
+        if (!val1.isNullOrBlank()) return val1
+        
+        return fallback?.resolveForField(step.fieldType, step.name, step.tag) ?: ""
+    }
+
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
         var completed = 0
@@ -365,6 +390,13 @@ object AutomationEngine {
                 return
             }
             val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
+            
+            // Fetch Default Profile (Static data) - Do not mark as used
+            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != config.groupName) {
+                VaultRepository.acquireNextProfile(config.defaultGroupName, "default")
+            } else {
+                profile
+            }
 
             updateState(AutomationState.NAVIGATING)
             updateStatus("Loading ${script.url}...")
@@ -379,10 +411,8 @@ object AutomationEngine {
                     StepKind.Field -> {
                         updateState(AutomationState.FILLING)
                         updateStatus("Filling ${step.displayLabel}...")
-                        val valToFill = if (step.customValue.isNotBlank()) step.customValue
-                                         else profile.resolveForField(step.fieldType, step.name, step.tag) ?: ""
+                        val valToFill = resolveFieldValue(step, profile, defaultProfile)
 
-                        // HUMANIZE: Random wait before interacting
                         if (config.humanize) {
                             delay(Random.nextLong(500, 3000))
                         }
@@ -491,7 +521,6 @@ object AutomationEngine {
                         updateState(AutomationState.CLICKING_NEXT)
                         updateStatus("Clicking ${step.displayLabel}...")
 
-                        // HUMANIZE: Random wait before clicking
                         if (config.humanize) {
                             delay(Random.nextLong(500, 3000))
                         }
@@ -611,6 +640,14 @@ object AutomationEngine {
             }
             val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
             currentProfile = profile
+            
+            // Fetch Default Profile (Static data) - Do not mark as used
+            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != config.groupName) {
+                VaultRepository.acquireNextProfile(config.defaultGroupName, "default")
+            } else {
+                profile
+            }
+
             if (config.clearTabBetweenRuns && hudCompleted > 0) {
                 updateState(AutomationState.CLEARING_DATA)
                 updateStatus("Clearing tab data...")
@@ -642,7 +679,19 @@ object AutomationEngine {
                 for (i in 0 until fieldsArr.length()) {
                     val f = fieldsArr.getJSONObject(i)
                     val looksLike = f.optString("looksLike")
-                    val matched = if (looksLike == "termsCheckbox") "true" else profile.resolveForField(looksLike, f.optString("name"), f.optString("tag"))
+                    
+                    val matched = when {
+                        looksLike == "termsCheckbox" -> "true"
+                        else -> {
+                            val isDynamic = DYNAMIC_FIELDS.contains(looksLike.lowercase())
+                            val primary = if (isDynamic) profile else defaultProfile
+                            val fallback = if (isDynamic) defaultProfile else profile
+                            
+                            val val1 = primary?.resolveForField(looksLike, f.optString("name"), f.optString("tag"))
+                            if (!val1.isNullOrBlank()) val1 else fallback?.resolveForField(looksLike, f.optString("name"), f.optString("tag"))
+                        }
+                    }
+                    
                     if (!matched.isNullOrBlank()) {
                         fillArray.put(JSONObject().apply { put("ref", f.optString("ref")); put("index", f.optInt("index", i)); put("value", matched) })
                     }
@@ -812,7 +861,7 @@ object AutomationEngine {
         hudVisible = false
     }
 
-        fun startRecording() {
+    fun startRecording() {
         if (hudMode == HudMode.Recording) return
         val webView = currentWebView?.get() ?: return
         webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
@@ -826,10 +875,8 @@ object AutomationEngine {
         hudMode = HudMode.Recording
         hudVisible = true
         
-        // Inject immediately
         loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (immediate)") } }
         
-        // Inject again after 500ms in case the page was still loading
         webView.postDelayed({
             if (hudMode == HudMode.Recording) {
                 loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (delayed)") } }

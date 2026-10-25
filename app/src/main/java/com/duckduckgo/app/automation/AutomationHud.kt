@@ -423,10 +423,11 @@ private fun HudRunSetupPanel() {
     val script = AutomationEngine.hudSelectedScript ?: return
     val groups = VaultRepository.groups.value
     val selectedGroup = AutomationEngine.hudSelectedGroup
+    val selectedDefaultGroup = AutomationEngine.hudSelectedDefaultGroup
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
     HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
-        Text("Select Data Group", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("Recurring Data (Email, Phone, etc.)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         if (groups.isEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
@@ -437,7 +438,7 @@ private fun HudRunSetupPanel() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = false)
-                    .heightIn(max = 150.dp)
+                    .heightIn(max = 120.dp)
             ) {
                 items(groups, key = { it.name }) { group ->
                     Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -447,6 +448,30 @@ private fun HudRunSetupPanel() {
                 }
             }
         }
+        
+        Spacer(Modifier.height(8.dp))
+        Text("Default Data (Password, DOB, etc.)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .heightIn(max = 120.dp)
+        ) {
+            item {
+                Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunDefaultGroup("") }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedDefaultGroup.isBlank(), onClick = { AutomationEngine.updateRunDefaultGroup("") })
+                    Text("None", fontFamily = VarelaRound, fontSize = 13.sp)
+                }
+            }
+            items(groups, key = { it.name }) { group ->
+                Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunDefaultGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedDefaultGroup == group.name, onClick = { AutomationEngine.updateRunDefaultGroup(group.name) })
+                    Text(group.name, fontFamily = VarelaRound, fontSize = 13.sp)
+                }
+            }
+        }
+        
         Spacer(Modifier.height(8.dp))
         Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
@@ -455,7 +480,6 @@ private fun HudRunSetupPanel() {
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // BUG FIX: Redesigned buttons to look cleaner and compact
             OutlinedIconButton(
                 onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) },
                 modifier = Modifier.size(36.dp),

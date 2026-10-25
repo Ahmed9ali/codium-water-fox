@@ -1,5 +1,5 @@
 /*
- * Automation Recorder (v8 - Disabled Button Fix + First Load Fix)
+ * Automation Recorder (v9 - Readonly Block + Disabled Force)
  */
 (function () {
   "use strict";
@@ -15,11 +15,11 @@
   let lastClickTime = 0;
   let justRecorded = false;
 
-  // --- BUG 2 FIX: Force disabled buttons to be clickable while recording ---
+  // Force disabled buttons to be clickable
   const styleEl = document.createElement('style');
   styleEl.id = '__automation_recorder_style';
   styleEl.textContent = `
-    button:disabled, input:disabled, select:disabled, textarea:disabled, [aria-disabled="true"] {
+    button:disabled, input:disabled, [aria-disabled="true"] {
       pointer-events: auto !important;
       cursor: crosshair !important;
       opacity: 0.7 !important;
@@ -27,7 +27,7 @@
   `;
   document.head.appendChild(styleEl);
 
-  // BUG 1 FIX: Override focus to prevent keyboard
+  // Block keyboard
   const originalFocus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function(...args) {
     if (!isPaused && g.__automationRecorderInstalled) return;
@@ -40,7 +40,6 @@
       const st = window.getComputedStyle(el);
       if (!st || st.display === "none" || st.visibility === "hidden") return false;
       const r = el.getBoundingClientRect();
-      // Relaxed visibility for mobile layouts
       return r.width > 0 || r.height > 0 || el.offsetParent !== null || el.getClientRects().length > 0;
     } catch (_) { return false; }
   }
@@ -141,7 +140,6 @@
     if (isPaused) return;
     if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
     
-    // Prevent double recording (mousedown -> click)
     if (e.type === 'click' && justRecorded) {
       justRecorded = false;
       return;
@@ -151,7 +149,6 @@
     let target = path[0];
     if (!target || target.nodeType !== Node.ELEMENT_NODE) return;
 
-    // Target may be an SVG or span inside a button
     let actualTarget = target;
     if (!['input', 'textarea', 'select', 'button', 'a'].includes(actualTarget.tagName.toLowerCase())) {
       const parentInteractive = actualTarget.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick], [aria-disabled="true"]');
@@ -180,7 +177,6 @@
     const isLink = tag === "a" || (tag === "button") || type === "submit" || actualTarget.getAttribute("role") === "button";
     if (isLink) {
       kind = "ClickNext";
-      // Block navigation if it's not disabled
       if (!actualTarget.disabled && actualTarget.getAttribute("aria-disabled") !== "true") {
         if (e.cancelable) {
           e.preventDefault();
@@ -189,7 +185,11 @@
         }
       }
     } else {
+      // BUG 1 FIX: Apply readonly trick to prevent keyboard on click
+      const wasReadonly = actualTarget.hasAttribute('readonly');
+      actualTarget.setAttribute('readonly', 'true');
       try { actualTarget.blur(); } catch (_) {}
+      setTimeout(() => { if (!wasReadonly) actualTarget.removeAttribute('readonly'); }, 200);
     }
 
     const oldOutline = actualTarget.style.outline;
@@ -213,13 +213,11 @@
     };
     sendToBridge(payload);
 
-    // If this was mousedown/touchstart, prevent the subsequent click just in case
     if (e.type === 'mousedown' || e.type === 'touchstart') {
       setTimeout(() => { justRecorded = false; }, 400);
     }
   }
 
-  // BUG 2 FIX: Listen to mousedown and touchstart to catch disabled buttons that swallow 'click'
   document.addEventListener("mousedown", handleEvent, true);
   document.addEventListener("touchstart", handleEvent, true);
   document.addEventListener("click", handleEvent, true);
