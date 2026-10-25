@@ -218,8 +218,9 @@ object AutomationEngine {
 
     fun openRunSetup(script: AutomationScript) {
         hudSelectedScript = script
-        hudSelectedGroup = VaultRepository.groups.value.firstOrNull()?.name ?: ""
-        hudSelectedDefaultGroup = "" // Default to None
+        // Load the groups saved directly inside the script
+        hudSelectedGroup = script.groupName
+        hudSelectedDefaultGroup = script.defaultGroupName
         hudRunRepeatCount = 1
         hudMode = HudMode.RunSetup
     }

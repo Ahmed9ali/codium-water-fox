@@ -25,7 +25,7 @@ import com.duckduckgo.mobile.android.R.drawable
 @Composable
 fun MyDataScreen(
     onBack: () -> Unit,
-    onAddClick: (DataGroupType) -> Unit, // UPDATED: Passes the type
+    onAddClick: (DataGroupType) -> Unit,
     onGroupClick: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -76,21 +76,42 @@ fun MyDataScreen(
             }
         }
 
-        // TABS
+        // FIXED TABS: Explicitly set indicator and divider colors to match theme
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = DuckDuckGoTheme.colors.backgrounds.surface,
-            contentColor = DuckDuckGoTheme.colors.brand.accentBlue
+            contentColor = DuckDuckGoTheme.colors.brand.accentBlue,
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = DuckDuckGoTheme.colors.brand.accentBlue
+                )
+            },
+            divider = {
+                HorizontalDivider(color = DuckDuckGoTheme.colors.backgrounds.background)
+            }
         ) {
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Recurring Data", fontWeight = FontWeight.SemiBold) }
+                text = { 
+                    Text(
+                        "Recurring Data", 
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (selectedTab == 0) DuckDuckGoTheme.colors.text.primary else DuckDuckGoTheme.colors.text.secondary
+                    ) 
+                }
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Default Data", fontWeight = FontWeight.SemiBold) }
+                text = { 
+                    Text(
+                        "Default Data", 
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (selectedTab == 1) DuckDuckGoTheme.colors.text.primary else DuckDuckGoTheme.colors.text.secondary
+                    ) 
+                }
             )
         }
 

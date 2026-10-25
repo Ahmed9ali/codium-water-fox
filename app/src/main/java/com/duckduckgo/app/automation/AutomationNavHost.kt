@@ -96,11 +96,12 @@ fun AutomationNavHost(
             AutomationScreen.Home -> AutomationHomeScreen(
                 onBack = onBack,
                 onMyDataClick = { current = AutomationScreen.MyData },
-                onAddDataClick = { current = AutomationScreen.AddData(DataGroupType.RECURRING) },
+                // FIXED: Routes directly to the tabbed MyData screen
+                onAddDataClick = { current = AutomationScreen.MyData }, 
                 onMyScriptsClick = { current = AutomationScreen.MyScripts },
                 onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) },
-                onCreateAutomationClick = { current = AutomationScreen.CreateAutomation },
                 onViewLogsClick = { current = AutomationScreen.MyData },
+                // Removed onCreateAutomationClick
             )
 
             AutomationScreen.MyData -> MyDataScreen(

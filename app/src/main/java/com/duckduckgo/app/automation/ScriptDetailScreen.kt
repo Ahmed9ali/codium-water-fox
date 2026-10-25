@@ -5,7 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items // FIXED: Import items for lists
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +43,7 @@ fun ScriptDetailScreen(
 
     var scriptName by remember(scriptId) { mutableStateOf(originalScript.name) }
     var selectedGroup by remember(scriptId) { mutableStateOf(originalScript.groupName) }
+    var selectedDefaultGroup by remember(scriptId) { mutableStateOf(originalScript.defaultGroupName) }
     var humanize by remember(scriptId) { mutableStateOf(originalScript.humanize) }
     var steps by remember(scriptId) { mutableStateOf(originalScript.steps) }
 
@@ -49,11 +51,12 @@ fun ScriptDetailScreen(
     var showNameDialog by remember { mutableStateOf(false) }
     var stepToEdit by remember { mutableStateOf<RecordedStep?>(null) }
 
-    // Drag State (No Animations)
+    // Drag State
     var draggedItemId by remember { mutableStateOf<String?>(null) }
     var draggedOffset by remember { mutableFloatStateOf(0f) }
 
-    val groups = VaultRepository.groups.value
+    val recurringGroups = VaultRepository.getRecurringGroups()
+    val defaultGroups = VaultRepository.getDefaultGroups()
 
     Column(
         modifier = Modifier
@@ -99,23 +102,25 @@ fun ScriptDetailScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
-            // Data Group Selection
+            // RECURRING DATA SELECTION
             Text(
-                "Assigned Data Group",
+                "Recurring Data (Emails, Phones)",
                 color = DuckDuckGoTheme.colors.text.primary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
             )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Select the pool of data to use 1-by-1. Required for automation.",
+                color = DuckDuckGoTheme.colors.text.secondary,
+                fontSize = 12.sp,
+            )
             Spacer(Modifier.height(8.dp))
             DdgCard {
-                if (groups.isEmpty()) {
-                    Text(
-                        "No groups available. Create one in My Data.",
-                        color = DuckDuckGoTheme.colors.text.secondary,
-                        fontSize = 13.sp,
-                    )
+                if (recurringGroups.isEmpty()) {
+                    Text("No Recurring groups available. Create one in My Data.", color = Color.Red, fontSize = 13.sp)
                 } else {
-                    groups.forEach { group ->
+                    recurringGroups.forEach { group ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -129,6 +134,53 @@ fun ScriptDetailScreen(
                             )
                             Text(group.name, fontFamily = VarelaRound, fontSize = 14.sp)
                         }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // DEFAULT DATA SELECTION
+            Text(
+                "Default Data (Password, DOB)",
+                color = DuckDuckGoTheme.colors.text.primary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Reusable data that never runs out. Used for static fields.",
+                color = DuckDuckGoTheme.colors.text.secondary,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            DdgCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { selectedDefaultGroup = "" }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = selectedDefaultGroup.isBlank(),
+                        onClick = { selectedDefaultGroup = "" },
+                    )
+                    Text("None (Use Recurring for all)", fontFamily = VarelaRound, fontSize = 14.sp, color = DuckDuckGoTheme.colors.text.secondary)
+                }
+                defaultGroups.forEach { group ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedDefaultGroup = group.name }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selectedDefaultGroup == group.name,
+                            onClick = { selectedDefaultGroup = group.name },
+                        )
+                        Text(group.name, fontFamily = VarelaRound, fontSize = 14.sp)
                     }
                 }
             }
@@ -201,7 +253,6 @@ fun ScriptDetailScreen(
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    // Left: Number Badge
                                     Box(
                                         modifier = Modifier
                                             .size(32.dp)
@@ -218,7 +269,6 @@ fun ScriptDetailScreen(
                                     
                                     Spacer(Modifier.width(16.dp))
                                     
-                                    // Center: Title & Type
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             step.displayLabel,
@@ -233,7 +283,6 @@ fun ScriptDetailScreen(
                                         )
                                     }
                                     
-                                    // Right: Single Drag Handle Icon
                                     Box(
                                         modifier = Modifier
                                             .size(40.dp)
@@ -287,7 +336,6 @@ fun ScriptDetailScreen(
 
             Spacer(Modifier.height(16.dp))
             
-            // Single Add Button
             Button(
                 onClick = { showAddStepDialog = true },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -308,6 +356,7 @@ fun ScriptDetailScreen(
                     val updated = originalScript.copy(
                         name = scriptName,
                         groupName = selectedGroup,
+                        defaultGroupName = selectedDefaultGroup,
                         humanize = humanize,
                         steps = steps,
                     )
@@ -318,7 +367,7 @@ fun ScriptDetailScreen(
         }
     }
 
-    // Rename Dialog
+    // Dialogs remain the same (Rename, Add Step, Step Options)...
     if (showNameDialog) {
         InAppInputDialog(
             title = "Script Name",
@@ -331,7 +380,6 @@ fun ScriptDetailScreen(
         )
     }
 
-    // Add Step Dialog
     if (showAddStepDialog) {
         Dialog(onDismissRequest = { showAddStepDialog = false }) {
             Surface(
@@ -386,7 +434,6 @@ fun ScriptDetailScreen(
                         modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                         contentPadding = PaddingValues(bottom = 20.dp)
                     ) {
-                        // FIXED: Explicitly pass the list to 'items'
                         items(items = FieldTypeMapper.assignOptions) { opt ->
                             Row(
                                 modifier = Modifier
@@ -420,7 +467,6 @@ fun ScriptDetailScreen(
         }
     }
 
-    // Step Options Dialog
     stepToEdit?.let { step ->
         Dialog(onDismissRequest = { stepToEdit = null }) {
             Surface(shape = RoundedCornerShape(16.dp), color = DuckDuckGoTheme.colors.backgrounds.surface) {

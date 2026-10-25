@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
+import com.duckduckgo.mobile.android.R.drawable
 import kotlin.math.roundToInt
 
 @Composable
@@ -78,7 +80,7 @@ private fun HudContainer(
                     Text(subtitle, color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
                 }
                 
-                // Clean, styled text arrow
+                // Custom Arrow Icons
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -87,11 +89,11 @@ private fun HudContainer(
                         .clickable { AutomationEngine.toggleHudPosition() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (isTop) "↓" else "↑",
-                        color = DuckDuckGoTheme.colors.brand.accentBlue,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        painter = painterResource(if (isTop) drawable.arrow_cool_down_24px else drawable.arrow_warm_up_24px),
+                        contentDescription = "Move HUD",
+                        tint = DuckDuckGoTheme.colors.brand.accentBlue,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
                 
@@ -433,58 +435,40 @@ private fun HudScriptEditPanel() {
 @Composable
 private fun HudRunSetupPanel() {
     val script = AutomationEngine.hudSelectedScript ?: return
-    
-    // Filter groups by type
-    val recurringGroups = VaultRepository.getRecurringGroups()
-    val defaultGroups = VaultRepository.getDefaultGroups()
-    
     val selectedGroup = AutomationEngine.hudSelectedGroup
     val selectedDefaultGroup = AutomationEngine.hudSelectedDefaultGroup
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
     HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
         
-        // Recurring Picker
-        Text("Recurring Data (Email, Phone)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        // Display Recurring Data Status
+        Text("Recurring Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
-        if (recurringGroups.isEmpty()) {
-            Text("Create a Recurring group in My Data first.", color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        if (selectedGroup.isBlank()) {
+            Text("Data not selected. Edit script to assign data.", color = Color.Red, fontSize = 13.sp)
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 100.dp)
-            ) {
-                items(recurringGroups, key = { it.name }) { group ->
-                    Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = selectedGroup == group.name, onClick = { AutomationEngine.updateRunGroup(group.name) })
-                        Text(group.name, fontFamily = VarelaRound, fontSize = 13.sp)
-                    }
-                }
+            Box(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(selectedGroup, fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
         
         Spacer(Modifier.height(12.dp))
         
-        // Default Picker
-        Text("Default Data (Password, DOB)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        // Display Default Data Status
+        Text("Default Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 100.dp)
-        ) {
-            item {
-                Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunDefaultGroup("") }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = selectedDefaultGroup.isBlank(), onClick = { AutomationEngine.updateRunDefaultGroup("") })
-                    Text("None (Use Recurring for all)", fontFamily = VarelaRound, fontSize = 13.sp, color = DuckDuckGoTheme.colors.text.secondary)
-                }
-            }
-            items(defaultGroups, key = { it.name }) { group ->
-                Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunDefaultGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = selectedDefaultGroup == group.name, onClick = { AutomationEngine.updateRunDefaultGroup(group.name) })
-                    Text(group.name, fontFamily = VarelaRound, fontSize = 13.sp)
-                }
-            }
+        Box(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(8.dp)).padding(12.dp)) {
+            Text(
+                text = if (selectedDefaultGroup.isBlank()) "None (Uses Recurring)" else selectedDefaultGroup,
+                fontFamily = VarelaRound, 
+                fontSize = 14.sp, 
+                color = if (selectedDefaultGroup.isBlank()) DuckDuckGoTheme.colors.text.secondary else DuckDuckGoTheme.colors.text.primary
+            )
         }
         
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
+        
+        // Repeat Count Picker
         Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -496,10 +480,22 @@ private fun HudRunSetupPanel() {
                 Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         }
+        
         Spacer(Modifier.height(14.dp))
+        
+        // Buttons
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DdgSecondaryButton(text = "Back", onClick = { AutomationEngine.openScriptList() }, modifier = Modifier.weight(1f))
-            DdgPrimaryButton(text = "Run", onClick = { AutomationEngine.startSelectedScriptRun() }, modifier = Modifier.weight(1f), enabled = selectedGroup.isNotBlank())
+            DdgSecondaryButton(text = "Edit Script", onClick = { AutomationEngine.openScriptEditor(script) }, modifier = Modifier.weight(1f))
+            DdgPrimaryButton(
+                text = "Run", 
+                onClick = { AutomationEngine.startSelectedScriptRun() }, 
+                modifier = Modifier.weight(1f), 
+                enabled = selectedGroup.isNotBlank() && VaultRepository.hasUnusedData(selectedGroup)
+            )
+        }
+        if (selectedGroup.isNotBlank() && !VaultRepository.hasUnusedData(selectedGroup)) {
+            Spacer(Modifier.height(6.dp))
+            Text("Recurring group is empty or all data used.", color = Color.Red, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }
