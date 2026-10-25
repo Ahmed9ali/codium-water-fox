@@ -89,19 +89,16 @@ fun AutomationNavHost(
             }
         }
 
-        // FIXED: Assign to a local variable to allow smart casting
         val screen = current
 
         when (screen) {
             AutomationScreen.Home -> AutomationHomeScreen(
                 onBack = onBack,
                 onMyDataClick = { current = AutomationScreen.MyData },
-                // FIXED: Routes directly to the tabbed MyData screen
-                onAddDataClick = { current = AutomationScreen.MyData }, 
+                onAddDataClick = { current = AutomationScreen.AddData(DataGroupType.RECURRING) },
                 onMyScriptsClick = { current = AutomationScreen.MyScripts },
                 onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) },
                 onViewLogsClick = { current = AutomationScreen.MyData },
-                // Removed onCreateAutomationClick
             )
 
             AutomationScreen.MyData -> MyDataScreen(
@@ -111,7 +108,7 @@ fun AutomationNavHost(
             )
 
             is AutomationScreen.AddData -> AddDataChoiceScreen(
-                type = screen.type, // FIXED: Passed missing 'type' parameter
+                type = screen.type,
                 onBack = { current = AutomationScreen.MyData },
                 onPasteClick = { current = AutomationScreen.PasteData(screen.type) },
                 onFileLoaded = { filename, text ->
@@ -177,7 +174,8 @@ fun AutomationNavHost(
             is AutomationScreen.Running -> AutomationRunningScreen(
                 config = screen.config,
                 onFinished = { count ->
-                    current = AutomationScreen.Completed(screen.config.groupName, screen.config.mode, count)
+                    // FIXED: using groupNames (plural)
+                    current = AutomationScreen.Completed(screen.config.groupNames.joinToString(", "), screen.config.mode, count)
                 },
                 onAddNewDataRequested = {
                     current = AutomationScreen.PasteData(DataGroupType.RECURRING)

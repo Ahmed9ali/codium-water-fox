@@ -179,13 +179,9 @@ private fun ScriptRow(
                 )
             }
             
-            // RUN BUTTON DIRECTLY FROM LIST
+            // FIXED: Replaced missing ic_play_24 with a Text Play button
             IconButton(onClick = { AutomationEngine.launchScriptFromList(script, context) }) {
-                Icon(
-                    painter = painterResource(drawable.ic_play_24), // Uses standard play icon
-                    contentDescription = "Run Script",
-                    tint = DuckDuckGoTheme.colors.brand.accentBlue,
-                )
+                Text("▶", color = DuckDuckGoTheme.colors.brand.accentBlue, fontSize = 20.sp)
             }
 
             IconButton(onClick = onOverflowClick) {
