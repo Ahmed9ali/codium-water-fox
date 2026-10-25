@@ -40,7 +40,6 @@ sealed interface AutomationScreen {
     object Home : AutomationScreen
     object MyData : AutomationScreen
     
-    // UPDATED: Pass DataGroupType through the Add flow
     data class AddData(val type: DataGroupType) : AutomationScreen
     data class PasteData(val type: DataGroupType) : AutomationScreen
     data class GenerateData(val type: DataGroupType) : AutomationScreen
@@ -74,10 +73,9 @@ fun AutomationNavHost(
                 AutomationScreen.MyData -> current = AutomationScreen.Home
                 is AutomationScreen.GroupDetail -> current = AutomationScreen.MyData
                 
-                // UPDATED: Preserve the type when going back
                 is AutomationScreen.AddData -> current = AutomationScreen.MyData
-                is AutomationScreen.PasteData -> current = AutomationScreen.AddData(current.type)
-                is AutomationScreen.GenerateData -> current = AutomationScreen.AddData(current.type)
+                is AutomationScreen.PasteData -> current = AutomationScreen.AddData((current as AutomationScreen.PasteData).type)
+                is AutomationScreen.GenerateData -> current = AutomationScreen.AddData((current as AutomationScreen.GenerateData).type)
                 
                 AutomationScreen.MyScripts -> current = AutomationScreen.Home
                 is AutomationScreen.ScriptDetail -> current = AutomationScreen.MyScripts
@@ -91,11 +89,14 @@ fun AutomationNavHost(
             }
         }
 
-        when (val c = current) {
+        // FIXED: Assign to a local variable to allow smart casting
+        val screen = current
+
+        when (screen) {
             AutomationScreen.Home -> AutomationHomeScreen(
                 onBack = onBack,
                 onMyDataClick = { current = AutomationScreen.MyData },
-                onAddDataClick = { current = AutomationScreen.AddData(DataGroupType.RECURRING) }, // Defaults to Recurring
+                onAddDataClick = { current = AutomationScreen.AddData(DataGroupType.RECURRING) },
                 onMyScriptsClick = { current = AutomationScreen.MyScripts },
                 onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) },
                 onCreateAutomationClick = { current = AutomationScreen.CreateAutomation },
@@ -104,39 +105,37 @@ fun AutomationNavHost(
 
             AutomationScreen.MyData -> MyDataScreen(
                 onBack = { current = AutomationScreen.Home },
-                onAddClick = { type -> current = AutomationScreen.AddData(type) }, // Passes the type from tabs
+                onAddClick = { type -> current = AutomationScreen.AddData(type) },
                 onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) },
             )
 
-            // UPDATED: Pass type to AddDataChoiceScreen
             is AutomationScreen.AddData -> AddDataChoiceScreen(
+                type = screen.type, // FIXED: Passed missing 'type' parameter
                 onBack = { current = AutomationScreen.MyData },
-                onPasteClick = { current = AutomationScreen.PasteData(c.type) },
+                onPasteClick = { current = AutomationScreen.PasteData(screen.type) },
                 onFileLoaded = { filename, text ->
                     val parsed = SmartParser.parse(text)
                     val lines = parsed.all.joinToString("\n") { (k, v) -> "$k: $v" }
-                    VaultRepository.addGroup(filename, lines.ifBlank { text }, c.type) // Passes the type
+                    VaultRepository.addGroup(filename, lines.ifBlank { text }, screen.type)
                     current = AutomationScreen.MyData
                 },
-                onGenerateClick = { current = AutomationScreen.GenerateData(c.type) },
+                onGenerateClick = { current = AutomationScreen.GenerateData(screen.type) },
             )
 
-            // UPDATED: Pass type to PasteDataScreen
             is AutomationScreen.PasteData -> PasteDataScreen(
-                type = c.type,
-                onBack = { current = AutomationScreen.AddData(c.type) },
+                type = screen.type,
+                onBack = { current = AutomationScreen.AddData(screen.type) },
                 onSaved = { current = AutomationScreen.MyData },
             )
 
-            // UPDATED: Pass type to GenerateDataScreen
             is AutomationScreen.GenerateData -> GenerateDataScreen(
-                type = c.type,
-                onBack = { current = AutomationScreen.AddData(c.type) },
+                type = screen.type,
+                onBack = { current = AutomationScreen.AddData(screen.type) },
                 onSaved = { current = AutomationScreen.MyData },
             )
 
             is AutomationScreen.GroupDetail -> GroupDetailScreen(
-                groupName = c.groupName,
+                groupName = screen.groupName,
                 onBack = { current = AutomationScreen.MyData },
             )
 
@@ -146,7 +145,7 @@ fun AutomationNavHost(
             )
             
             is AutomationScreen.ScriptDetail -> ScriptDetailScreen(
-                scriptId = c.scriptId,
+                scriptId = screen.scriptId,
                 onBack = { current = AutomationScreen.MyScripts }
             )
 
@@ -175,9 +174,9 @@ fun AutomationNavHost(
             )
 
             is AutomationScreen.Running -> AutomationRunningScreen(
-                config = c.config,
+                config = screen.config,
                 onFinished = { count ->
-                    current = AutomationScreen.Completed(c.config.groupName, c.config.mode, count)
+                    current = AutomationScreen.Completed(screen.config.groupName, screen.config.mode, count)
                 },
                 onAddNewDataRequested = {
                     current = AutomationScreen.PasteData(DataGroupType.RECURRING)
@@ -189,20 +188,16 @@ fun AutomationNavHost(
             )
 
             is AutomationScreen.Completed -> AutomationCompletedScreen(
-                groupName = c.groupName,
-                mode = c.mode,
-                totalFilled = c.count,
-                onViewLogs = { current = AutomationScreen.GroupDetail(c.groupName) },
+                groupName = screen.groupName,
+                mode = screen.mode,
+                totalFilled = screen.count,
+                onViewLogs = { current = AutomationScreen.GroupDetail(screen.groupName) },
                 onRunAgain = { current = AutomationScreen.CreateAutomation },
                 onBack = { current = AutomationScreen.Home },
             )
         }
     }
 }
-
-// ============================================================================
-// UI COMPONENTS (Shared across screens)
-// ============================================================================
 
 @Composable
 fun AutomationTopBar(

@@ -143,7 +143,7 @@ fun CreateAutomationScreen(
                 Text(
                     text = if (useInlineManual) "Select Saved Group" else "+ New / Manual",
                     color = DuckDuckGoTheme.colors.brand.accentBlue,
-                    fontFamily = VarelaRound, // CHANGED
+                    fontFamily = VarelaRound,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
@@ -159,7 +159,7 @@ fun CreateAutomationScreen(
                     Text(
                         text = "Quick Manual Group Entry",
                         color = DuckDuckGoTheme.colors.text.primary,
-                        fontFamily = VarelaRound, // CHANGED
+                        fontFamily = VarelaRound,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -167,7 +167,7 @@ fun CreateAutomationScreen(
                     Text(
                         text = "Enter 'key: value' lines (e.g. email: a@b.com, password: Pass123!) or paste raw lines.",
                         color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = VarelaRound, // CHANGED
+                        fontFamily = VarelaRound,
                         fontSize = 12.sp,
                     )
                     Spacer(Modifier.height(10.dp))
@@ -220,7 +220,7 @@ fun CreateAutomationScreen(
                                 Text(
                                     text = group.name,
                                     color = DuckDuckGoTheme.colors.text.primary,
-                                    fontFamily = VarelaRound, // CHANGED
+                                    fontFamily = VarelaRound,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -228,7 +228,7 @@ fun CreateAutomationScreen(
                                 Text(
                                     text = "$groupUnused unused · $groupUsed used (${group.entries.size} total)",
                                     color = DuckDuckGoTheme.colors.text.secondary,
-                                    fontFamily = VarelaRound, // CHANGED
+                                    fontFamily = VarelaRound,
                                     fontSize = 12.sp,
                                 )
                             }
@@ -253,13 +253,13 @@ fun CreateAutomationScreen(
                         Text(
                             text = "${activeGroupObj.usedCount} entries marked as used",
                             color = DuckDuckGoTheme.colors.text.secondary,
-                            fontFamily = VarelaRound, // CHANGED
+                            fontFamily = VarelaRound,
                             fontSize = 12.sp,
                         )
                         Text(
                             text = "Reset Used Status",
                             color = DuckDuckGoTheme.colors.brand.accentBlue,
-                            fontFamily = VarelaRound, // CHANGED
+                            fontFamily = VarelaRound,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
@@ -325,7 +325,7 @@ fun CreateAutomationScreen(
                     Text(
                         text = "Tip: Selected group currently has $unusedProfilesInGroup unused profile(s). If target exceeds this, you'll be asked to repeat or add new data.",
                         color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = VarelaRound, // CHANGED
+                        fontFamily = VarelaRound,
                         fontSize = 11.sp,
                     )
                 }
@@ -411,7 +411,8 @@ fun CreateAutomationScreen(
                 onClick = {
                     val finalGroupName = if (useInlineManual) {
                         val name = manualGroupName.trim().ifBlank { "Manual ${System.currentTimeMillis() % 10000}" }
-                        VaultRepository.addGroup(name, manualRawData)
+                        // FIXED: Added DataGroupType.RECURRING parameter
+                        VaultRepository.addGroup(name, manualRawData, DataGroupType.RECURRING)
                         selectedGroup = name
                         useInlineManual = false
                         name
@@ -458,7 +459,7 @@ fun CreateAutomationScreen(
                 Text(
                     text = "All Data in '$selectedGroup' Has Been Used",
                     color = DuckDuckGoTheme.colors.text.primary,
-                    fontFamily = VarelaRound, // CHANGED
+                    fontFamily = VarelaRound,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -466,7 +467,7 @@ fun CreateAutomationScreen(
                 Text(
                     text = "Would you like to reset the used status to start from the beginning, or add new data?",
                     color = DuckDuckGoTheme.colors.text.secondary,
-                    fontFamily = VarelaRound, // CHANGED
+                    fontFamily = VarelaRound,
                     fontSize = 14.sp,
                 )
                 Spacer(Modifier.height(20.dp))
@@ -533,7 +534,7 @@ private fun OrderModeOption(
                 Text(
                     text = title,
                     color = DuckDuckGoTheme.colors.text.primary,
-                    fontFamily = VarelaRound, // CHANGED
+                    fontFamily = VarelaRound,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 )
@@ -541,7 +542,7 @@ private fun OrderModeOption(
                 Text(
                     text = desc,
                     color = DuckDuckGoTheme.colors.text.secondary,
-                    fontFamily = VarelaRound, // CHANGED
+                    fontFamily = VarelaRound,
                     fontSize = 12.sp,
                 )
             }

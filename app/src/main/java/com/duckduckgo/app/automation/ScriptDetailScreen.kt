@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items // FIXED: Import items for lists
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -189,7 +189,6 @@ fun ScriptDetailScreen(
                                 .zIndex(if (isDragging) 1f else 0f)
                                 .offset { IntOffset(0, if (isDragging) draggedOffset.roundToInt() else 0) }
                         ) {
-                            // Standard Surface without animation
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = DuckDuckGoTheme.colors.backgrounds.surface,
@@ -387,7 +386,8 @@ fun ScriptDetailScreen(
                         modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
                         contentPadding = PaddingValues(bottom = 20.dp)
                     ) {
-                        items(FieldTypeMapper.assignOptions) { opt ->
+                        // FIXED: Explicitly pass the list to 'items'
+                        items(items = FieldTypeMapper.assignOptions) { opt ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

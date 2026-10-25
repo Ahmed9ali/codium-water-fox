@@ -236,7 +236,8 @@ fun ImportScreen(
                                     if (data.emails.isNotEmpty()) data.emails.first()
                                     else "Imported ${System.currentTimeMillis() % 10000}"
                                 }
-                                VaultRepository.addGroup(name, text)
+                                // FIXED: Added DataGroupType.RECURRING parameter
+                                VaultRepository.addGroup(name, text, DataGroupType.RECURRING)
                                 onSaved()
                             }
                         },

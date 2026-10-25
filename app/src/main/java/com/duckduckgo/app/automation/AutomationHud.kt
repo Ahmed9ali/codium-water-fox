@@ -1,11 +1,6 @@
 package com.duckduckgo.app.automation
 
 import android.content.Intent
-
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -83,18 +78,25 @@ private fun HudContainer(
                     Text(subtitle, color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
                 }
                 
-                // REPLACED TEXT WITH PROPER ICON
-                IconButton(
-                    onClick = { AutomationEngine.toggleHudPosition() },
-                    modifier = Modifier.size(32.dp)
+                // Clean, styled text arrow
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f))
+                        .clickable { AutomationEngine.toggleHudPosition() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (isTop) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Move HUD",
-                        tint = DuckDuckGoTheme.colors.brand.accentBlue
+                    Text(
+                        text = if (isTop) "↓" else "↑",
+                        color = DuckDuckGoTheme.colors.brand.accentBlue,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
                 
+                Spacer(Modifier.width(8.dp))
+
                 if (onClose != null) {
                     IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
                         Text("✕", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp)
@@ -167,7 +169,7 @@ private fun RecordingCapturePanel(steps: List<RecordedStep>, isPaused: Boolean) 
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = false) // Take available space, but don't force fill if not needed
+                    .weight(1f, fill = false)
                     .heightIn(max = 150.dp)
             ) {
                 items(steps, key = { it.id }) { step ->
