@@ -1,19 +1,3 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import androidx.compose.foundation.background
@@ -58,7 +42,7 @@ fun CreateAutomationScreen(
     onAddDataClick: () -> Unit = {},
     onStartConfig: (AutomationConfig) -> Unit,
 ) {
-    val groups = VaultRepository.groups.value
+    val groups = VaultRepository.getRecurringGroups()
 
     var targetUrl by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf(groups.firstOrNull()?.name ?: "") }
@@ -66,20 +50,16 @@ fun CreateAutomationScreen(
     var manualGroupName by remember { mutableStateOf("") }
     var manualRawData by remember { mutableStateOf("") }
 
-    // Execution modes: "series" (Top-to-Bottom), "bottom_up" (Bottom-to-Top), "random" (Random)
     var mode by remember { mutableStateOf("series") }
 
-    // Repeat target & Delays
     var repeatCountText by remember { mutableStateOf("1") }
     var typingDelayText by remember { mutableStateOf("60") }
     var fieldDelayText by remember { mutableStateOf("120") }
     var settleTimeoutText by remember { mutableStateOf("2000") }
 
-    // Toggles
     var pauseOnCaptcha by remember { mutableStateOf(true) }
     var clearTabBetweenRuns by remember { mutableStateOf(true) }
 
-    // Pre-start exhaustion prompt if selected group has 0 unused entries left
     var showExhaustedPreDialog by remember { mutableStateOf(false) }
 
     val activeGroupObj = groups.firstOrNull { it.name == selectedGroup }
@@ -107,7 +87,6 @@ fun CreateAutomationScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
-            // 1. Target Website Input
             DdgSectionHeader(
                 title = "1. Target Website",
                 subtitle = "Enter the website URL or domain where forms will be automated",
@@ -128,7 +107,6 @@ fun CreateAutomationScreen(
 
             Spacer(Modifier.height(22.dp))
 
-            // 2. Dataset / Group Selection (or Manual On-the-Fly Creation)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -241,7 +219,6 @@ fun CreateAutomationScreen(
                     Spacer(Modifier.height(8.dp))
                 }
 
-                // Inline Reset bar if selected group has used entries
                 if (activeGroupObj != null && activeGroupObj.usedCount > 0) {
                     Row(
                         modifier = Modifier
@@ -272,7 +249,6 @@ fun CreateAutomationScreen(
 
             Spacer(Modifier.height(22.dp))
 
-            // 3. 1-by-1 Execution Order Mode
             DdgSectionHeader(
                 title = "3. Data Selection Order (1-by-1)",
                 subtitle = "Choose how records are pulled from your group on each cycle",
@@ -302,7 +278,6 @@ fun CreateAutomationScreen(
 
             Spacer(Modifier.height(22.dp))
 
-            // 4. Target Repeat Count & Timing Delays
             DdgSectionHeader(
                 title = "4. Target Cycles & Speed Delays",
                 subtitle = "Control how many automations to run and human-like timing",
@@ -376,7 +351,6 @@ fun CreateAutomationScreen(
 
             Spacer(Modifier.height(22.dp))
 
-            // 5. CAPTCHA & Clean Tab Session Rules
             DdgSectionHeader(
                 title = "5. CAPTCHA & Session Isolation",
                 subtitle = "Nanobrowser safety rules between multi-step transitions",
@@ -411,7 +385,6 @@ fun CreateAutomationScreen(
                 onClick = {
                     val finalGroupName = if (useInlineManual) {
                         val name = manualGroupName.trim().ifBlank { "Manual ${System.currentTimeMillis() % 10000}" }
-                        // FIXED: Added DataGroupType.RECURRING parameter
                         VaultRepository.addGroup(name, manualRawData, DataGroupType.RECURRING)
                         selectedGroup = name
                         useInlineManual = false
@@ -420,15 +393,15 @@ fun CreateAutomationScreen(
                         selectedGroup
                     }
 
-                    // If all entries in the chosen group are already marked used, ask user before starting
                     if (!VaultRepository.hasUnusedData(finalGroupName)) {
                         showExhaustedPreDialog = true
                         return@DdgPrimaryButton
                     }
 
+                    // FIXED: Changed from groupName = finalGroupName to groupNames = listOf(finalGroupName)
                     val config = AutomationConfig(
                         targetUrl = targetUrl.trim(),
-                        groupName = finalGroupName,
+                        groupNames = listOf(finalGroupName),
                         mode = mode,
                         targetRepeatCount = (repeatCountText.toIntOrNull() ?: 1).coerceAtLeast(1),
                         typingDelayMs = (typingDelayText.toLongOrNull() ?: 60L).coerceAtLeast(0L),
@@ -445,7 +418,6 @@ fun CreateAutomationScreen(
         }
     }
 
-    // Pre-start modal when selected group has 0 unused entries remaining
     if (showExhaustedPreDialog) {
         Column(
             modifier = Modifier
@@ -476,10 +448,11 @@ fun CreateAutomationScreen(
                     onClick = {
                         VaultRepository.resetUsed(selectedGroup)
                         showExhaustedPreDialog = false
+                        // FIXED: Changed from groupName = selectedGroup to groupNames = listOf(selectedGroup)
                         onStartConfig(
                             AutomationConfig(
                                 targetUrl = targetUrl.trim(),
-                                groupName = selectedGroup,
+                                groupNames = listOf(selectedGroup),
                                 mode = mode,
                                 targetRepeatCount = (repeatCountText.toIntOrNull() ?: 1).coerceAtLeast(1),
                                 typingDelayMs = (typingDelayText.toLongOrNull() ?: 60L).coerceAtLeast(0L),
