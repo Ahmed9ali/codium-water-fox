@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -143,6 +144,8 @@ private fun ScriptRow(
     onRenameClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -152,7 +155,7 @@ private fun ScriptRow(
                     shape = RoundedCornerShape(12.dp),
                 )
                 .clickable(onClick = onCardClick)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -175,6 +178,16 @@ private fun ScriptRow(
                     fontSize = 13.sp,
                 )
             }
+            
+            // RUN BUTTON DIRECTLY FROM LIST
+            IconButton(onClick = { AutomationEngine.launchScriptFromList(script, context) }) {
+                Icon(
+                    painter = painterResource(drawable.ic_play_24), // Uses standard play icon
+                    contentDescription = "Run Script",
+                    tint = DuckDuckGoTheme.colors.brand.accentBlue,
+                )
+            }
+
             IconButton(onClick = onOverflowClick) {
                 Icon(
                     painter = painterResource(drawable.ic_menu_hamburger_24),

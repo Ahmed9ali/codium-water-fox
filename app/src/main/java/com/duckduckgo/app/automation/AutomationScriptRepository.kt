@@ -13,8 +13,8 @@ data class AutomationScript(
     val url: String,
     val host: String,
     val name: String,
-    val groupName: String = "", // Recurring Data
-    val defaultGroupName: String = "", // Default Data (NEW)
+    val groupNames: List<String> = emptyList(), // Supports multiple recurring groups
+    val defaultGroupName: String = "",
     val humanize: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
@@ -25,8 +25,8 @@ data class AutomationScript(
         put("url", url)
         put("host", host)
         put("name", name)
-        put("groupName", groupName)
-        put("defaultGroupName", defaultGroupName) // SAVE
+        put("groupNames", JSONArray(groupNames))
+        put("defaultGroupName", defaultGroupName)
         put("humanize", humanize)
         put("createdAt", createdAt)
         put("updatedAt", updatedAt)
@@ -39,13 +39,22 @@ data class AutomationScript(
             val steps = (0 until stepsJson.length()).map {
                 RecordedStep.fromJson(stepsJson.getJSONObject(it))
             }
+            
+            val groupsJson = json.optJSONArray("groupNames")
+            val groupNames = if (groupsJson != null) {
+                (0 until groupsJson.length()).map { groupsJson.getString(it) }
+            } else {
+                // Migration from old single groupName string
+                listOfNotNull(json.optString("groupName").takeIf { it.isNotBlank() })
+            }
+
             return AutomationScript(
                 id = json.optString("id").ifBlank { UUID.randomUUID().toString() },
                 url = json.optString("url"),
                 host = json.optString("host"),
                 name = json.optString("name"),
-                groupName = json.optString("groupName"),
-                defaultGroupName = json.optString("defaultGroupName"), // LOAD
+                groupNames = groupNames,
+                defaultGroupName = json.optString("defaultGroupName"),
                 humanize = json.optBoolean("humanize", false),
                 createdAt = json.optLong("createdAt", System.currentTimeMillis()),
                 updatedAt = json.optLong("updatedAt", System.currentTimeMillis()),

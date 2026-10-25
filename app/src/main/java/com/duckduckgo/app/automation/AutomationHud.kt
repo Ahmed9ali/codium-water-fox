@@ -29,8 +29,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
-import com.duckduckgo.mobile.android.R.drawable // For standard mobile icons like ic_arrow_left_24
-import com.duckduckgo.app.browser.R // For your custom app icons like arrow_cool_down_24px
+import com.duckduckgo.mobile.android.R.drawable
+import com.duckduckgo.app.browser.R
 import kotlin.math.roundToInt
 
 @Composable
@@ -74,14 +74,12 @@ private fun HudContainer(
                 .clickable(enabled = true, onClick = {})
                 .padding(14.dp),
         ) {
-            // Header with manual toggle
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(title, color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Text(subtitle, color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
                 }
                 
-                // FIXED: Using your custom XML arrows from the app module
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -114,10 +112,6 @@ private fun HudContainer(
     }
 }
 
-// ============================================================================
-// 1. MENU PANEL
-// ============================================================================
-
 @Composable
 private fun HudMenuPanel() {
     val context = LocalContext.current
@@ -138,10 +132,6 @@ private fun HudMenuPanel() {
         )
     }
 }
-
-// ============================================================================
-// 2. RECORDING PANEL
-// ============================================================================
 
 @Composable
 private fun HudRecordingPanel() {
@@ -249,10 +239,6 @@ private fun RecordingChip(text: String, compact: Boolean = false, onClick: () ->
     }
 }
 
-// ============================================================================
-// 3. SCRIPT LIST PANEL
-// ============================================================================
-
 @Composable
 private fun HudScriptListPanel() {
     val scripts = AutomationEngine.hudAvailableScripts
@@ -288,10 +274,6 @@ private fun HudScriptListPanel() {
     }
 }
 
-// ============================================================================
-// 4. SCRIPT EDITOR PANEL
-// ============================================================================
-
 @Composable
 private fun HudScriptEditPanel() {
     val script = AutomationEngine.hudEditingScript ?: return
@@ -302,7 +284,6 @@ private fun HudScriptEditPanel() {
     var customSelector by remember { mutableStateOf("") }
     var customValue by remember { mutableStateOf("") }
     
-    // Smooth Drag State
     var draggedId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
 
@@ -329,7 +310,6 @@ private fun HudScriptEditPanel() {
                                     dragOffset += dragAmount.y
                                 },
                                 onDragEnd = {
-                                    // Calculate target index based on drag offset
                                     val threshold = 50.dp.toPx()
                                     val itemsMoved = (dragOffset / threshold).roundToInt()
                                     val targetIndex = (index + itemsMoved).coerceIn(0, script.steps.size - 1)
@@ -431,33 +411,27 @@ private fun HudScriptEditPanel() {
     }
 }
 
-// ============================================================================
-// 5. RUN SETUP PANEL
-// ============================================================================
-
 @Composable
 private fun HudRunSetupPanel() {
     val script = AutomationEngine.hudSelectedScript ?: return
-    val selectedGroup = AutomationEngine.hudSelectedGroup
+    val selectedGroups = AutomationEngine.hudSelectedGroups
     val selectedDefaultGroup = AutomationEngine.hudSelectedDefaultGroup
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
     HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
         
-        // Display Recurring Data Status
         Text("Recurring Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
-        if (selectedGroup.isBlank()) {
+        if (selectedGroups.isEmpty()) {
             Text("Data not selected. Edit script to assign data.", color = Color.Red, fontSize = 13.sp)
         } else {
             Box(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(selectedGroup, fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(selectedGroups.joinToString(", "), fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
         }
         
         Spacer(Modifier.height(12.dp))
         
-        // Display Default Data Status
         Text("Default Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         Box(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(8.dp)).padding(12.dp)) {
@@ -471,7 +445,6 @@ private fun HudRunSetupPanel() {
         
         Spacer(Modifier.height(16.dp))
         
-        // Repeat Count Picker
         Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -486,26 +459,21 @@ private fun HudRunSetupPanel() {
         
         Spacer(Modifier.height(14.dp))
         
-        // Buttons
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DdgSecondaryButton(text = "Edit Script", onClick = { AutomationEngine.openScriptEditor(script) }, modifier = Modifier.weight(1f))
             DdgPrimaryButton(
                 text = "Run", 
                 onClick = { AutomationEngine.startSelectedScriptRun() }, 
                 modifier = Modifier.weight(1f), 
-                enabled = selectedGroup.isNotBlank() && VaultRepository.hasUnusedData(selectedGroup)
+                enabled = selectedGroups.isNotEmpty() && selectedGroups.any { VaultRepository.hasUnusedData(it) }
             )
         }
-        if (selectedGroup.isNotBlank() && !VaultRepository.hasUnusedData(selectedGroup)) {
+        if (selectedGroups.isNotEmpty() && !selectedGroups.any { VaultRepository.hasUnusedData(it) }) {
             Spacer(Modifier.height(6.dp))
-            Text("Recurring group is empty or all data used.", color = Color.Red, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text("All selected recurring groups are empty or used.", color = Color.Red, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
     }
 }
-
-// ============================================================================
-// 6. RUNNING PANEL
-// ============================================================================
 
 @Composable
 private fun HudRunningPanel() {
@@ -513,7 +481,7 @@ private fun HudRunningPanel() {
     val completed = AutomationEngine.hudCompleted
     val total = AutomationEngine.hudTotal
     val status = AutomationEngine.hudStatus
-    val unusedLeft = VaultRepository.unusedProfileCount(AutomationEngine.hudGroupName)
+    val unusedLeft = AutomationEngine.hudSelectedGroups.sumOf { VaultRepository.unusedProfileCount(it) }
 
     HudContainer(title = "Automation · ${AutomationEngine.hudGroupName}", subtitle = status.ifBlank { "Running..." }, onClose = null) {
         Spacer(Modifier.height(8.dp))
@@ -534,9 +502,9 @@ private fun HudRunningPanel() {
                 Spacer(Modifier.height(6.dp))
                 DdgSecondaryButton(text = "Stop Automation", onClick = { AutomationEngine.stopAutomation() })
             }
-                        AutomationState.WAITING_DATA_EXHAUSTED -> {
+            AutomationState.WAITING_DATA_EXHAUSTED -> {
                 Text(
-                    text = "Recurring data finished! Repeat with the same data or add new profiles?", 
+                    text = "All selected recurring groups finished! Repeat with the same data or add new profiles?", 
                     fontFamily = VarelaRound, 
                     fontSize = 12.sp, 
                     fontWeight = FontWeight.SemiBold

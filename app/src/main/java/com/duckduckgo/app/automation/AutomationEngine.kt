@@ -40,8 +40,8 @@ import kotlin.random.Random
 
 data class AutomationConfig(
     val targetUrl: String,
-    val groupName: String, // Recurring Data
-    val defaultGroupName: String? = null, // Default Data (Optional)
+    val groupNames: List<String>, // Supports multiple recurring groups
+    val defaultGroupName: String? = null,
     val mode: String,
     val targetRepeatCount: Int = 1,
     val humanize: Boolean = false,
@@ -64,7 +64,6 @@ object AutomationEngine {
     private const val HUD_VIEW_TAG = "ddg_automation_hud_overlay"
     private const val MAX_WAIT_MS = 300_000L
 
-    // Fields that should fetch from the Recurring Data Group (Emails, Phones, etc.)
     private val DYNAMIC_FIELDS = setOf("email", "confirmemail", "phone", "confirmphone", "username", "otp")
 
     private var currentWebView: WeakReference<WebView>? = null
@@ -100,7 +99,7 @@ object AutomationEngine {
     var hudCompleted by mutableIntStateOf(0); private set
     var hudTotal by mutableIntStateOf(1); private set
     var hudStatus by mutableStateOf(""); private set
-    var hudGroupName by mutableStateOf(""); private set
+    var hudGroupName by mutableStateOf(""); private set // For display only
 
     var onShowFireDialog: ((String) -> Unit)? = null
     private var fireDialogContinuation: CancellableContinuation<Unit>? = null
@@ -115,8 +114,8 @@ object AutomationEngine {
 
     var hudAvailableScripts by mutableStateOf<List<AutomationScript>>(emptyList()); private set
     var hudSelectedScript by mutableStateOf<AutomationScript?>(null); private set
-    var hudSelectedGroup by mutableStateOf(""); private set // Recurring
-    var hudSelectedDefaultGroup by mutableStateOf(""); private set // Default
+    var hudSelectedGroups by mutableStateOf<List<String>>(emptyList()); private set
+    var hudSelectedDefaultGroup by mutableStateOf(""); private set
     var hudRunRepeatCount by mutableIntStateOf(1); private set
 
     var hudEditingScript by mutableStateOf<AutomationScript?>(null); private set
@@ -218,16 +217,43 @@ object AutomationEngine {
 
     fun openRunSetup(script: AutomationScript) {
         hudSelectedScript = script
-        // Load the groups saved directly inside the script
-        hudSelectedGroup = script.groupName
+        hudSelectedGroups = script.groupNames
         hudSelectedDefaultGroup = script.defaultGroupName
         hudRunRepeatCount = 1
         hudMode = HudMode.RunSetup
     }
 
-    fun updateRunGroup(group: String) { hudSelectedGroup = group }
+    fun updateRunGroups(groups: List<String>) { hudSelectedGroups = groups }
     fun updateRunDefaultGroup(group: String) { hudSelectedDefaultGroup = group }
     fun updateRunRepeat(count: Int) { hudRunRepeatCount = count.coerceIn(1, 999) }
+
+    // NEW: Launch script directly from MyScripts screen
+    fun launchScriptFromList(script: AutomationScript, context: Context) {
+        if (script.groupNames.isEmpty()) {
+            Toast.makeText(context, "Script has no data assigned. Edit script first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        
+        val config = AutomationConfig(
+            targetUrl = script.url,
+            groupNames = script.groupNames,
+            defaultGroupName = script.defaultGroupName.takeIf { it.isNotBlank() },
+            mode = "series",
+            targetRepeatCount = 1,
+            humanize = script.humanize
+        )
+        
+        queueAutomationInBrowserTab(config)
+        
+        val browserIntent = com.duckduckgo.app.browser.BrowserActivity.intent(
+            context = context,
+            launchSource = com.duckduckgo.app.browser.mode.InAppNavigation,
+            queryExtra = script.url,
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        context.startActivity(browserIntent)
+    }
 
     fun openScriptEditor(script: AutomationScript) {
         hudEditingScript = script
@@ -279,13 +305,13 @@ object AutomationEngine {
 
     fun startSelectedScriptRun() {
         val script = hudSelectedScript ?: return
-        if (hudSelectedGroup.isBlank()) {
+        if (hudSelectedGroups.isEmpty()) {
             Toast.makeText(appContext, "Select a recurring data group first", Toast.LENGTH_SHORT).show()
             return
         }
         val config = AutomationConfig(
             targetUrl = script.url,
-            groupName = hudSelectedGroup,
+            groupNames = hudSelectedGroups,
             defaultGroupName = hudSelectedDefaultGroup.takeIf { it.isNotBlank() },
             mode = "series",
             targetRepeatCount = hudRunRepeatCount,
@@ -294,7 +320,7 @@ object AutomationEngine {
         hudMode = HudMode.Running
         hudVisible = true
         currentConfig = config
-        hudGroupName = config.groupName
+        hudGroupName = config.groupNames.joinToString(", ")
         updateProgress(0, config.targetRepeatCount)
         updateState(AutomationState.NAVIGATING)
         _captchaState.postValue(false)
@@ -346,15 +372,14 @@ object AutomationEngine {
         val config = currentConfig ?: return
         _dataExhaustedState.postValue(false)
         if (choice == "repeat_same") {
-            VaultRepository.resetUsed(config.groupName)
+            config.groupNames.forEach { VaultRepository.resetUsed(it) }
             updateState(AutomationState.NAVIGATING)
             automationJob?.cancel()
             currentWebView?.get()?.evaluateJavascript("try { window.__automation_active = true; } catch(_) {}", null)
-            // FIXED: Do NOT reset hudCompleted here. Resume exactly where it left off.
             automationJob = scope.launch { runScriptExecution(script, config) }
         } else {
             stopAutomation()
-            onDataExhaustedAction?.invoke(config.groupName)
+            onDataExhaustedAction?.invoke(config.groupNames.firstOrNull() ?: "")
             appContext?.let { ctx ->
                 val intent = Intent(ctx, AutomationActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -370,8 +395,6 @@ object AutomationEngine {
         val looksLike = step.fieldType.lowercase()
         val isDynamic = DYNAMIC_FIELDS.contains(looksLike)
         
-        // Dynamic fields (email, phone, username) prioritize recurring profile
-        // Static fields (password, dob) prioritize default profile
         val primary = if (isDynamic) recurringProfile else defaultProfile
         val fallback = if (isDynamic) defaultProfile else recurringProfile
         
@@ -383,22 +406,22 @@ object AutomationEngine {
 
     private suspend fun runScriptExecution(script: AutomationScript, config: AutomationConfig) {
         val webView = currentWebView?.get() ?: return
-        
-        // FIXED: Resume from current progress, do not reset to 0
         var completed = hudCompleted
 
         while (completed < config.targetRepeatCount && scope.isActive) {
-            if (!VaultRepository.hasUnusedData(config.groupName)) {
-                // Clear message: Recurring data is done.
+            // Find the first group that still has data
+            val activeGroup = config.groupNames.firstOrNull { VaultRepository.hasUnusedData(it) }
+            
+            if (activeGroup == null) {
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
-                updateStatus("Recurring data exhausted after $completed runs.")
+                updateStatus("All recurring groups exhausted after $completed runs.")
                 return
             }
-            val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
             
-            // Fetch Default Profile (Static data) - Do not mark as used
-            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != config.groupName) {
+            val profile = VaultRepository.acquireNextProfile(activeGroup, config.mode) ?: return
+            
+            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != activeGroup) {
                 VaultRepository.acquireNextProfile(config.defaultGroupName, "default")
             } else {
                 profile
@@ -591,11 +614,8 @@ object AutomationEngine {
             }
             VaultRepository.markProfileUsed(profile)
             completed++
-            
-            // FIXED: Update HUD so it remembers the progress
             hudCompleted = completed
             updateProgress(completed, config.targetRepeatCount)
-            
             delay(500)
         }
         updateState(AutomationState.COMPLETED)
@@ -607,7 +627,7 @@ object AutomationEngine {
     fun queueAutomationInBrowserTab(config: AutomationConfig) {
         currentConfig = config
         pendingBrowserConfig = config
-        hudGroupName = config.groupName
+        hudGroupName = config.groupNames.joinToString(", ")
         updateProgress(0, config.targetRepeatCount)
         updateState(AutomationState.NAVIGATING)
         updateStatus("Opening ${config.targetUrl} in browser tab...")
@@ -621,7 +641,7 @@ object AutomationEngine {
 
     fun startAutomation(config: AutomationConfig, navigateFirstCycle: Boolean = true) {
         currentConfig = config
-        hudGroupName = config.groupName
+        hudGroupName = config.groupNames.joinToString(", ")
         updateProgress(0, config.targetRepeatCount)
         updateState(AutomationState.NAVIGATING)
         hudMode = HudMode.Running
@@ -645,14 +665,17 @@ object AutomationEngine {
         val targetUri = if (config.targetUrl.startsWith("http")) config.targetUrl else "https://${config.targetUrl}"
         var isFirst = true
         while (hudCompleted < config.targetRepeatCount && scope.isActive) {
-            if (!VaultRepository.hasUnusedData(config.groupName)) {
+            
+            val activeGroup = config.groupNames.firstOrNull { VaultRepository.hasUnusedData(it) }
+            
+            if (activeGroup == null) {
                 _dataExhaustedState.postValue(true); updateState(AutomationState.WAITING_DATA_EXHAUSTED); return
             }
-            val profile = VaultRepository.acquireNextProfile(config.groupName, config.mode) ?: return
+            
+            val profile = VaultRepository.acquireNextProfile(activeGroup, config.mode) ?: return
             currentProfile = profile
             
-            // Fetch Default Profile (Static data) - Do not mark as used
-            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != config.groupName) {
+            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != activeGroup) {
                 VaultRepository.acquireNextProfile(config.defaultGroupName, "default")
             } else {
                 profile
@@ -746,7 +769,7 @@ object AutomationEngine {
                 updateProgress(hudCompleted + 1, config.targetRepeatCount)
                 updateStatus("Completed cycle ${hudCompleted} of ${config.targetRepeatCount}")
             } else {
-                updateStatus("No matching fields found for '${config.groupName}'.")
+                updateStatus("No matching fields found.")
                 break
             }
             delay(1000)
@@ -801,10 +824,9 @@ object AutomationEngine {
         fireDialogContinuation = null
     }
 
-    // FASTER PAGE LOAD WAIT
     private suspend fun waitForPageReady(webView: WebView) {
         var waited = 0L
-        while (waited < 5000L) { // 5 sec max
+        while (waited < 5000L) {
             val progress = withContext(Dispatchers.Main) { webView.progress }
             val state = evaluateJsSuspend(webView, "return document.readyState;")
             if (progress >= 80 && (state.contains("interactive") || state.contains("complete"))) break
@@ -814,7 +836,7 @@ object AutomationEngine {
     }
 
     private suspend fun evaluateJsSuspend(webView: WebView, script: String): String =
-        withTimeoutOrNull(8000L) { // 8 second timeout prevents freezing
+        withTimeoutOrNull(8000L) {
             suspendCancellableCoroutine { cont ->
                 Handler(Looper.getMainLooper()).post {
                     val wrapped = "(async () => { try { ${script.trim()} } catch(e) { return JSON.stringify({error: e.message}); } })();"
@@ -992,7 +1014,7 @@ object AutomationEngine {
         val finalName = name.trim().ifBlank { "${hudRecordingHost} Script" }
         val script = AutomationScript(
             id = UUID.randomUUID().toString(), url = hudRecordingUrl, host = hudRecordingHost,
-            name = finalName, groupName = "", humanize = false, createdAt = System.currentTimeMillis(),
+            name = finalName, groupNames = emptyList(), humanize = false, createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis(), steps = hudRecordedSteps
         )
         AutomationScriptRepository.saveScript(script)
