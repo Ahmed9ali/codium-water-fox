@@ -29,7 +29,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
-import com.duckduckgo.mobile.android.R.drawable
+import com.duckduckgo.mobile.android.R.drawable // For standard mobile icons like ic_arrow_left_24
+import com.duckduckgo.app.browser.R // For your custom app icons like arrow_cool_down_24px
 import kotlin.math.roundToInt
 
 @Composable
@@ -80,7 +81,7 @@ private fun HudContainer(
                     Text(subtitle, color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
                 }
                 
-                // Custom Arrow Icons
+                // FIXED: Using your custom XML arrows from the app module
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -90,7 +91,9 @@ private fun HudContainer(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        painter = painterResource(if (isTop) drawable.arrow_cool_down_24px else drawable.arrow_warm_up_24px),
+                        painter = painterResource(
+                            id = if (isTop) R.drawable.arrow_cool_down_24px else R.drawable.arrow_warm_up_24px
+                        ),
                         contentDescription = "Move HUD",
                         tint = DuckDuckGoTheme.colors.brand.accentBlue,
                         modifier = Modifier.size(20.dp)

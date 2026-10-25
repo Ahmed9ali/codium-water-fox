@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset // <-- THIS WAS MISSING
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,7 +77,7 @@ fun MyDataScreen(
             }
         }
 
-        // FIXED TABS: Explicitly set indicator and divider colors to match theme
+        // TABS
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = DuckDuckGoTheme.colors.backgrounds.surface,
@@ -260,7 +261,6 @@ private fun GroupRow(
                         fontWeight = FontWeight.Medium,
                     )
                     Spacer(Modifier.width(8.dp))
-                    // Visual Type Badge
                     Box(
                         modifier = Modifier
                             .background(
