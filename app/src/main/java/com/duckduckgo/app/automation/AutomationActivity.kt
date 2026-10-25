@@ -41,6 +41,7 @@ class AutomationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize the repository and engine when the activity opens
         VaultRepository.init(applicationContext)
         AutomationEngine.init(applicationContext)
 
@@ -51,22 +52,26 @@ class AutomationActivity : ComponentActivity() {
                 val view = LocalView.current
                 if (!view.isInEditMode) {
                     SideEffect {
+                        // Status Bar
                         window.statusBarColor = if (isLight) {
                             AndroidColor.parseColor("#FFFFFF")
                         } else {
                             AndroidColor.parseColor("#1C1C1E")
                         }
+                        // Navigation Bar
                         window.navigationBarColor = if (isLight) {
                             AndroidColor.parseColor("#F2F2F7")
                         } else {
                             AndroidColor.parseColor("#111111")
                         }
+                        // Light/Dark Icons
                         val controller = WindowCompat.getInsetsController(window, view)
                         controller.isAppearanceLightStatusBars = isLight
                         controller.isAppearanceLightNavigationBars = isLight
                     }
                 }
 
+                // Launch the Navigation Graph
                 AutomationNavHost(onBack = { finish() })
             }
         }
@@ -109,7 +114,6 @@ fun AutomationThemeWrapper(
         uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightBits
     }
 
-    // CHANGED: Use VarelaRound instead of SansSerif
     val cleanTypography = Typography(
         displayLarge = TextStyle(fontFamily = VarelaRound),
         displayMedium = TextStyle(fontFamily = VarelaRound),
@@ -129,7 +133,6 @@ fun AutomationThemeWrapper(
     )
 
     CompositionLocalProvider(LocalConfiguration provides patchedConfig) {
-        // CHANGED: Pass isDarkTheme here so it doesn't use the system theme
         DuckDuckGoTheme(isDarkTheme = !isLightMode) {
             MaterialTheme(
                 typography = cleanTypography,
@@ -149,7 +152,7 @@ fun AutomationThemeWrapper(
             ) {
                 ProvideTextStyle(
                     value = TextStyle(
-                        fontFamily = VarelaRound, // CHANGED: Use VarelaRound here too
+                        fontFamily = VarelaRound,
                         color = DuckDuckGoTheme.colors.text.primary,
                     ),
                 ) {

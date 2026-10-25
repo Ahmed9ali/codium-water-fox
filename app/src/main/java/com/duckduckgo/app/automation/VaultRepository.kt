@@ -1,19 +1,3 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import android.content.Context
@@ -22,6 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.random.Random
+
+enum class DataGroupType {
+    DEFAULT,    // Reusable: Password, DOB, Address, Name, etc.
+    RECURRING   // Consumable: Email, Phone, Username, etc.
+}
 
 data class VaultEntry(
     val fieldType: String,
@@ -33,6 +22,7 @@ data class VaultGroup(
     val name: String,
     val entries: List<VaultEntry>,
     val pinned: Boolean = false,
+    val type: DataGroupType = DataGroupType.RECURRING // NEW: Default or Recurring
 ) {
     val unusedCount: Int
         get() = entries.count { !it.used }
@@ -59,8 +49,15 @@ data class ActiveAutomationProfile(
             "confirmpassword" -> fields["password"]
             "confirmemail" -> fields["email"]
             "confirmphone" -> fields["phone"]
-            "firstname" -> fields["fullname"]?.trim()?.substringBefore(" ") ?: fields["username"]
-            "lastname", "surname" -> fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
+            
+            // STRICT FALLBACKS (Prevents duplicate name concatenation)
+            "firstname" -> fields["firstname"] ?: fields["fullname"]?.trim()?.substringBefore(" ") ?: fields["username"]
+            "middlename" -> fields["middlename"] // Do NOT fallback to fullname for middle name
+            
+            // Prioritize explicit lastname/surname to avoid duplicates
+            "lastname" -> fields["lastname"] ?: fields["surname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
+            "surname" -> fields["surname"] ?: fields["lastname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
+            
             "fullname" -> {
                 val first = fields["firstname"].orEmpty()
                 val last = fields["lastname"] ?: fields["surname"].orEmpty()
@@ -96,7 +93,11 @@ object VaultRepository {
         groups.value = load()
     }
 
-    fun addGroup(name: String, rawText: String, pinned: Boolean = false) {
+    // --- HELPER FUNCTIONS FOR GROUP TYPES ---
+    fun getDefaultGroups(): List<VaultGroup> = groups.value.filter { it.type == DataGroupType.DEFAULT }
+    fun getRecurringGroups(): List<VaultGroup> = groups.value.filter { it.type == DataGroupType.RECURRING }
+
+    fun addGroup(name: String, rawText: String, type: DataGroupType, pinned: Boolean = false) {
         val trimmedName = name.trim().ifBlank { "Group ${System.currentTimeMillis() % 10000}" }
         val entries = parseEntries(rawText, trimmedName)
         val existing = groups.value.firstOrNull { it.name.equals(trimmedName, ignoreCase = true) }
@@ -110,7 +111,7 @@ object VaultRepository {
             }
         } else {
             val finalPinned = pinned && groups.value.count { it.pinned } < MAX_PINNED
-            val group = VaultGroup(name = trimmedName, entries = entries, pinned = finalPinned)
+            val group = VaultGroup(name = trimmedName, entries = entries, pinned = finalPinned, type = type)
             groups.value = groups.value + group
         }
         save()
@@ -173,7 +174,7 @@ object VaultRepository {
     fun appendEntriesToGroup(groupName: String, rawText: String) {
         val group = getGroup(groupName)
         if (group == null) {
-            addGroup(groupName, rawText)
+            addGroup(groupName, rawText, DataGroupType.RECURRING)
             return
         }
         val newEntries = parseEntries(rawText, groupName)
@@ -431,6 +432,7 @@ object VaultRepository {
             val groupJson = JSONObject()
             groupJson.put("name", group.name)
             groupJson.put("pinned", group.pinned)
+            groupJson.put("type", group.type.name) // SAVE TYPE
             val entriesJson = JSONArray()
             group.entries.forEach { entry ->
                 val entryJson = JSONObject()
@@ -464,6 +466,7 @@ object VaultRepository {
                     name = groupJson.getString("name"),
                     entries = entries,
                     pinned = groupJson.optBoolean("pinned", false),
+                    type = try { DataGroupType.valueOf(groupJson.optString("type", "RECURRING")) } catch (_: Exception) { DataGroupType.RECURRING }
                 )
             }
         } catch (e: Exception) {

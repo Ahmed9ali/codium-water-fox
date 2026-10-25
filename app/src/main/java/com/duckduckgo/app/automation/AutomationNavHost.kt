@@ -7,37 +7,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,9 +39,12 @@ val VarelaRound = FontFamily(
 sealed interface AutomationScreen {
     object Home : AutomationScreen
     object MyData : AutomationScreen
-    object AddData : AutomationScreen
-    object PasteData : AutomationScreen
-    object GenerateData : AutomationScreen
+    
+    // UPDATED: Pass DataGroupType through the Add flow
+    data class AddData(val type: DataGroupType) : AutomationScreen
+    data class PasteData(val type: DataGroupType) : AutomationScreen
+    data class GenerateData(val type: DataGroupType) : AutomationScreen
+    
     data class GroupDetail(val groupName: String) : AutomationScreen
     
     object MyScripts : AutomationScreen
@@ -96,9 +73,11 @@ fun AutomationNavHost(
                 AutomationScreen.Home -> onBack()
                 AutomationScreen.MyData -> current = AutomationScreen.Home
                 is AutomationScreen.GroupDetail -> current = AutomationScreen.MyData
-                AutomationScreen.AddData -> current = AutomationScreen.Home
-                AutomationScreen.PasteData -> current = AutomationScreen.AddData
-                AutomationScreen.GenerateData -> current = AutomationScreen.AddData
+                
+                // UPDATED: Preserve the type when going back
+                is AutomationScreen.AddData -> current = AutomationScreen.MyData
+                is AutomationScreen.PasteData -> current = AutomationScreen.AddData(current.type)
+                is AutomationScreen.GenerateData -> current = AutomationScreen.AddData(current.type)
                 
                 AutomationScreen.MyScripts -> current = AutomationScreen.Home
                 is AutomationScreen.ScriptDetail -> current = AutomationScreen.MyScripts
@@ -113,41 +92,46 @@ fun AutomationNavHost(
         }
 
         when (val c = current) {
-                AutomationScreen.Home -> AutomationHomeScreen(
+            AutomationScreen.Home -> AutomationHomeScreen(
                 onBack = onBack,
                 onMyDataClick = { current = AutomationScreen.MyData },
-                onAddDataClick = { current = AutomationScreen.AddData },
+                onAddDataClick = { current = AutomationScreen.AddData(DataGroupType.RECURRING) }, // Defaults to Recurring
                 onMyScriptsClick = { current = AutomationScreen.MyScripts },
-                onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) }, // NEW
+                onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) },
                 onCreateAutomationClick = { current = AutomationScreen.CreateAutomation },
                 onViewLogsClick = { current = AutomationScreen.MyData },
             )
 
             AutomationScreen.MyData -> MyDataScreen(
                 onBack = { current = AutomationScreen.Home },
-                onAddClick = { current = AutomationScreen.AddData },
+                onAddClick = { type -> current = AutomationScreen.AddData(type) }, // Passes the type from tabs
                 onGroupClick = { name -> current = AutomationScreen.GroupDetail(name) },
             )
 
-            AutomationScreen.AddData -> AddDataChoiceScreen(
-                onBack = { current = AutomationScreen.Home },
-                onPasteClick = { current = AutomationScreen.PasteData },
+            // UPDATED: Pass type to AddDataChoiceScreen
+            is AutomationScreen.AddData -> AddDataChoiceScreen(
+                onBack = { current = AutomationScreen.MyData },
+                onPasteClick = { current = AutomationScreen.PasteData(c.type) },
                 onFileLoaded = { filename, text ->
                     val parsed = SmartParser.parse(text)
                     val lines = parsed.all.joinToString("\n") { (k, v) -> "$k: $v" }
-                    VaultRepository.addGroup(filename, lines.ifBlank { text })
+                    VaultRepository.addGroup(filename, lines.ifBlank { text }, c.type) // Passes the type
                     current = AutomationScreen.MyData
                 },
-                onGenerateClick = { current = AutomationScreen.GenerateData },
+                onGenerateClick = { current = AutomationScreen.GenerateData(c.type) },
             )
 
-            AutomationScreen.PasteData -> PasteDataScreen(
-                onBack = { current = AutomationScreen.AddData },
+            // UPDATED: Pass type to PasteDataScreen
+            is AutomationScreen.PasteData -> PasteDataScreen(
+                type = c.type,
+                onBack = { current = AutomationScreen.AddData(c.type) },
                 onSaved = { current = AutomationScreen.MyData },
             )
 
-            AutomationScreen.GenerateData -> GenerateDataScreen(
-                onBack = { current = AutomationScreen.AddData },
+            // UPDATED: Pass type to GenerateDataScreen
+            is AutomationScreen.GenerateData -> GenerateDataScreen(
+                type = c.type,
+                onBack = { current = AutomationScreen.AddData(c.type) },
                 onSaved = { current = AutomationScreen.MyData },
             )
 
@@ -168,7 +152,7 @@ fun AutomationNavHost(
 
             AutomationScreen.CreateAutomation -> CreateAutomationScreen(
                 onBack = { current = AutomationScreen.Home },
-                onAddDataClick = { current = AutomationScreen.AddData },
+                onAddDataClick = { current = AutomationScreen.AddData(DataGroupType.RECURRING) },
                 onStartConfig = { config ->
                     val formattedUrl = if (config.targetUrl.startsWith("http://") || config.targetUrl.startsWith("https://")) {
                         config.targetUrl
@@ -196,7 +180,7 @@ fun AutomationNavHost(
                     current = AutomationScreen.Completed(c.config.groupName, c.config.mode, count)
                 },
                 onAddNewDataRequested = {
-                    current = AutomationScreen.PasteData
+                    current = AutomationScreen.PasteData(DataGroupType.RECURRING)
                 },
                 onCancel = {
                     AutomationEngine.stopAutomation()
@@ -215,6 +199,10 @@ fun AutomationNavHost(
         }
     }
 }
+
+// ============================================================================
+// UI COMPONENTS (Shared across screens)
+// ============================================================================
 
 @Composable
 fun AutomationTopBar(

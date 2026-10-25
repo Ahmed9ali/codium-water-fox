@@ -1,6 +1,11 @@
 package com.duckduckgo.app.automation
 
 import android.content.Intent
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,11 +69,11 @@ private fun HudContainer(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 420.dp) // Strict max height for the whole HUD
+                .heightIn(max = 420.dp)
                 .clip(shape)
                 .background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
                 .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
-                .clickable(enabled = true, onClick = {}) // Prevent click-through ONLY on the HUD surface
+                .clickable(enabled = true, onClick = {})
                 .padding(14.dp),
         ) {
             // Header with manual toggle
@@ -77,21 +82,26 @@ private fun HudContainer(
                     Text(title, color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Text(subtitle, color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
                 }
-                // Manual flip button
-                Text(
-                    text = if (isTop) "↓" else "↑",
-                    color = DuckDuckGoTheme.colors.brand.accentBlue,
-                    fontSize = 22.sp,
-                    modifier = Modifier
-                        .clickable { AutomationEngine.toggleHudPosition() }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                
+                // REPLACED TEXT WITH PROPER ICON
+                IconButton(
+                    onClick = { AutomationEngine.toggleHudPosition() },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isTop) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                        contentDescription = "Move HUD",
+                        tint = DuckDuckGoTheme.colors.brand.accentBlue
+                    )
+                }
+                
                 if (onClose != null) {
-                    Text("✕", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp, modifier = Modifier.clickable(onClick = onClose).padding(6.dp))
+                    IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                        Text("✕", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 18.sp)
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
-            // Inner content that can use weight(1f)
             content()
         }
     }
@@ -421,26 +431,27 @@ private fun HudScriptEditPanel() {
 @Composable
 private fun HudRunSetupPanel() {
     val script = AutomationEngine.hudSelectedScript ?: return
-    val groups = VaultRepository.groups.value
+    
+    // Filter groups by type
+    val recurringGroups = VaultRepository.getRecurringGroups()
+    val defaultGroups = VaultRepository.getDefaultGroups()
+    
     val selectedGroup = AutomationEngine.hudSelectedGroup
     val selectedDefaultGroup = AutomationEngine.hudSelectedDefaultGroup
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
     HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
-        Text("Recurring Data (Email, Phone, etc.)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        
+        // Recurring Picker
+        Text("Recurring Data (Email, Phone)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
-        if (groups.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                Text("No groups available. Create one first.", color = DuckDuckGoTheme.colors.text.secondary, fontFamily = VarelaRound, fontSize = 12.sp)
-            }
+        if (recurringGroups.isEmpty()) {
+            Text("Create a Recurring group in My Data first.", color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .heightIn(max = 120.dp)
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 100.dp)
             ) {
-                items(groups, key = { it.name }) { group ->
+                items(recurringGroups, key = { it.name }) { group ->
                     Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = selectedGroup == group.name, onClick = { AutomationEngine.updateRunGroup(group.name) })
                         Text(group.name, fontFamily = VarelaRound, fontSize = 13.sp)
@@ -449,22 +460,21 @@ private fun HudRunSetupPanel() {
             }
         }
         
-        Spacer(Modifier.height(8.dp))
-        Text("Default Data (Password, DOB, etc.)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        
+        // Default Picker
+        Text("Default Data (Password, DOB)", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(4.dp))
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false)
-                .heightIn(max = 120.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 100.dp)
         ) {
             item {
                 Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunDefaultGroup("") }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = selectedDefaultGroup.isBlank(), onClick = { AutomationEngine.updateRunDefaultGroup("") })
-                    Text("None", fontFamily = VarelaRound, fontSize = 13.sp)
+                    Text("None (Use Recurring for all)", fontFamily = VarelaRound, fontSize = 13.sp, color = DuckDuckGoTheme.colors.text.secondary)
                 }
             }
-            items(groups, key = { it.name }) { group ->
+            items(defaultGroups, key = { it.name }) { group ->
                 Row(modifier = Modifier.fillMaxWidth().clickable { AutomationEngine.updateRunDefaultGroup(group.name) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = selectedDefaultGroup == group.name, onClick = { AutomationEngine.updateRunDefaultGroup(group.name) })
                     Text(group.name, fontFamily = VarelaRound, fontSize = 13.sp)
@@ -472,34 +482,15 @@ private fun HudRunSetupPanel() {
             }
         }
         
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
         Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedIconButton(
-                onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) },
-                modifier = Modifier.size(36.dp),
-                shape = RoundedCornerShape(8.dp)
-            ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            OutlinedIconButton(onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) }, modifier = Modifier.size(36.dp), shape = RoundedCornerShape(8.dp)) {
                 Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
-            Text(
-                "$repeatCount",
-                modifier = Modifier.padding(horizontal = 24.dp),
-                fontFamily = VarelaRound,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = DuckDuckGoTheme.colors.text.primary
-            )
-            OutlinedIconButton(
-                onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) },
-                modifier = Modifier.size(36.dp),
-                shape = RoundedCornerShape(8.dp)
-            ) {
+            Text("$repeatCount", modifier = Modifier.padding(horizontal = 24.dp), fontFamily = VarelaRound, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = DuckDuckGoTheme.colors.text.primary)
+            OutlinedIconButton(onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) }, modifier = Modifier.size(36.dp), shape = RoundedCornerShape(8.dp)) {
                 Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         }

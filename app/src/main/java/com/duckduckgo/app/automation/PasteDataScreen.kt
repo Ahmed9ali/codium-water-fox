@@ -17,6 +17,7 @@
 package com.duckduckgo.app.automation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -57,6 +58,7 @@ import com.duckduckgo.mobile.android.R.drawable
 
 @Composable
 fun PasteDataScreen(
+    type: DataGroupType, // NEW: Required to know what we are adding
     onBack: () -> Unit,
     onSaved: () -> Unit,
 ) {
@@ -108,6 +110,7 @@ fun PasteDataScreen(
             Text(
                 text = stringResource(R.string.automation_paste_title),
                 color = DuckDuckGoTheme.colors.text.primary,
+                fontFamily = VarelaRound,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -120,10 +123,45 @@ fun PasteDataScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
+            // Type Indicator Banner
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = if (type == DataGroupType.DEFAULT) Color(0xFFE0F2FE) else Color(0xFFFCE7F3),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Text(
+                        text = if (type == DataGroupType.DEFAULT) "Creating Default Data" else "Creating Recurring Data",
+                        color = if (type == DataGroupType.DEFAULT) Color(0xFF0369A1) else Color(0xFFBE185D),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        fontFamily = VarelaRound
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (type == DataGroupType.DEFAULT) {
+                            "This data is reusable and will never run out (e.g., Password, DOB)."
+                        } else {
+                            "This data is consumed 1-by-1 (e.g., Emails, Phone numbers)."
+                        },
+                        color = if (type == DataGroupType.DEFAULT) Color(0xFF0369A1).copy(alpha = 0.8f) else Color(0xFFBE185D).copy(alpha = 0.8f),
+                        fontSize = 13.sp,
+                        fontFamily = VarelaRound
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
             // Field name
             Text(
                 text = stringResource(R.string.automation_field_name_label),
                 color = DuckDuckGoTheme.colors.text.secondary,
+                fontFamily = VarelaRound,
                 fontSize = 13.sp,
             )
             Spacer(Modifier.height(6.dp))
@@ -134,6 +172,7 @@ fun PasteDataScreen(
                     Text(
                         text = stringResource(R.string.automation_field_name_placeholder),
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = VarelaRound,
                     )
                 },
                 singleLine = true,
@@ -156,6 +195,7 @@ fun PasteDataScreen(
                 Text(
                     text = stringResource(R.string.automation_values_label),
                     color = DuckDuckGoTheme.colors.text.secondary,
+                    fontFamily = VarelaRound,
                     fontSize = 13.sp,
                     modifier = Modifier.weight(1f),
                 )
@@ -163,6 +203,7 @@ fun PasteDataScreen(
                     Text(
                         text = stringResource(R.string.automation_values_count, valueCount),
                         color = DuckDuckGoTheme.colors.brand.accentBlue,
+                        fontFamily = VarelaRound,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -176,6 +217,7 @@ fun PasteDataScreen(
                     Text(
                         text = stringResource(R.string.automation_values_placeholder),
                         color = DuckDuckGoTheme.colors.text.secondary,
+                        fontFamily = VarelaRound,
                     )
                 },
                 modifier = Modifier
@@ -196,7 +238,8 @@ fun PasteDataScreen(
             Button(
                 onClick = {
                     if (canSave) {
-                        VaultRepository.addGroup(fieldName, valuesText)
+                        // UPDATED: Pass the type to the repository
+                        VaultRepository.addGroup(fieldName, valuesText, type)
                         onSaved()
                     }
                 },
@@ -217,6 +260,7 @@ fun PasteDataScreen(
                         stringResource(R.string.automation_save)
                     },
                     color = Color.White,
+                    fontFamily = VarelaRound,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(vertical = 8.dp),

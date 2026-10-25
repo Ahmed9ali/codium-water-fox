@@ -1,19 +1,3 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import android.widget.Toast
@@ -21,29 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,24 +29,9 @@ import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import com.duckduckgo.mobile.android.R.drawable
 
 private val PRESET_FIELD_TYPES = listOf(
-    "email",
-    "password",
-    "confirmPassword",
-    "fullName",
-    "firstName",
-    "lastName",
-    "username",
-    "phone",
-    "message",
-    "subject",
-    "address",
-    "city",
-    "zip",
-    "country",
-    "countryCode",
-    "dob",
-    "otp",
-    "text",
+    "email", "password", "confirmPassword", "fullName", "firstName",
+    "lastName", "username", "phone", "message", "subject", "address",
+    "city", "zip", "country", "countryCode", "dob", "otp", "text",
 )
 
 @Composable
@@ -90,6 +44,7 @@ fun GroupDetailScreen(
     val entries = group?.entries ?: emptyList()
     val unusedCount = group?.unusedCount ?: 0
     val usedCount = group?.usedCount ?: 0
+    val groupType = group?.type ?: DataGroupType.RECURRING
 
     // State for "Add Specific Data" dialog
     var showAddDialog by remember { mutableStateOf(false) }
@@ -109,11 +64,36 @@ fun GroupDetailScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             
-            // CLEAN APP BAR: Only Title and Back button
-            AutomationTopBar(
-                title = groupName,
-                onBack = onBack,
-            )
+            // CLEAN APP BAR: Now shows group type
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DuckDuckGoTheme.colors.backgrounds.surface)
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        painter = painterResource(drawable.ic_arrow_left_24),
+                        contentDescription = "Back",
+                        tint = DuckDuckGoTheme.colors.icons.primary,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = groupName,
+                        color = DuckDuckGoTheme.colors.text.primary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (groupType == DataGroupType.DEFAULT) "Default Group (Reusable)" else "Recurring Group (Consumable)",
+                        color = DuckDuckGoTheme.colors.text.secondary,
+                        fontSize = 12.sp
+                    )
+                }
+            }
 
             Column(
                 modifier = Modifier
@@ -122,7 +102,7 @@ fun GroupDetailScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
             ) {
-                // MOVED DOWN: Stats and Reset Action
+                // Stats and Reset Action
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -206,11 +186,7 @@ fun GroupDetailScreen(
                                     Spacer(Modifier.height(4.dp))
                                     Text(
                                         text = entry.value,
-                                        color = if (entry.used) {
-                                            DuckDuckGoTheme.colors.text.secondary
-                                        } else {
-                                            DuckDuckGoTheme.colors.text.primary
-                                        },
+                                        color = if (entry.used) DuckDuckGoTheme.colors.text.secondary else DuckDuckGoTheme.colors.text.primary,
                                         fontFamily = VarelaRound,
                                         fontSize = 15.sp,
                                         textDecoration = if (entry.used) TextDecoration.LineThrough else TextDecoration.None,
@@ -244,9 +220,7 @@ fun GroupDetailScreen(
             }
         }
 
-        // ====================================================================
-        // MODAL 1: ADD SPECIFIC DATA TO THIS GROUP
-        // ====================================================================
+        // MODAL 1: ADD SPECIFIC DATA
         if (showAddDialog) {
             Box(
                 modifier = Modifier
@@ -260,7 +234,7 @@ fun GroupDetailScreen(
                         .fillMaxWidth(0.92f)
                         .clip(RoundedCornerShape(16.dp))
                         .background(DuckDuckGoTheme.colors.backgrounds.surface)
-                        .clickable { /* consume click */ }
+                        .clickable { }
                         .padding(20.dp),
                 ) {
                     Text(
@@ -280,7 +254,6 @@ fun GroupDetailScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Horizontal scrollable field type chips
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -294,20 +267,12 @@ fun GroupDetailScreen(
                                 modifier = Modifier
                                     .clip(chipShape)
                                     .background(
-                                        if (isSelected) {
-                                            DuckDuckGoTheme.colors.brand.accentBlue
-                                        } else {
-                                            DuckDuckGoTheme.colors.backgrounds.background
-                                        },
+                                        if (isSelected) DuckDuckGoTheme.colors.brand.accentBlue else DuckDuckGoTheme.colors.backgrounds.background,
                                         chipShape,
                                     )
                                     .border(
                                         1.dp,
-                                        if (isSelected) {
-                                            DuckDuckGoTheme.colors.brand.accentBlue
-                                        } else {
-                                            DuckDuckGoTheme.colors.text.secondary.copy(alpha = 0.25f)
-                                        },
+                                        if (isSelected) DuckDuckGoTheme.colors.brand.accentBlue else DuckDuckGoTheme.colors.text.secondary.copy(alpha = 0.25f),
                                         chipShape,
                                     )
                                     .clickable {
@@ -378,9 +343,7 @@ fun GroupDetailScreen(
             }
         }
 
-        // ====================================================================
-        // MODAL 2: EDIT EXISTING ENTRY FIELD TYPE OR VALUE
-        // ====================================================================
+        // MODAL 2: EDIT EXISTING ENTRY
         if (editingIndex >= 0 && editingIndex < entries.size) {
             Box(
                 modifier = Modifier

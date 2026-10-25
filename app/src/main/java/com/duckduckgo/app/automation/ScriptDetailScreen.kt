@@ -1,19 +1,3 @@
-/*
- * Copyright (c) 2024 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import androidx.compose.foundation.background
@@ -23,12 +7,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -46,22 +33,13 @@ fun ScriptDetailScreen(
     scriptId: String,
     onBack: () -> Unit,
 ) {
-    // Explicit type is critical: it forces the compiler to resolve
-    // AutomationScriptRepository.getScript(...)'s return type on THIS line,
-    // instead of letting an error type cascade into every `.name` / `.steps`
-    // reference below. If getScript is missing or returns the wrong type,
-    // the error will now be reported here with a clear message.
     val originalScript: AutomationScript? = AutomationScriptRepository.getScript(scriptId)
 
     if (originalScript == null) {
-        // Do not call onBack() directly from composition — it is a side effect
-        // and may run multiple times / mid-frame. LaunchedEffect defers it.
         LaunchedEffect(Unit) { onBack() }
         return
     }
 
-    // `originalScript` is smart-cast to AutomationScript for the rest of the body.
-    // Key on scriptId so state resets if the caller swaps scripts in place.
     var scriptName by remember(scriptId) { mutableStateOf(originalScript.name) }
     var selectedGroup by remember(scriptId) { mutableStateOf(originalScript.groupName) }
     var humanize by remember(scriptId) { mutableStateOf(originalScript.humanize) }
@@ -69,8 +47,9 @@ fun ScriptDetailScreen(
 
     var showAddStepDialog by remember { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
+    var stepToEdit by remember { mutableStateOf<RecordedStep?>(null) }
 
-    // Drag State
+    // Drag State (No Animations)
     var draggedItemId by remember { mutableStateOf<String?>(null) }
     var draggedOffset by remember { mutableFloatStateOf(0f) }
 
@@ -92,7 +71,7 @@ fun ScriptDetailScreen(
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    painterResource(drawable.ic_arrow_left_24),
+                    painter = painterResource(drawable.ic_arrow_left_24),
                     contentDescription = "Back",
                     tint = DuckDuckGoTheme.colors.icons.primary,
                 )
@@ -106,7 +85,7 @@ fun ScriptDetailScreen(
             )
             IconButton(onClick = { showNameDialog = true }) {
                 Icon(
-                    painterResource(drawable.ic_edit_24),
+                    painter = painterResource(drawable.ic_edit_24),
                     contentDescription = "Edit Name",
                     tint = DuckDuckGoTheme.colors.icons.primary,
                 )
@@ -175,7 +154,7 @@ fun ScriptDetailScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Long-press ☰ to reorder",
+                "Long-press the handle ☰ to reorder",
                 color = DuckDuckGoTheme.colors.text.secondary,
                 fontSize = 11.sp,
             )
@@ -198,83 +177,106 @@ fun ScriptDetailScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = (steps.size * 90).dp, max = 600.dp),
+                        .heightIn(min = (steps.size * 76).dp, max = 600.dp),
                 ) {
                     itemsIndexed(steps, key = { _, step -> step.id }) { index, step ->
                         val isDragging = draggedItemId == step.id
+                        
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 8.dp)
                                 .zIndex(if (isDragging) 1f else 0f)
-                                .offset { IntOffset(0, if (isDragging) draggedOffset.roundToInt() else 0) },
+                                .offset { IntOffset(0, if (isDragging) draggedOffset.roundToInt() else 0) }
                         ) {
-                            DdgCard {
+                            // Standard Surface without animation
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = DuckDuckGoTheme.colors.backgrounds.surface,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .pointerInput(steps.size, index) {
-                                            detectDragGesturesAfterLongPress(
-                                                onDragStart = {
-                                                    draggedItemId = step.id
-                                                    draggedOffset = 0f
-                                                },
-                                                onDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    draggedOffset += dragAmount.y
-                                                },
-                                                onDragEnd = {
-                                                    val threshold = 80.dp.toPx()
-                                                    val itemsMoved = (draggedOffset / threshold).roundToInt()
-                                                    val targetIndex = (index + itemsMoved).coerceIn(0, steps.size - 1)
-
-                                                    if (targetIndex != index) {
-                                                        val mutable = steps.toMutableList()
-                                                        val item = mutable.removeAt(index)
-                                                        mutable.add(targetIndex, item)
-                                                        steps = mutable.mapIndexed { i, s ->
-                                                            s.copy(sequenceIndex = i + 1)
-                                                        }
-                                                    }
-                                                    draggedItemId = null
-                                                    draggedOffset = 0f
-                                                },
-                                                onDragCancel = {
-                                                    draggedItemId = null
-                                                    draggedOffset = 0f
-                                                },
-                                            )
-                                        },
+                                        .clickable { stepToEdit = step }
+                                        .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Text(
-                                        "☰",
-                                        color = DuckDuckGoTheme.colors.text.secondary,
-                                        fontSize = 20.sp,
-                                        modifier = Modifier.padding(horizontal = 8.dp),
-                                    )
+                                    // Left: Number Badge
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.15f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            "${index + 1}",
+                                            color = DuckDuckGoTheme.colors.brand.accentBlue,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                    
+                                    Spacer(Modifier.width(16.dp))
+                                    
+                                    // Center: Title & Type
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            "${index + 1}. ${step.displayLabel}",
+                                            step.displayLabel,
                                             color = DuckDuckGoTheme.colors.text.primary,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.SemiBold
                                         )
                                         Text(
                                             "Type: ${step.kind.name}",
                                             color = DuckDuckGoTheme.colors.text.secondary,
-                                            fontSize = 12.sp,
+                                            fontSize = 12.sp
                                         )
                                     }
-                                    IconButton(onClick = {
-                                        steps = steps
-                                            .filterIndexed { i, _ -> i != index }
-                                            .mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
-                                    }) {
+                                    
+                                    // Right: Single Drag Handle Icon
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .pointerInput(steps.size, index) {
+                                                detectDragGesturesAfterLongPress(
+                                                    onDragStart = {
+                                                        draggedItemId = step.id
+                                                        draggedOffset = 0f
+                                                    },
+                                                    onDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        draggedOffset += dragAmount.y
+                                                    },
+                                                    onDragEnd = {
+                                                        val threshold = 76.dp.toPx()
+                                                        val itemsMoved = (draggedOffset / threshold).roundToInt()
+                                                        val targetIndex = (index + itemsMoved).coerceIn(0, steps.size - 1)
+
+                                                        if (targetIndex != index) {
+                                                            val mutable = steps.toMutableList()
+                                                            val item = mutable.removeAt(index)
+                                                            mutable.add(targetIndex, item)
+                                                            steps = mutable.mapIndexed { i, s ->
+                                                                s.copy(sequenceIndex = i + 1)
+                                                            }
+                                                        }
+                                                        draggedItemId = null
+                                                        draggedOffset = 0f
+                                                    },
+                                                    onDragCancel = {
+                                                        draggedItemId = null
+                                                        draggedOffset = 0f
+                                                    }
+                                                )
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Icon(
-                                            painterResource(drawable.ic_fire_24),
-                                            contentDescription = "Delete step",
-                                            tint = DuckDuckGoTheme.colors.text.destructive,
+                                            painter = painterResource(drawable.ic_menu_hamburger_24),
+                                            contentDescription = "Drag to reorder",
+                                            tint = DuckDuckGoTheme.colors.text.secondary.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(24.dp)
                                         )
                                     }
                                 }
@@ -285,11 +287,19 @@ fun ScriptDetailScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            DdgSecondaryButton(
-                text = "+ Add Step / Function",
-                iconRes = drawable.ic_add_24,
+            
+            // Single Add Button
+            Button(
                 onClick = { showAddStepDialog = true },
-            )
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DuckDuckGoTheme.colors.backgrounds.surface),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, DuckDuckGoTheme.colors.backgrounds.surface)
+            ) {
+                Icon(painterResource(drawable.ic_add_24), contentDescription = null, tint = DuckDuckGoTheme.colors.brand.accentBlue)
+                Spacer(Modifier.width(8.dp))
+                Text("Add Step / Function", color = DuckDuckGoTheme.colors.brand.accentBlue, fontWeight = FontWeight.SemiBold)
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -325,90 +335,112 @@ fun ScriptDetailScreen(
     // Add Step Dialog
     if (showAddStepDialog) {
         Dialog(onDismissRequest = { showAddStepDialog = false }) {
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 500.dp)
-                    .background(DuckDuckGoTheme.colors.backgrounds.surface, RoundedCornerShape(16.dp))
-                    .padding(16.dp),
+                    .fillMaxHeight(0.85f),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 24.dp, bottomEnd = 24.dp),
+                color = DuckDuckGoTheme.colors.backgrounds.surface
             ) {
-                Text("Add Function", fontFamily = VarelaRound, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Add to Script", fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = VarelaRound)
+                        IconButton(onClick = { showAddStepDialog = false }) {
+                            Text("✕", fontSize = 20.sp, color = DuckDuckGoTheme.colors.text.secondary)
+                        }
+                    }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ScriptChip("Wait 2s") {
-                        steps = steps + RecordedStep(
-                            sequenceIndex = steps.size + 1,
-                            kind = StepKind.Wait,
-                            waitMs = 2000,
-                            displayLabel = "Wait 2s",
-                        )
-                        showAddStepDialog = false
+                    Text("Actions", fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp), color = DuckDuckGoTheme.colors.text.secondary)
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ActionChip("Wait 2s") {
+                            steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.Wait, waitMs = 2000, displayLabel = "Wait 2s")
+                            showAddStepDialog = false
+                        }
+                        ActionChip("Clear Data") {
+                            steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.DeleteCookies, fieldType = "delete_tab", displayLabel = "Delete Tab Data")
+                            showAddStepDialog = false
+                        }
+                        ActionChip("CAPTCHA") {
+                            steps = steps + RecordedStep(sequenceIndex = steps.size + 1, kind = StepKind.CaptchaWait, displayLabel = "Wait CAPTCHA")
+                            showAddStepDialog = false
+                        }
                     }
-                    ScriptChip("Delete Tab Data") {
-                        steps = steps + RecordedStep(
-                            sequenceIndex = steps.size + 1,
-                            kind = StepKind.DeleteCookies,
-                            fieldType = "delete_tab",
-                            displayLabel = "Delete This Tab Data",
-                        )
-                        showAddStepDialog = false
-                    }
-                    ScriptChip("Delete All Data") {
-                        steps = steps + RecordedStep(
-                            sequenceIndex = steps.size + 1,
-                            kind = StepKind.DeleteCookies,
-                            fieldType = "delete_all",
-                            displayLabel = "Delete All Data",
-                        )
-                        showAddStepDialog = false
-                    }
-                    ScriptChip("Wait CAPTCHA") {
-                        steps = steps + RecordedStep(
-                            sequenceIndex = steps.size + 1,
-                            kind = StepKind.CaptchaWait,
-                            displayLabel = "Wait for CAPTCHA",
-                        )
-                        showAddStepDialog = false
+
+                    Spacer(Modifier.height(20.dp))
+                    
+                    Text("Web Fields", fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp), color = DuckDuckGoTheme.colors.text.secondary)
+                    Spacer(Modifier.height(8.dp))
+                    
+                    LazyColumn(
+                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                        contentPadding = PaddingValues(bottom = 20.dp)
+                    ) {
+                        items(FieldTypeMapper.assignOptions) { opt ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        steps = steps + RecordedStep(
+                                            sequenceIndex = steps.size + 1,
+                                            kind = StepKind.Field,
+                                            fieldType = opt.canonical,
+                                            displayLabel = FieldTypeMapper.fieldRowLabel(opt.canonical, ""),
+                                        )
+                                        showAddStepDialog = false
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(36.dp).background(DuckDuckGoTheme.colors.backgrounds.background, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(opt.canonical.take(1).uppercase(), fontWeight = FontWeight.Bold, color = DuckDuckGoTheme.colors.brand.accentBlue)
+                                }
+                                Spacer(Modifier.width(16.dp))
+                                Text(opt.label, fontFamily = VarelaRound, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            }
+                            HorizontalDivider(color = DuckDuckGoTheme.colors.backgrounds.background, thickness = 1.dp)
+                        }
                     }
                 }
+            }
+        }
+    }
 
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    "Web Fields (Skeleton)",
-                    fontFamily = VarelaRound,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.height(8.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    FieldTypeMapper.assignOptions.forEach { opt ->
-                        Text(
-                            text = opt.label,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    steps = steps + RecordedStep(
-                                        sequenceIndex = steps.size + 1,
-                                        kind = StepKind.Field,
-                                        fieldType = opt.canonical,
-                                        displayLabel = FieldTypeMapper.fieldRowLabel(opt.canonical, ""),
-                                    )
-                                    showAddStepDialog = false
-                                }
-                                .padding(vertical = 10.dp),
-                            fontFamily = VarelaRound,
-                            fontSize = 14.sp,
-                        )
-                    }
+    // Step Options Dialog
+    stepToEdit?.let { step ->
+        Dialog(onDismissRequest = { stepToEdit = null }) {
+            Surface(shape = RoundedCornerShape(16.dp), color = DuckDuckGoTheme.colors.backgrounds.surface) {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text(step.displayLabel, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("${step.kind.name} Step", color = DuckDuckGoTheme.colors.text.secondary, fontSize = 14.sp)
+                    Spacer(Modifier.height(16.dp))
+                    
+                    DdgSecondaryButton(
+                        text = "Delete Step",
+                        onClick = {
+                            steps = steps.filter { it.id != step.id }.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
+                            stepToEdit = null
+                        }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    DdgSecondaryButton(
+                        text = "Cancel",
+                        onClick = { stepToEdit = null }
+                    )
                 }
             }
         }
@@ -416,21 +448,13 @@ fun ScriptDetailScreen(
 }
 
 @Composable
-private fun ScriptChip(text: String, onClick: () -> Unit) {
+private fun ActionChip(text: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .background(
-                DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f),
-                RoundedCornerShape(8.dp),
-            )
+            .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Text(
-            text,
-            color = DuckDuckGoTheme.colors.brand.accentBlue,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Text(text, color = DuckDuckGoTheme.colors.brand.accentBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }

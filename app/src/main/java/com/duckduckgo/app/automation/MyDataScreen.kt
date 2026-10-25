@@ -1,46 +1,14 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.automation
 
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -57,14 +25,19 @@ import com.duckduckgo.mobile.android.R.drawable
 @Composable
 fun MyDataScreen(
     onBack: () -> Unit,
-    onAddClick: () -> Unit,
+    onAddClick: (DataGroupType) -> Unit, // UPDATED: Passes the type
     onGroupClick: (String) -> Unit,
 ) {
     val context = LocalContext.current
+    var selectedTab by remember { mutableIntStateOf(0) }
+    
     var groupToDelete by remember { mutableStateOf<String?>(null) }
     var groupToRename by remember { mutableStateOf<String?>(null) }
     var renameInput by remember { mutableStateOf("") }
     var overflowMenuFor by remember { mutableStateOf<String?>(null) }
+
+    val currentType = if (selectedTab == 0) DataGroupType.RECURRING else DataGroupType.DEFAULT
+    val groups = if (selectedTab == 0) VaultRepository.getRecurringGroups() else VaultRepository.getDefaultGroups()
 
     Column(
         modifier = Modifier
@@ -88,29 +61,65 @@ fun MyDataScreen(
                 )
             }
             Text(
-                text = stringResource(R.string.automation_my_data),
+                text = "My Data",
                 color = DuckDuckGoTheme.colors.text.primary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onAddClick) {
+            IconButton(onClick = { onAddClick(currentType) }) {
                 Icon(
                     painter = painterResource(drawable.ic_add_24),
-                    contentDescription = stringResource(R.string.automation_add_data),
+                    contentDescription = "Add Data",
                     tint = DuckDuckGoTheme.colors.icons.primary,
                 )
             }
         }
 
-        val groups = VaultRepository.groups.value
+        // TABS
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = DuckDuckGoTheme.colors.backgrounds.surface,
+            contentColor = DuckDuckGoTheme.colors.brand.accentBlue
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = { Text("Recurring Data", fontWeight = FontWeight.SemiBold) }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = { Text("Default Data", fontWeight = FontWeight.SemiBold) }
+            )
+        }
+
+        // Info Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f))
+                .padding(16.dp)
+        ) {
+            Text(
+                text = if (selectedTab == 0) {
+                    "Recurring data is consumed 1-by-1. Perfect for Emails, Phones, and Usernames."
+                } else {
+                    "Default data is reused infinitely. Perfect for Passwords, DOB, and Names."
+                },
+                color = DuckDuckGoTheme.colors.brand.accentBlue,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
         if (groups.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = stringResource(R.string.automation_no_data),
+                    text = "No ${currentType.name.lowercase()} groups yet.",
                     color = DuckDuckGoTheme.colors.text.secondary,
                     fontSize = 15.sp,
                 )
@@ -137,11 +146,7 @@ fun MyDataScreen(
                         },
                         onPinClick = {
                             if (!group.pinned && !VaultRepository.canPinMore()) {
-                                Toast.makeText(
-                                    context,
-                                    "Max ${5} pinned groups",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                                Toast.makeText(context, "Max 5 pinned groups", Toast.LENGTH_SHORT).show()
                             } else {
                                 VaultRepository.togglePin(group.name)
                             }
@@ -158,7 +163,7 @@ fun MyDataScreen(
         }
     }
 
-    // Custom in-app confirmation dialog
+    // Delete Confirmation
     groupToDelete?.let { name ->
         InAppConfirmDialog(
             title = stringResource(R.string.automation_delete_confirm),
@@ -173,7 +178,7 @@ fun MyDataScreen(
         )
     }
 
-    // Rename dialog
+    // Rename Dialog
     groupToRename?.let { oldName ->
         InAppInputDialog(
             title = stringResource(R.string.automation_rename_title),
@@ -226,12 +231,31 @@ private fun GroupRow(
             )
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = group.name,
-                    color = DuckDuckGoTheme.colors.text.primary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = group.name,
+                        color = DuckDuckGoTheme.colors.text.primary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // Visual Type Badge
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (group.type == DataGroupType.DEFAULT) Color(0xFFE0F2FE) else Color(0xFFFCE7F3),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (group.type == DataGroupType.DEFAULT) "DEFAULT" else "RECURRING",
+                            color = if (group.type == DataGroupType.DEFAULT) Color(0xFF0369A1) else Color(0xFFBE185D),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
                 Text(
                     text = stringResource(R.string.automation_entries_count, group.entries.size),
                     color = DuckDuckGoTheme.colors.text.secondary,

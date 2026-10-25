@@ -11,16 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -40,6 +32,7 @@ import com.duckduckgo.mobile.android.R.drawable
 
 @Composable
 fun AddDataChoiceScreen(
+    type: DataGroupType, // NEW: Required to know what we are adding
     onBack: () -> Unit,
     onPasteClick: () -> Unit,
     onFileLoaded: (String, String) -> Unit,
@@ -90,19 +83,45 @@ fun AddDataChoiceScreen(
             Text(
                 text = stringResource(R.string.automation_add_data_title),
                 color = DuckDuckGoTheme.colors.text.primary,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
         }
 
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.automation_add_data_subtitle),
-                color = DuckDuckGoTheme.colors.text.secondary,
-                fontFamily = VarelaRound, // CHANGED
-                fontSize = 14.sp,
-            )
+            // Type Indicator Banner
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = if (type == DataGroupType.DEFAULT) Color(0xFFE0F2FE) else Color(0xFFFCE7F3),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Text(
+                        text = if (type == DataGroupType.DEFAULT) "Creating Default Data" else "Creating Recurring Data",
+                        color = if (type == DataGroupType.DEFAULT) Color(0xFF0369A1) else Color(0xFFBE185D),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        fontFamily = VarelaRound
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (type == DataGroupType.DEFAULT) {
+                            "This data is reusable and will never run out (e.g., Password, DOB)."
+                        } else {
+                            "This data is consumed 1-by-1 (e.g., Emails, Phone numbers)."
+                        },
+                        color = if (type == DataGroupType.DEFAULT) Color(0xFF0369A1).copy(alpha = 0.8f) else Color(0xFFBE185D).copy(alpha = 0.8f),
+                        fontSize = 13.sp,
+                        fontFamily = VarelaRound
+                    )
+                }
+            }
+
             Spacer(Modifier.height(20.dp))
 
             ChoiceCard(
@@ -158,7 +177,7 @@ private fun ChoiceCard(
             Text(
                 text = title,
                 color = DuckDuckGoTheme.colors.text.primary,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -166,7 +185,7 @@ private fun ChoiceCard(
             Text(
                 text = desc,
                 color = DuckDuckGoTheme.colors.text.secondary,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound,
                 fontSize = 13.sp,
             )
         }

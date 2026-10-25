@@ -6,14 +6,7 @@
 package com.duckduckgo.app.automation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -66,6 +59,7 @@ object MockFormGenerator {
 
 @Composable
 fun GenerateDataScreen(
+    type: DataGroupType, // NEW: Required for saving
     onBack: () -> Unit,
     onSaved: () -> Unit,
 ) {
@@ -112,7 +106,7 @@ fun GenerateDataScreen(
             Text(
                 text = stringResource(R.string.automation_generate_title),
                 color = DuckDuckGoTheme.colors.text.primary,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound, 
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -128,7 +122,7 @@ fun GenerateDataScreen(
             Text(
                 text = stringResource(R.string.automation_generate_desc),
                 color = DuckDuckGoTheme.colors.text.secondary,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound,
                 fontSize = 14.sp,
             )
 
@@ -140,14 +134,14 @@ fun GenerateDataScreen(
                 label = { 
                     Text(
                         text = stringResource(R.string.automation_field_name_label),
-                        fontFamily = VarelaRound, // CHANGED
+                        fontFamily = VarelaRound,
                     ) 
                 },
                 placeholder = {
                     Text(
                         text = stringResource(R.string.automation_generate_name_placeholder),
                         color = DuckDuckGoTheme.colors.text.secondary,
-                        fontFamily = VarelaRound, // CHANGED
+                        fontFamily = VarelaRound,
                     )
                 },
                 singleLine = true,
@@ -165,7 +159,7 @@ fun GenerateDataScreen(
             Text(
                 text = stringResource(R.string.automation_generate_preview),
                 color = DuckDuckGoTheme.colors.text.primary,
-                fontFamily = VarelaRound, // CHANGED
+                fontFamily = VarelaRound,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -190,7 +184,7 @@ fun GenerateDataScreen(
                         Text(
                             text = key,
                             color = DuckDuckGoTheme.colors.text.secondary,
-                            fontFamily = VarelaRound, // CHANGED
+                            fontFamily = VarelaRound,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(0.4f),
@@ -198,7 +192,7 @@ fun GenerateDataScreen(
                         Text(
                             text = value,
                             color = DuckDuckGoTheme.colors.text.primary,
-                            fontFamily = VarelaRound, // CHANGED
+                            fontFamily = VarelaRound,
                             fontSize = 12.sp,
                             modifier = Modifier.weight(0.6f),
                         )
@@ -213,7 +207,8 @@ fun GenerateDataScreen(
                     val name = groupName.ifBlank {
                         "Form ${System.currentTimeMillis() % 10000}"
                     }
-                    VaultRepository.addGroup(name, MockFormGenerator.generateAsText())
+                    // UPDATED: Pass the type to the repository
+                    VaultRepository.addGroup(name, MockFormGenerator.generateAsText(), type)
                     onSaved()
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -226,7 +221,7 @@ fun GenerateDataScreen(
                 Text(
                     text = stringResource(R.string.automation_generate_save),
                     color = Color.White,
-                    fontFamily = VarelaRound, // CHANGED
+                    fontFamily = VarelaRound,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(vertical = 8.dp),
