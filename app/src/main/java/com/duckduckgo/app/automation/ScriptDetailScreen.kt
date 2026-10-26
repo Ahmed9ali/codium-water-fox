@@ -28,6 +28,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import com.duckduckgo.mobile.android.R.drawable
+import kotlinx.coroutines.delay // <-- FIXED: Added import
+import kotlinx.coroutines.isActive // <-- FIXED: Added import
 import kotlin.math.roundToInt
 
 @Composable
@@ -61,7 +63,7 @@ fun ScriptDetailScreen(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dropTargetIndex by remember { mutableIntStateOf(-1) }
 
-    // FIXED: Auto-scroll logic running in a coroutine
+    // Auto-scroll logic
     LaunchedEffect(draggedItemId) {
         if (draggedItemId != null) {
             while (isActive) {
