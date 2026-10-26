@@ -61,28 +61,29 @@ fun ScriptDetailScreen(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dropTargetIndex by remember { mutableIntStateOf(-1) }
 
-    // Auto-scroll logic
-    LaunchedEffect(draggedItemId, dragOffset) {
-        if (draggedItemId != null && draggedIndex != -1) {
-            val visibleItems = listState.layoutInfo.visibleItemsInfo
-            val draggedItemInfo = visibleItems.find { it.index == draggedIndex + 4 } // Offset for headers
-            
-            if (draggedItemInfo != null) {
-                val currentTop = draggedItemInfo.offset + dragOffset
-                val currentBottom = currentTop + draggedItemInfo.size
-                val viewportStart = listState.layoutInfo.viewportStartOffset
-                val viewportEnd = listState.layoutInfo.viewportEndOffset
-                val threshold = 100f
+    // FIXED: Auto-scroll logic running in a coroutine
+    LaunchedEffect(draggedItemId) {
+        if (draggedItemId != null) {
+            while (isActive) {
+                val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == draggedIndex + 4 }
+                if (itemInfo != null) {
+                    val itemTop = itemInfo.offset + dragOffset
+                    val itemBottom = itemTop + itemInfo.size
+                    val viewportStart = listState.layoutInfo.viewportStartOffset
+                    val viewportEnd = listState.layoutInfo.viewportEndOffset
+                    val threshold = 120f
 
-                if (currentBottom > viewportEnd - threshold) {
-                    val scrollAmount = 15f
-                    listState.scrollBy(scrollAmount)
-                    dragOffset -= scrollAmount
-                } else if (currentTop < viewportStart + threshold) {
-                    val scrollAmount = -15f
-                    listState.scrollBy(scrollAmount)
-                    dragOffset -= scrollAmount
+                    if (itemBottom > viewportEnd - threshold) {
+                        val scrollAmount = 15f
+                        listState.scrollBy(scrollAmount)
+                        dragOffset -= scrollAmount
+                    } else if (itemTop < viewportStart + threshold) {
+                        val scrollAmount = -15f
+                        listState.scrollBy(scrollAmount)
+                        dragOffset -= scrollAmount
+                    }
                 }
+                delay(16)
             }
         }
     }
@@ -95,7 +96,6 @@ fun ScriptDetailScreen(
             .fillMaxSize()
             .background(DuckDuckGoTheme.colors.backgrounds.background),
     ) {
-        // Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -127,7 +127,6 @@ fun ScriptDetailScreen(
             }
         }
 
-        // SINGLE LAZY COLUMN FOR ENTIRE SCREEN
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -344,7 +343,6 @@ fun ScriptDetailScreen(
         }
     }
 
-    // Dialogs
     if (showNameDialog) {
         InAppInputDialog(
             title = "Script Name",

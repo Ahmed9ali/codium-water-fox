@@ -67,7 +67,7 @@ private fun HudContainer(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 420.dp)
+                .heightIn(max = 420.dp) // FIXED: Max height so it doesn't take over screen
                 .clip(shape)
                 .background(DuckDuckGoTheme.colors.backgrounds.surface, shape)
                 .border(1.5.dp, DuckDuckGoTheme.colors.brand.accentBlue, shape)
@@ -420,45 +420,48 @@ private fun HudRunSetupPanel() {
 
     HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
         
-        Text("Recurring Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        if (selectedGroups.isEmpty()) {
-            Text("Data not selected. Edit script to assign data.", color = Color.Red, fontSize = 13.sp)
-        } else {
+        // FIXED: Added verticalScroll so buttons don't get squeezed
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+            Text("Recurring Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            if (selectedGroups.isEmpty()) {
+                Text("Data not selected. Edit script to assign data.", color = Color.Red, fontSize = 13.sp)
+            } else {
+                Box(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                    Text(selectedGroups.joinToString(", "), fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+            
+            Spacer(Modifier.height(12.dp))
+            
+            Text("Default Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
             Box(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(selectedGroups.joinToString(", "), fontFamily = VarelaRound, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    text = if (selectedDefaultGroup.isBlank()) "None (Uses Recurring)" else selectedDefaultGroup,
+                    fontFamily = VarelaRound, 
+                    fontSize = 14.sp, 
+                    color = if (selectedDefaultGroup.isBlank()) DuckDuckGoTheme.colors.text.secondary else DuckDuckGoTheme.colors.text.primary
+                )
             }
+            
+            Spacer(Modifier.height(16.dp))
+            
+            Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                OutlinedIconButton(onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) }, modifier = Modifier.size(36.dp), shape = RoundedCornerShape(8.dp)) {
+                    Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+                Text("$repeatCount", modifier = Modifier.padding(horizontal = 24.dp), fontFamily = VarelaRound, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = DuckDuckGoTheme.colors.text.primary)
+                OutlinedIconButton(onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) }, modifier = Modifier.size(36.dp), shape = RoundedCornerShape(8.dp)) {
+                    Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
         
-        Spacer(Modifier.height(12.dp))
-        
-        Text("Default Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Box(modifier = Modifier.fillMaxWidth().background(DuckDuckGoTheme.colors.backgrounds.background, RoundedCornerShape(8.dp)).padding(12.dp)) {
-            Text(
-                text = if (selectedDefaultGroup.isBlank()) "None (Uses Recurring)" else selectedDefaultGroup,
-                fontFamily = VarelaRound, 
-                fontSize = 14.sp, 
-                color = if (selectedDefaultGroup.isBlank()) DuckDuckGoTheme.colors.text.secondary else DuckDuckGoTheme.colors.text.primary
-            )
-        }
-        
-        Spacer(Modifier.height(16.dp))
-        
-        Text("Repeat Count", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            OutlinedIconButton(onClick = { AutomationEngine.updateRunRepeat(repeatCount - 1) }, modifier = Modifier.size(36.dp), shape = RoundedCornerShape(8.dp)) {
-                Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            }
-            Text("$repeatCount", modifier = Modifier.padding(horizontal = 24.dp), fontFamily = VarelaRound, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = DuckDuckGoTheme.colors.text.primary)
-            OutlinedIconButton(onClick = { AutomationEngine.updateRunRepeat(repeatCount + 1) }, modifier = Modifier.size(36.dp), shape = RoundedCornerShape(8.dp)) {
-                Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        
-        Spacer(Modifier.height(14.dp))
-        
+        // Sticky Bottom Buttons
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DdgSecondaryButton(text = "Edit Script", onClick = { AutomationEngine.openScriptEditor(script) }, modifier = Modifier.weight(1f))
             DdgPrimaryButton(

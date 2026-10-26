@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -179,10 +180,24 @@ private fun ScriptRow(
                 )
             }
             
-            // FIXED: Replaced missing ic_play_24 with a Text Play button
-            IconButton(onClick = { AutomationEngine.launchScriptFromList(script, context) }) {
-                Text("▶", color = DuckDuckGoTheme.colors.brand.accentBlue, fontSize = 20.sp)
+            // UPDATED: Play button with the same soft blue background as HUD arrows
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(DuckDuckGoTheme.colors.brand.accentBlue.copy(alpha = 0.1f))
+                    .clickable { AutomationEngine.launchScriptFromList(script, context) },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.play_arrow_24px), 
+                    contentDescription = "Run Script",
+                    tint = DuckDuckGoTheme.colors.brand.accentBlue,
+                    modifier = Modifier.size(20.dp)
+                )
             }
+
+            Spacer(Modifier.width(8.dp))
 
             IconButton(onClick = onOverflowClick) {
                 Icon(

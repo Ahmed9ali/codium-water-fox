@@ -1,5 +1,5 @@
 /*
- * Automation Recorder (v10 - Scroll Fix)
+ * Automation Recorder (v11 - Strict Scroll & Tap Detection)
  */
 (function () {
   "use strict";
@@ -14,30 +14,8 @@
   let lastTarget = null;
   let lastClickTime = 0;
   let justRecorded = false;
-  let isScrolling = false;
-  let touchStartX = 0;
-  let touchStartY = 0;
 
-  // Detect scrolls to prevent accidental captures
-  document.addEventListener('touchstart', (e) => {
-    if (e.touches.length > 0) {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      isScrolling = false;
-    }
-  }, { capture: true, passive: true });
-
-  document.addEventListener('touchmove', (e) => {
-    if (e.touches.length > 0) {
-      const diffX = Math.abs(e.touches[0].clientX - touchStartX);
-      const diffY = Math.abs(e.touches[0].clientY - touchStartY);
-      if (diffX > 10 || diffY > 10) {
-        isScrolling = true;
-      }
-    }
-  }, { capture: true, passive: true });
-
-  // Force disabled buttons to be clickable
+  // Forced clickable disabled elements
   const styleEl = document.createElement('style');
   styleEl.id = '__automation_recorder_style';
   styleEl.textContent = `
@@ -55,6 +33,12 @@
     if (!isPaused && g.__automationRecorderInstalled) return;
     return originalFocus.apply(this, args);
   };
+
+  // Tap detection state
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+  let touchMoved = false;
 
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
@@ -158,18 +142,9 @@
     }
   }
 
-  function handleEvent(e) {
-    if (isPaused || isScrolling) return;
-    if (e.target && e.target.closest && e.target.closest('[data-automation-hud]')) return;
-    
-    if (e.type === 'click' && justRecorded) {
-      justRecorded = false;
-      return;
-    }
-
-    const path = e.composedPath ? e.composedPath() : [e.target];
-    let target = path[0];
-    if (!target || target.nodeType !== Node.ELEMENT_NODE) return;
+  function processTarget(target) {
+    if (isPaused) return;
+    if (target && target.closest && target.closest('[data-automation-hud]')) return;
 
     let actualTarget = target;
     if (!['input', 'textarea', 'select', 'button', 'a'].includes(actualTarget.tagName.toLowerCase())) {
@@ -199,12 +174,11 @@
     const isLink = tag === "a" || (tag === "button") || type === "submit" || actualTarget.getAttribute("role") === "button";
     if (isLink) {
       kind = "ClickNext";
-      if (!actualTarget.disabled && actualTarget.getAttribute("aria-disabled") !== "true") {
-        if (e.cancelable) {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-        }
+      // Prevent default to stop navigation while recording
+      if (event && event.cancelable) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     } else {
       const wasReadonly = actualTarget.hasAttribute('readonly');
@@ -234,23 +208,62 @@
     };
     sendToBridge(payload);
 
-    if (e.type === 'mousedown' || e.type === 'touchstart') {
-      setTimeout(() => { justRecorded = false; }, 400);
-    }
+    setTimeout(() => { justRecorded = false; }, 400);
   }
 
-  document.addEventListener("mousedown", handleEvent, true);
-  document.addEventListener("touchstart", handleEvent, true);
-  document.addEventListener("click", handleEvent, true);
+  // Touch handling for accurate taps
+  document.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+      touchMoved = false;
+    }
+  }, { capture: true, passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 1) {
+      const diffX = Math.abs(e.touches[0].clientX - touchStartX);
+      const diffY = Math.abs(e.touches[0].clientY - touchStartY);
+      if (diffX > 10 || diffY > 10) {
+        touchMoved = true;
+      }
+    }
+  }, { capture: true, passive: true });
+
+  document.addEventListener("touchend", (e) => {
+    if (e.changedTouches.length === 1 && !touchMoved) {
+      const time = Date.now() - touchStartTime;
+      if (time < 500) {
+        processTarget(e.changedTouches[0].target);
+      }
+    }
+  }, { capture: true });
+
+  // Mouse click handling for desktop
+  document.addEventListener("click", (e) => {
+    if (justRecorded) return;
+    processTarget(e.target);
+  }, { capture: true });
+
+  // Focus handling for keyboard navigation
+  document.addEventListener("focusin", (e) => {
+    if (justRecorded) return;
+    // Only capture if it wasn't triggered by a touch (which already handled it)
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) {
+        processTarget(e.target);
+    }
+  }, { capture: true });
 
   g.__automationRecorderPause = () => { isPaused = true; };
   g.__automationRecorderResume = () => { isPaused = false; };
   g.__automationRecorderStop = () => {
-    document.removeEventListener("mousedown", handleEvent, true);
-    document.removeEventListener("touchstart", handleEvent, true);
-    document.removeEventListener("click", handleEvent, true);
+    document.removeEventListener("click", processTarget, true);
+    document.removeEventListener("touchstart", () => {}, true);
+    document.removeEventListener("touchend", () => {}, true);
+    document.removeEventListener("focusin", () => {}, true);
     if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
     HTMLElement.prototype.focus = originalFocus;
     g.__automationRecorderInstalled = false;
   };
-})();
+})(); 

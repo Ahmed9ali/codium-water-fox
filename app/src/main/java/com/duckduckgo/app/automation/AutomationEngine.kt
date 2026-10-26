@@ -177,7 +177,14 @@ object AutomationEngine {
             webView.addJavascriptInterface(bridge, "AutomationBridge")
         } catch (e: Exception) { Log.e(TAG, "attachBridge failed: ${e.message}") }
 
-        if (hudMode == HudMode.Recording && !hudRecordingPaused) {
+        mountHudOverlayIfNeeded(webView)
+
+        // FIXED: Process pending config when WebView attaches
+        if (pendingBrowserConfig != null) {
+            val config = pendingBrowserConfig!!
+            pendingBrowserConfig = null
+            startAutomation(config)
+        } else if (hudMode == HudMode.Recording && !hudRecordingPaused) {
             webView.postDelayed({
                 loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder re-injected") } }
             }, 200)
@@ -227,7 +234,6 @@ object AutomationEngine {
     fun updateRunDefaultGroup(group: String) { hudSelectedDefaultGroup = group }
     fun updateRunRepeat(count: Int) { hudRunRepeatCount = count.coerceIn(1, 999) }
 
-    // NEW: Launch script directly from MyScripts screen
     fun launchScriptFromList(script: AutomationScript, context: Context) {
         if (script.groupNames.isEmpty()) {
             Toast.makeText(context, "Script has no data assigned. Edit script first.", Toast.LENGTH_LONG).show()
@@ -409,7 +415,6 @@ object AutomationEngine {
         var completed = hudCompleted
 
         while (completed < config.targetRepeatCount && scope.isActive) {
-            // Find the first group that still has data
             val activeGroup = config.groupNames.firstOrNull { VaultRepository.hasUnusedData(it) }
             
             if (activeGroup == null) {
