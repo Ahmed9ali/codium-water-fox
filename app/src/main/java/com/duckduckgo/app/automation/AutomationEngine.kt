@@ -508,17 +508,28 @@ object AutomationEngine {
                         val qXpath = JSONObject.quote(step.xpath)
                         val qName = JSONObject.quote(step.name)
                         val qId = JSONObject.quote(step.domId)
+                        val qLabel = JSONObject.quote(step.displayLabel) // Pass label for text fallback
                         val doHumanize = if (config.humanize) "true" else "false"
 
                         val js = """
                             (async function() {
-                                function waitForEl(selector, xpath, timeout = 5000) {
+                                function waitForEl(selector, xpath, text, timeout = 5000) {
                                     return new Promise(resolve => {
                                         let elapsed = 0;
                                         const interval = setInterval(() => {
                                             let el = null;
                                             if (selector) try { el = document.querySelector(selector); } catch(_){}
                                             if (!el && xpath) try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
+                                            if (!el && text) {
+                                                const tags = ['input', 'textarea', 'select'];
+                                                for (const t of tags) {
+                                                    try {
+                                                        const els = Array.from(document.querySelectorAll(t));
+                                                        el = els.find(e => (e.name || e.id || e.placeholder || e.getAttribute('aria-label') || '').toLowerCase().includes(text.toLowerCase()));
+                                                        if (el) break;
+                                                    } catch (_) {}
+                                                }
+                                            }
                                             if (el) { clearInterval(interval); resolve(el); }
                                             else if (elapsed >= timeout) { clearInterval(interval); resolve(null); }
                                             elapsed += 50;
@@ -531,11 +542,12 @@ object AutomationEngine {
                                     const nm = $qName;
                                     const css = $qCss;
                                     const xpath = $qXpath;
+                                    const text = $qLabel;
                                     if (id) el = document.getElementById(id);
                                     if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                     if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                     if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
-                                    if (!el) el = await waitForEl(css, xpath);
+                                    if (!el) el = await waitForEl(css, xpath, text);
                                     if (!el) return {ok: false, err: 'element not found'};
                                     el.scrollIntoView({block: 'center'});
                                     const wanted = $qVal;
@@ -617,16 +629,27 @@ object AutomationEngine {
                         val qXpath = JSONObject.quote(step.xpath)
                         val qName = JSONObject.quote(step.name)
                         val qId = JSONObject.quote(step.domId)
+                        val qLabel = JSONObject.quote(step.displayLabel)
 
                         val js = """
                             (async function() {
-                                function waitForEl(selector, xpath, timeout = 5000) {
+                                function waitForEl(selector, xpath, text, timeout = 5000) {
                                     return new Promise(resolve => {
                                         let elapsed = 0;
                                         const interval = setInterval(() => {
                                             let el = null;
                                             if (selector) try { el = document.querySelector(selector); } catch(_){}
                                             if (!el && xpath) try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){}
+                                            if (!el && text) {
+                                                const tags = ['button', 'a', 'input[type="submit"]', 'div[role="button"]'];
+                                                for (const t of tags) {
+                                                    try {
+                                                        const els = Array.from(document.querySelectorAll(t));
+                                                        el = els.find(e => (e.innerText || e.textContent || e.value || '').trim().toLowerCase().includes(text.toLowerCase()));
+                                                        if (el) break;
+                                                    } catch (_) {}
+                                                }
+                                            }
                                             if (el) { clearInterval(interval); resolve(el); }
                                             else if (elapsed >= timeout) { clearInterval(interval); resolve(null); }
                                             elapsed += 50;
@@ -639,11 +662,12 @@ object AutomationEngine {
                                     const nm = $qName;
                                     const css = $qCss;
                                     const xpath = $qXpath;
+                                    const text = $qLabel;
                                     if (id) el = document.getElementById(id);
                                     if (!el && nm) el = document.querySelector('[name="' + nm + '"]');
                                     if (!el && css) { try { el = document.querySelector(css); } catch(_){} }
                                     if (!el && xpath) { try { el = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; } catch(_){} }
-                                    if (!el) el = await waitForEl(css, xpath);
+                                    if (!el) el = await waitForEl(css, xpath, text);
                                     if (!el) return {ok: false, err: 'button not found'};
                                     el.scrollIntoView({block: 'center'});
                                     await new Promise(r => setTimeout(r, 150));
@@ -674,7 +698,8 @@ object AutomationEngine {
                 }
 
                 if (!stepOk) {
-                    val msg = "Failed at step ${stepIdx + 1}: ${step.displayLabel} (${step.kind})"
+                    // Show the exact error message in the HUD
+                    val msg = "Failed at step ${stepIdx + 1}: ${step.displayLabel} (Button not found)"
                     Log.e(TAG, "runScriptExecution: $msg")
                     updateStatus(msg)
                     updateState(AutomationState.ERROR)

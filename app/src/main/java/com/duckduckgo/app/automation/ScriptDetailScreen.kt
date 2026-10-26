@@ -1,6 +1,6 @@
 package com.duckduckgo.app.automation
 
-import android.util.Log // <-- FIXED: added this line
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,38 +65,37 @@ fun ScriptDetailScreen(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dropTargetId by remember { mutableStateOf<String?>(null) }
 
-    // BUG 3 FIX: key-based drag tracking + fallback auto-scroll.
+    // Auto-scroll logic
     LaunchedEffect(draggedItemId) {
         while (isActive && draggedItemId != null) {
             val viewportStart = listState.layoutInfo.viewportStartOffset.toFloat()
             val viewportEnd = listState.layoutInfo.viewportEndOffset.toFloat()
             val viewportHeight = viewportEnd - viewportStart
             val threshold = 150f
-            val scrollStep = 20f
+            val scrollStep = 15f
 
-            val draggedInfo = listState.layoutInfo.visibleItemsInfo
-                .find { it.key == draggedItemId }
+            val draggedInfo = listState.layoutInfo.visibleItemsInfo.find { it.key == draggedItemId }
 
-            val shouldScrollDown: Boolean
-            val shouldScrollUp: Boolean
             if (draggedInfo != null) {
                 val top = draggedInfo.offset + dragOffset
                 val bottom = top + draggedInfo.size
-                shouldScrollDown = bottom > viewportEnd - threshold
-                shouldScrollUp = top < viewportStart + threshold
-            } else {
-                shouldScrollDown = dragOffset > viewportHeight * 0.4f
-                shouldScrollUp = dragOffset < -viewportHeight * 0.4f
-            }
 
-            if (shouldScrollDown) {
-                listState.scrollBy(scrollStep)
-                dragOffset += scrollStep
-                Log.d(TAG, "Auto-scroll DOWN step=$scrollStep dragOffset=$dragOffset")
-            } else if (shouldScrollUp) {
-                listState.scrollBy(-scrollStep)
-                dragOffset -= scrollStep
-                Log.d(TAG, "Auto-scroll UP step=$scrollStep dragOffset=$dragOffset")
+                if (top < viewportStart + threshold) {
+                    listState.scrollBy(-scrollStep)
+                    dragOffset -= scrollStep // Scroll up -> item layout moves down -> decrease offset
+                } else if (bottom > viewportEnd - threshold) {
+                    listState.scrollBy(scrollStep)
+                    dragOffset += scrollStep // Scroll down -> item layout moves up -> increase offset
+                }
+            } else {
+                // Fallback for when item is off-screen
+                if (dragOffset > viewportHeight * 0.4f) {
+                    listState.scrollBy(scrollStep)
+                    dragOffset += scrollStep
+                } else if (dragOffset < -viewportHeight * 0.4f) {
+                    listState.scrollBy(-scrollStep)
+                    dragOffset -= scrollStep
+                }
             }
             delay(16)
         }
@@ -354,6 +353,7 @@ fun ScriptDetailScreen(
                                                 change.consume()
                                                 dragOffset += dragAmount.y
 
+                                                // FIXED: Crash prevention - only cast to String if it IS a String
                                                 val draggedInfo = listState.layoutInfo.visibleItemsInfo
                                                     .find { it.key == draggedItemId }
                                                 if (draggedInfo != null) {
@@ -361,7 +361,7 @@ fun ScriptDetailScreen(
                                                     val target = listState.layoutInfo.visibleItemsInfo.find {
                                                         centerY >= it.offset && centerY <= it.offset + it.size
                                                     }
-                                                    if (target != null && target.key != null) {
+                                                    if (target != null && target.key is String) {
                                                         dropTargetId = target.key as String
                                                     }
                                                 }
@@ -370,13 +370,14 @@ fun ScriptDetailScreen(
                                                 Log.d(TAG, "Drag END from=${step.id} to=${dropTargetId}")
                                                 val fromIdx = steps.indexOfFirst { it.id == step.id }
                                                 val toIdx = steps.indexOfFirst { it.id == dropTargetId }
+                                                
+                                                // FIXED: Clamp indices to prevent crash
                                                 if (fromIdx != -1 && toIdx != -1 && fromIdx != toIdx) {
                                                     val mutable = steps.toMutableList()
                                                     val item = mutable.removeAt(fromIdx)
-                                                    mutable.add(toIdx, item)
-                                                    steps = mutable.mapIndexed { i, s ->
-                                                        s.copy(sequenceIndex = i + 1)
-                                                    }
+                                                    val safeToIdx = toIdx.coerceIn(0, mutable.size)
+                                                    mutable.add(safeToIdx, item)
+                                                    steps = mutable.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
                                                 }
                                                 draggedItemId = null
                                                 dragOffset = 0f

@@ -1,13 +1,11 @@
 /*
- * Automation Recorder v11 - tap detection fixes for Android WebView
+ * Automation Recorder v12 - Robust Selectors
  */
 (function () {
   "use strict";
   const g = globalThis;
 
   if (g.__automationRecorderInstalled) {
-    // Already running — just resume. Do NOT tear down and rebuild,
-    // which created a window where taps were lost.
     if (typeof g.__automationRecorderResume === "function") g.__automationRecorderResume();
     return;
   }
@@ -44,9 +42,19 @@
     } catch (_) { return false; }
   }
 
+  // FIXED: Robust CSS selector generation
   function getCssSelector(el) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
     if (el.id) return "#" + CSS.escape(el.id);
+
+    const attrs = ['data-testid', 'data-test', 'data-cy', 'aria-label', 'name', 'title', 'placeholder'];
+    for (const attr of attrs) {
+      const val = el.getAttribute(attr);
+      if (val && val.length > 2 && val.length < 50 && !/\d{4,}/.test(val)) {
+        return `[${attr}="${CSS.escape(val)}"]`;
+      }
+    }
+
     let path = [], cur = el;
     while (cur && cur.nodeType === Node.ELEMENT_NODE && cur !== document.body) {
       let name = cur.nodeName.toLowerCase();
@@ -61,9 +69,19 @@
     return path.length ? path.join(" > ") : "";
   }
 
+  // FIXED: Robust XPath generation
   function getXPath(el) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
     if (el.id) return `//*[@id="${el.id}"]`;
+
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'button' || tag === 'a' || tag === 'input') {
+      const text = (el.innerText || el.textContent || el.value || '').trim();
+      if (text.length > 0 && text.length < 40 && !text.includes('\n')) {
+        return `//${tag}[contains(normalize-space(.), "${text}")]`;
+      }
+    }
+
     let path = [], cur = el;
     while (cur && cur.nodeType === Node.ELEMENT_NODE) {
       let i = 1, sib = cur.previousSibling;
@@ -159,7 +177,6 @@
     const isLink = tag === "a" || tag === "button" || type === "submit" || actualTarget.getAttribute("role") === "button";
     if (isLink) kind = "ClickNext";
 
-    // Visual feedback
     const old = actualTarget.style.outline;
     actualTarget.style.outline = "3px solid #06b6d4";
     setTimeout(() => { actualTarget.style.outline = old; }, 600);
@@ -182,7 +199,6 @@
     setTimeout(() => { justRecorded = false; }, 300);
   }
 
-  // Tap tracking — thresholds raised so slightly wobbly taps are NOT dropped
   let tX = 0, tY = 0, tT = 0, tMoved = false;
   document.addEventListener("touchstart", (e) => {
     if (e.touches.length === 1) {
@@ -197,32 +213,26 @@
     }
   }, { capture: true, passive: true });
 
-  // Touchend — primary capture path
   document.addEventListener("touchend", (e) => {
     if (e.changedTouches.length === 1 && !tMoved) {
       const time = Date.now() - tT;
-      if (time < 800) {
-        processTarget(e.changedTouches[0].target);
-      }
+      if (time < 800) processTarget(e.changedTouches[0].target);
     }
   }, { capture: true });
 
-  // pointerup fallback — survives preventDefault on touchstart, fires before click
   document.addEventListener("pointerup", (e) => {
     if (e.pointerType !== "touch") return;
     if (tMoved) return;
     if (Date.now() - tT > 800) return;
-    if (justRecorded) return; // touchend already handled it
+    if (justRecorded) return;
     processTarget(e.target);
   }, { capture: true });
 
-  // Click fallback (mouse / desktop)
   document.addEventListener("click", (e) => {
     if (justRecorded) return;
     processTarget(e.target);
   }, { capture: true });
 
-  // Focusin fallback — only for input/textarea (not blocked by justRecorded so late focus still captures)
   document.addEventListener("focusin", (e) => {
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) {
       if (justRecorded) return;
