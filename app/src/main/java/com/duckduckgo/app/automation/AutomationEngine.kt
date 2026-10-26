@@ -99,7 +99,7 @@ object AutomationEngine {
     var hudCompleted by mutableIntStateOf(0); private set
     var hudTotal by mutableIntStateOf(1); private set
     var hudStatus by mutableStateOf(""); private set
-    var hudGroupName by mutableStateOf(""); private set // For display only
+    var hudGroupName by mutableStateOf(""); private set 
 
     var onShowFireDialog: ((String) -> Unit)? = null
     private var fireDialogContinuation: CancellableContinuation<Unit>? = null
@@ -179,11 +179,11 @@ object AutomationEngine {
 
         mountHudOverlayIfNeeded(webView)
 
-        // FIXED: Process pending config when WebView attaches
         if (pendingBrowserConfig != null) {
             val config = pendingBrowserConfig!!
             pendingBrowserConfig = null
-            startAutomation(config)
+            // FIXED: Let the browser load the URL, engine just waits for it
+            startAutomation(config, navigateFirstCycle = false) 
         } else if (hudMode == HudMode.Recording && !hudRecordingPaused) {
             webView.postDelayed({
                 loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder re-injected") } }
@@ -239,6 +239,8 @@ object AutomationEngine {
             Toast.makeText(context, "Script has no data assigned. Edit script first.", Toast.LENGTH_LONG).show()
             return
         }
+        
+        VaultRepository.init(context) // Ensure init
         
         val config = AutomationConfig(
             targetUrl = script.url,
@@ -436,8 +438,7 @@ object AutomationEngine {
             updateStatus("Loading ${script.url}...")
             withContext(Dispatchers.Main) { webView.loadUrl(script.url) }
             waitForPageReady(webView)
-            delay(500)
-
+            
             for (step in script.steps) {
                 if (!scope.isActive) break
 
@@ -613,7 +614,6 @@ object AutomationEngine {
                         updateStatus("Waiting for page transition...")
                         delay(500)
                         waitForPageReady(webView)
-                        delay(500)
                     }
                 }
             }
@@ -698,7 +698,11 @@ object AutomationEngine {
                 withContext(Dispatchers.Main) { webView.loadUrl(targetUri) }
             }
             isFirst = false
-            waitForPageReady(webView); injectScanner(); delay(600)
+            waitForPageReady(webView)
+            
+            injectScanner()
+            delay(800)
+            
             var stepSuccess = false
             var counter = 0
             while (counter < 5 && scope.isActive) {
@@ -829,15 +833,16 @@ object AutomationEngine {
         fireDialogContinuation = null
     }
 
+    // FIXED: Simplified to only check webView.progress, avoiding the JS evaluation loop hang
     private suspend fun waitForPageReady(webView: WebView) {
         var waited = 0L
-        while (waited < 5000L) {
+        while (waited < 15000L) { 
             val progress = withContext(Dispatchers.Main) { webView.progress }
-            val state = evaluateJsSuspend(webView, "return document.readyState;")
-            if (progress >= 80 && (state.contains("interactive") || state.contains("complete"))) break
-            delay(100)
-            waited += 100
+            if (progress >= 100) break
+            delay(200)
+            waited += 200
         }
+        delay(2000) // Give JS time to render
     }
 
     private suspend fun evaluateJsSuspend(webView: WebView, script: String): String =

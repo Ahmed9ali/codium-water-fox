@@ -28,8 +28,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.duckduckgo.common.ui.compose.theme.DuckDuckGoTheme
 import com.duckduckgo.mobile.android.R.drawable
-import kotlinx.coroutines.delay // <-- FIXED: Added import
-import kotlinx.coroutines.isActive // <-- FIXED: Added import
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlin.math.roundToInt
 
 @Composable
@@ -63,30 +63,28 @@ fun ScriptDetailScreen(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var dropTargetIndex by remember { mutableIntStateOf(-1) }
 
-    // Auto-scroll logic
+    // FIXED: Auto-scroll logic updates dragOffset to keep item under finger
     LaunchedEffect(draggedItemId) {
-        if (draggedItemId != null) {
-            while (isActive) {
-                val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == draggedIndex + 4 }
-                if (itemInfo != null) {
-                    val itemTop = itemInfo.offset + dragOffset
-                    val itemBottom = itemTop + itemInfo.size
-                    val viewportStart = listState.layoutInfo.viewportStartOffset
-                    val viewportEnd = listState.layoutInfo.viewportEndOffset
-                    val threshold = 120f
+        while (isActive && draggedItemId != null) {
+            val draggedInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == draggedIndex + 4 }
+            if (draggedInfo != null) {
+                val currentTop = draggedInfo.offset + dragOffset
+                val currentBottom = currentTop + draggedInfo.size
+                val viewportStart = listState.layoutInfo.viewportStartOffset
+                val viewportEnd = listState.layoutInfo.viewportEndOffset
+                val threshold = 100f
 
-                    if (itemBottom > viewportEnd - threshold) {
-                        val scrollAmount = 15f
-                        listState.scrollBy(scrollAmount)
-                        dragOffset -= scrollAmount
-                    } else if (itemTop < viewportStart + threshold) {
-                        val scrollAmount = -15f
-                        listState.scrollBy(scrollAmount)
-                        dragOffset -= scrollAmount
-                    }
+                if (currentBottom > viewportEnd - threshold) {
+                    val scrollAmount = 15f
+                    listState.scrollBy(scrollAmount)
+                    dragOffset += scrollAmount
+                } else if (currentTop < viewportStart + threshold) {
+                    val scrollAmount = -15f
+                    listState.scrollBy(scrollAmount)
+                    dragOffset += scrollAmount
                 }
-                delay(16)
             }
+            delay(16)
         }
     }
 
@@ -271,7 +269,6 @@ fun ScriptDetailScreen(
                                                 change.consume()
                                                 dragOffset += dragAmount.y
                                                 
-                                                // Adjust for headers (4 items before steps)
                                                 val draggedInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == draggedIndex + 4 }
                                                 if (draggedInfo != null) {
                                                     val currentCenterY = draggedInfo.offset + dragOffset + draggedInfo.size / 2f

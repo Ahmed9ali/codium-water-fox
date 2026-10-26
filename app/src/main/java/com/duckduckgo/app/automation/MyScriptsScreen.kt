@@ -180,7 +180,7 @@ private fun ScriptRow(
                 )
             }
             
-            // UPDATED: Play button with the same soft blue background as HUD arrows
+            // FIXED: Play button with the soft blue background
             Box(
                 modifier = Modifier
                     .size(36.dp)
