@@ -261,6 +261,7 @@ class DuckDuckGoWebView :
             super.setWebViewClient(
                 object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                        logcat(LogPriority.DEBUG) { "WebView onPageStarted: $url" }
                         client.onPageStarted(view, url, favicon)
                         try {
                             this@DuckDuckGoWebView.addJavascriptInterface(
@@ -273,16 +274,15 @@ class DuckDuckGoWebView :
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
+                        logcat(LogPriority.DEBUG) { "WebView onPageFinished: $url" }
                         client.onPageFinished(view, url)
                         try {
                             AutomationEngine.attachWebView(this@DuckDuckGoWebView, automationTabId)
                             AutomationEngine.injectScanner()
-
-                            // FIX FOR BUG 3: Re-inject recorder if still recording after navigation/reload
                             if (AutomationEngine.hudMode == HudMode.Recording) {
                                 loadRecorderAsset()?.let { js ->
                                     this@DuckDuckGoWebView.evaluateJavascript(js) {
-                                        logcat { "Recorder re-injected after page load" }
+                                        logcat(LogPriority.DEBUG) { "Recorder re-injected after page load" }
                                     }
                                 }
                             }

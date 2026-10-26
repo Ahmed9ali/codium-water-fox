@@ -59,30 +59,45 @@ fun ScriptDetailScreen(
 
     val listState = rememberLazyListState()
     var draggedItemId by remember { mutableStateOf<String?>(null) }
-    var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    var dropTargetIndex by remember { mutableIntStateOf(-1) }
+    var dropTargetId by remember { mutableStateOf<String?>(null) }
+    var lastDragEventTime by remember { mutableLongStateOf(0L) }
 
-    // FIXED: Auto-scroll logic updates dragOffset to keep item under finger
+    // BUG 3 FIX: identify dragged item by KEY (immune to header-count changes)
+    // and fall back to dragOffset-based scrolling when the item's layout position
+    // scrolls off-screen (which is exactly when the original `+ 4` code broke).
     LaunchedEffect(draggedItemId) {
         while (isActive && draggedItemId != null) {
-            val draggedInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == draggedIndex + 4 }
-            if (draggedInfo != null) {
-                val currentTop = draggedInfo.offset + dragOffset
-                val currentBottom = currentTop + draggedInfo.size
-                val viewportStart = listState.layoutInfo.viewportStartOffset
-                val viewportEnd = listState.layoutInfo.viewportEndOffset
-                val threshold = 100f
+            val viewportStart = listState.layoutInfo.viewportStartOffset.toFloat()
+            val viewportEnd = listState.layoutInfo.viewportEndOffset.toFloat()
+            val viewportHeight = viewportEnd - viewportStart
+            val threshold = 150f
+            val scrollStep = 20f
 
-                if (currentBottom > viewportEnd - threshold) {
-                    val scrollAmount = 15f
-                    listState.scrollBy(scrollAmount)
-                    dragOffset += scrollAmount
-                } else if (currentTop < viewportStart + threshold) {
-                    val scrollAmount = -15f
-                    listState.scrollBy(scrollAmount)
-                    dragOffset += scrollAmount
-                }
+            val draggedInfo = listState.layoutInfo.visibleItemsInfo
+                .find { it.key == draggedItemId }
+
+            val shouldScrollDown: Boolean
+            val shouldScrollUp: Boolean
+            if (draggedInfo != null) {
+                val top = draggedInfo.offset + dragOffset
+                val bottom = top + draggedInfo.size
+                shouldScrollDown = bottom > viewportEnd - threshold
+                shouldScrollUp = top < viewportStart + threshold
+            } else {
+                // Dragged item is off-screen in layout — use dragOffset as fallback.
+                shouldScrollDown = dragOffset > viewportHeight * 0.4f
+                shouldScrollUp = dragOffset < -viewportHeight * 0.4f
+            }
+
+            if (shouldScrollDown) {
+                listState.scrollBy(scrollStep)
+                dragOffset += scrollStep
+                Log.d("ScriptDetailScreen", "Auto-scroll DOWN step=$scrollStep dragOffset=$dragOffset")
+            } else if (shouldScrollUp) {
+                listState.scrollBy(-scrollStep)
+                dragOffset -= scrollStep
+                Log.d("ScriptDetailScreen", "Auto-scroll UP step=$scrollStep dragOffset=$dragOffset")
             }
             delay(16)
         }
@@ -216,7 +231,7 @@ fun ScriptDetailScreen(
 
             itemsIndexed(steps, key = { _, step -> step.id }) { index, step ->
                 val isDragging = draggedItemId == step.id
-                val isDropTarget = dropTargetIndex == index && !isDragging
+                val isDropTarget = dropTargetId == step.id && draggedItemId != step.id
 
                 Box(
                     modifier = Modifier
@@ -258,45 +273,51 @@ fun ScriptDetailScreen(
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .pointerInput(steps.size, index) {
+                                    .pointerInput(steps.size, step.id) {
                                         detectDragGesturesAfterLongPress(
                                             onDragStart = {
                                                 draggedItemId = step.id
-                                                draggedIndex = index
                                                 dragOffset = 0f
+                                                dropTargetId = step.id
+                                                lastDragEventTime = System.currentTimeMillis()
+                                                Log.d("ScriptDetailScreen", "Drag START ${step.displayLabel}")
                                             },
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
                                                 dragOffset += dragAmount.y
-                                                
-                                                val draggedInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == draggedIndex + 4 }
+                                                lastDragEventTime = System.currentTimeMillis()
+
+                                                val draggedInfo = listState.layoutInfo.visibleItemsInfo
+                                                    .find { it.key == draggedItemId }
                                                 if (draggedInfo != null) {
-                                                    val currentCenterY = draggedInfo.offset + dragOffset + draggedInfo.size / 2f
+                                                    val centerY = draggedInfo.offset + dragOffset + draggedInfo.size / 2f
                                                     val target = listState.layoutInfo.visibleItemsInfo.find {
-                                                        currentCenterY >= it.offset && currentCenterY <= it.offset + it.size
+                                                        centerY >= it.offset && centerY <= it.offset + it.size
                                                     }
-                                                    if (target != null && target.index >= 4) {
-                                                        dropTargetIndex = target.index - 4
+                                                    if (target != null && target.key != null) {
+                                                        dropTargetId = target.key as String
                                                     }
                                                 }
                                             },
                                             onDragEnd = {
-                                                if (dropTargetIndex != -1 && dropTargetIndex != draggedIndex) {
+                                                Log.d("ScriptDetailScreen", "Drag END from=${step.id} to=${dropTargetId}")
+                                                val fromIdx = steps.indexOfFirst { it.id == step.id }
+                                                val toIdx = steps.indexOfFirst { it.id == dropTargetId }
+                                                if (fromIdx != -1 && toIdx != -1 && fromIdx != toIdx) {
                                                     val mutable = steps.toMutableList()
-                                                    val item = mutable.removeAt(draggedIndex)
-                                                    mutable.add(dropTargetIndex, item)
+                                                    val item = mutable.removeAt(fromIdx)
+                                                    mutable.add(toIdx, item)
                                                     steps = mutable.mapIndexed { i, s -> s.copy(sequenceIndex = i + 1) }
                                                 }
                                                 draggedItemId = null
-                                                draggedIndex = -1
                                                 dragOffset = 0f
-                                                dropTargetIndex = -1
+                                                dropTargetId = null
                                             },
                                             onDragCancel = {
+                                                Log.d("ScriptDetailScreen", "Drag CANCEL")
                                                 draggedItemId = null
-                                                draggedIndex = -1
                                                 dragOffset = 0f
-                                                dropTargetIndex = -1
+                                                dropTargetId = null
                                             }
                                         )
                                     },

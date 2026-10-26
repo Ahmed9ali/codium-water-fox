@@ -1,12 +1,15 @@
 /*
- * Automation Recorder (v11 - Strict Scroll & Tap Detection)
+ * Automation Recorder v11 - tap detection fixes for Android WebView
  */
 (function () {
   "use strict";
   const g = globalThis;
 
-  if (g.__automationRecorderStop) {
-    try { g.__automationRecorderStop(); } catch (_) {}
+  if (g.__automationRecorderInstalled) {
+    // Already running — just resume. Do NOT tear down and rebuild,
+    // which created a window where taps were lost.
+    if (typeof g.__automationRecorderResume === "function") g.__automationRecorderResume();
+    return;
   }
   g.__automationRecorderInstalled = true;
 
@@ -15,30 +18,21 @@
   let lastClickTime = 0;
   let justRecorded = false;
 
-  // Forced clickable disabled elements
-  const styleEl = document.createElement('style');
-  styleEl.id = '__automation_recorder_style';
+  // Disabled elements clickable
+  const styleEl = document.createElement("style");
+  styleEl.id = "__automation_recorder_style";
   styleEl.textContent = `
     button:disabled, input:disabled, [aria-disabled="true"] {
-      pointer-events: auto !important;
-      cursor: crosshair !important;
-      opacity: 0.7 !important;
-    }
-  `;
+      pointer-events: auto !important; cursor: crosshair !important; opacity: 0.7 !important;
+    }`;
   document.head.appendChild(styleEl);
 
   // Block keyboard
   const originalFocus = HTMLElement.prototype.focus;
-  HTMLElement.prototype.focus = function(...args) {
+  HTMLElement.prototype.focus = function (...args) {
     if (!isPaused && g.__automationRecorderInstalled) return;
     return originalFocus.apply(this, args);
   };
-
-  // Tap detection state
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartTime = 0;
-  let touchMoved = false;
 
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
@@ -53,18 +47,16 @@
   function getCssSelector(el) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
     if (el.id) return "#" + CSS.escape(el.id);
-    let path = [];
-    let current = el;
-    while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
-      let name = current.nodeName.toLowerCase();
-      if (current.id) { path.unshift("#" + CSS.escape(current.id)); break; }
-      let parent = current.parentElement;
-      if (!parent && current.getRootNode() instanceof ShadowRoot) parent = current.getRootNode().host;
+    let path = [], cur = el;
+    while (cur && cur.nodeType === Node.ELEMENT_NODE && cur !== document.body) {
+      let name = cur.nodeName.toLowerCase();
+      if (cur.id) { path.unshift("#" + CSS.escape(cur.id)); break; }
+      let parent = cur.parentElement;
+      if (!parent && cur.getRootNode() instanceof ShadowRoot) parent = cur.getRootNode().host;
       if (!parent) break;
-      const siblings = Array.from(parent.children).filter(c => c.nodeName === current.nodeName);
-      if (siblings.length > 1) name += `:nth-of-type(${siblings.indexOf(current) + 1})`;
-      path.unshift(name);
-      current = parent;
+      const sibs = Array.from(parent.children).filter(c => c.nodeName === cur.nodeName);
+      if (sibs.length > 1) name += `:nth-of-type(${sibs.indexOf(cur) + 1})`;
+      path.unshift(name); cur = parent;
     }
     return path.length ? path.join(" > ") : "";
   }
@@ -72,16 +64,11 @@
   function getXPath(el) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
     if (el.id) return `//*[@id="${el.id}"]`;
-    let path = [];
-    let current = el;
-    while (current && current.nodeType === Node.ELEMENT_NODE) {
-      let idx = 1, sib = current.previousSibling;
-      while (sib) {
-        if (sib.nodeType === Node.ELEMENT_NODE && sib.nodeName === current.nodeName) idx++;
-        sib = sib.previousSibling;
-      }
-      path.unshift(`${current.nodeName.toLowerCase()}[${idx}]`);
-      current = current.parentElement;
+    let path = [], cur = el;
+    while (cur && cur.nodeType === Node.ELEMENT_NODE) {
+      let i = 1, sib = cur.previousSibling;
+      while (sib) { if (sib.nodeType === Node.ELEMENT_NODE && sib.nodeName === cur.nodeName) i++; sib = sib.previousSibling; }
+      path.unshift(`${cur.nodeName.toLowerCase()}[${i}]`); cur = cur.parentElement;
     }
     return "/" + path.join("/");
   }
@@ -100,10 +87,9 @@
     const type = (el.type || "").toLowerCase();
     const role = (el.getAttribute("role") || "").toLowerCase();
     const ac = (el.getAttribute("autocomplete") || "").toLowerCase();
-    const combined = `${getLabel(el)} ${el.name || ""} ${el.id || ""}`.toLowerCase();
-
+    const c = `${getLabel(el)} ${el.name || ""} ${el.id || ""}`.toLowerCase();
     if (type === "checkbox" || type === "radio" || role === "checkbox" || role === "radio" || role === "switch") {
-      if (/\b(gender|sex|male|female)\b/i.test(combined)) return "gender";
+      if (/\b(gender|sex|male|female)\b/i.test(c)) return "gender";
       return "termscheckbox";
     }
     if (ac) {
@@ -121,80 +107,65 @@
     if (type === "tel") return "phone";
     if (type === "password") return "password";
     if (type === "date") return "dob";
-    
-    if (/\b(first|given)\s*name\b|\bfname\b/.test(combined)) return "firstName";
-    if (/\b(last|family|sur)\s*name\b|\blname\b/.test(combined)) return "lastName";
-    if (/\b(full\s*name|your\s*name|name)\b/.test(combined)) return "fullName";
-    if (/\b(e-?mail)\b/.test(combined)) return "email";
-    if (/\b(phone|mobile|tel)\b/.test(combined)) return "phone";
-    if (/\b(password|pass)\b/.test(combined)) return "password";
-    if (/\b(city)\b/.test(combined)) return "city";
-    if (/\b(state)\b/.test(combined)) return "state";
-    if (/\b(zip|postal)\b/.test(combined)) return "zip";
-    if (/\b(country)\b/.test(combined)) return "country";
-    if (tag === "textarea" || /\b(message|comment|description)\b/.test(combined)) return "message";
+    if (/\b(first|given)\s*name\b|\bfname\b/.test(c)) return "firstName";
+    if (/\b(last|family|sur)\s*name\b|\blname\b/.test(c)) return "lastName";
+    if (/\b(full\s*name|your\s*name|name)\b/.test(c)) return "fullName";
+    if (/\b(e-?mail)\b/.test(c)) return "email";
+    if (/\b(phone|mobile|tel)\b/.test(c)) return "phone";
+    if (/\b(password|pass)\b/.test(c)) return "password";
+    if (/\b(city)\b/.test(c)) return "city";
+    if (/\b(state)\b/.test(c)) return "state";
+    if (/\b(zip|postal)\b/.test(c)) return "zip";
+    if (/\b(country)\b/.test(c)) return "country";
+    if (tag === "textarea" || /\b(message|comment|description)\b/.test(c)) return "message";
     return "text";
   }
 
   function sendToBridge(data) {
     if (window.AutomationBridge && window.AutomationBridge.onElementRecorded) {
-      try { window.AutomationBridge.onElementRecorded(JSON.stringify(data)); } catch (_) {}
+      try { window.AutomationBridge.onElementRecorded(JSON.stringify(data)); }
+      catch (e) { console.error("Recorder: bridge error", e); }
+    } else {
+      console.warn("Recorder: AutomationBridge missing");
     }
   }
 
   function processTarget(target) {
     if (isPaused) return;
-    if (target && target.closest && target.closest('[data-automation-hud]')) return;
+    if (target && target.closest && target.closest("[data-automation-hud]")) return;
 
     let actualTarget = target;
-    if (!['input', 'textarea', 'select', 'button', 'a'].includes(actualTarget.tagName.toLowerCase())) {
-      const parentInteractive = actualTarget.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick], [aria-disabled="true"]');
-      if (parentInteractive) actualTarget = parentInteractive;
+    if (!["input", "textarea", "select", "button", "a"].includes(actualTarget.tagName.toLowerCase())) {
+      const parent = actualTarget.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick], [aria-disabled="true"]');
+      if (parent) actualTarget = parent;
     }
-
     if (!isVisible(actualTarget)) return;
 
     const label = actualTarget.closest("label");
     if (label) {
-      const innerInput = label.querySelector("input, select, textarea, [role='radio'], [role='checkbox']");
-      if (innerInput) actualTarget = innerInput;
+      const inner = label.querySelector("input, select, textarea, [role='radio'], [role='checkbox']");
+      if (inner) actualTarget = inner;
     }
 
     const now = Date.now();
-    if (actualTarget === lastTarget && now - lastClickTime < 500) return;
+    if (actualTarget === lastTarget && now - lastClickTime < 300) return;
     lastTarget = actualTarget;
     lastClickTime = now;
     justRecorded = true;
 
     const tag = actualTarget.tagName.toLowerCase();
-    const type = (actualTarget.type || '').toLowerCase();
+    const type = (actualTarget.type || "").toLowerCase();
     let kind = "Field";
-    let displayLabel = getLabel(actualTarget);
+    const isLink = tag === "a" || tag === "button" || type === "submit" || actualTarget.getAttribute("role") === "button";
+    if (isLink) kind = "ClickNext";
 
-    const isLink = tag === "a" || (tag === "button") || type === "submit" || actualTarget.getAttribute("role") === "button";
-    if (isLink) {
-      kind = "ClickNext";
-      // Prevent default to stop navigation while recording
-      if (event && event.cancelable) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    } else {
-      const wasReadonly = actualTarget.hasAttribute('readonly');
-      actualTarget.setAttribute('readonly', 'true');
-      try { actualTarget.blur(); } catch (_) {}
-      setTimeout(() => { if (!wasReadonly) actualTarget.removeAttribute('readonly'); }, 200);
-    }
-
-    const oldOutline = actualTarget.style.outline;
+    // Visual feedback
+    const old = actualTarget.style.outline;
     actualTarget.style.outline = "3px solid #06b6d4";
-    setTimeout(() => { actualTarget.style.outline = oldOutline; }, 600);
+    setTimeout(() => { actualTarget.style.outline = old; }, 600);
 
     const payload = {
-      kind: kind,
-      tag: tag,
-      domType: type || "",
+      kind, tag, domType: type,
       name: actualTarget.getAttribute("name") || "",
       domId: actualTarget.id || "",
       placeholder: actualTarget.getAttribute("placeholder") || "",
@@ -202,68 +173,73 @@
       cssSelector: getCssSelector(actualTarget),
       xpath: getXPath(actualTarget),
       looksLike: classify(actualTarget),
-      displayLabel: displayLabel || "Element",
-      buttonLabel: kind === "ClickNext" ? (displayLabel || "Button") : "",
-      verified: true
+      displayLabel: getLabel(actualTarget) || "Element",
+      buttonLabel: kind === "ClickNext" ? (getLabel(actualTarget) || "Button") : "",
+      verified: true,
     };
+    console.log("Recorder: captured", tag, payload.displayLabel);
     sendToBridge(payload);
-
-    setTimeout(() => { justRecorded = false; }, 400);
+    setTimeout(() => { justRecorded = false; }, 300);
   }
 
-  // Touch handling for accurate taps
+  // Tap tracking — thresholds raised so slightly wobbly taps are NOT dropped
+  let tX = 0, tY = 0, tT = 0, tMoved = false;
   document.addEventListener("touchstart", (e) => {
     if (e.touches.length === 1) {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      touchStartTime = Date.now();
-      touchMoved = false;
+      tX = e.touches[0].clientX; tY = e.touches[0].clientY;
+      tT = Date.now(); tMoved = false;
     }
   }, { capture: true, passive: true });
 
   document.addEventListener("touchmove", (e) => {
     if (e.touches.length === 1) {
-      const diffX = Math.abs(e.touches[0].clientX - touchStartX);
-      const diffY = Math.abs(e.touches[0].clientY - touchStartY);
-      if (diffX > 10 || diffY > 10) {
-        touchMoved = true;
-      }
+      if (Math.abs(e.touches[0].clientX - tX) > 30 || Math.abs(e.touches[0].clientY - tY) > 30) tMoved = true;
     }
   }, { capture: true, passive: true });
 
+  // Touchend — primary capture path
   document.addEventListener("touchend", (e) => {
-    if (e.changedTouches.length === 1 && !touchMoved) {
-      const time = Date.now() - touchStartTime;
-      if (time < 500) {
+    if (e.changedTouches.length === 1 && !tMoved) {
+      const time = Date.now() - tT;
+      if (time < 800) {
         processTarget(e.changedTouches[0].target);
       }
     }
   }, { capture: true });
 
-  // Mouse click handling for desktop
+  // pointerup fallback — survives preventDefault on touchstart, fires before click
+  document.addEventListener("pointerup", (e) => {
+    if (e.pointerType !== "touch") return;
+    if (tMoved) return;
+    if (Date.now() - tT > 800) return;
+    if (justRecorded) return; // touchend already handled it
+    processTarget(e.target);
+  }, { capture: true });
+
+  // Click fallback (mouse / desktop)
   document.addEventListener("click", (e) => {
     if (justRecorded) return;
     processTarget(e.target);
   }, { capture: true });
 
-  // Focus handling for keyboard navigation
+  // Focusin fallback — only for input/textarea (not blocked by justRecorded so late focus still captures)
   document.addEventListener("focusin", (e) => {
-    if (justRecorded) return;
-    // Only capture if it wasn't triggered by a touch (which already handled it)
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) {
-        processTarget(e.target);
+      if (justRecorded) return;
+      processTarget(e.target);
     }
   }, { capture: true });
 
   g.__automationRecorderPause = () => { isPaused = true; };
   g.__automationRecorderResume = () => { isPaused = false; };
   g.__automationRecorderStop = () => {
+    document.removeEventListener("touchend", processTarget, true);
+    document.removeEventListener("pointerup", processTarget, true);
     document.removeEventListener("click", processTarget, true);
-    document.removeEventListener("touchstart", () => {}, true);
-    document.removeEventListener("touchend", () => {}, true);
-    document.removeEventListener("focusin", () => {}, true);
-    if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+    document.removeEventListener("focusin", processTarget, true);
+    if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
     HTMLElement.prototype.focus = originalFocus;
     g.__automationRecorderInstalled = false;
   };
-})(); 
+  console.log("Recorder: installed");
+})();
