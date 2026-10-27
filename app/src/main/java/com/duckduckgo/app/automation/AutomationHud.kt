@@ -418,9 +418,7 @@ private fun HudRunSetupPanel() {
     val selectedDefaultGroup = AutomationEngine.hudSelectedDefaultGroup
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
-    HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
-        
-        // FIXED: Added verticalScroll so buttons don't get squeezed
+    HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {        
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text("Recurring Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
@@ -461,7 +459,9 @@ private fun HudRunSetupPanel() {
             Spacer(Modifier.height(16.dp))
         }
         
-        // Sticky Bottom Buttons
+        val missingGroups = selectedGroups.filter { VaultRepository.getGroup(it) == null }
+        val hasNoUnusedData = selectedGroups.isNotEmpty() && !selectedGroups.any { VaultRepository.hasUnusedData(it) }
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DdgSecondaryButton(text = "Edit Script", onClick = { AutomationEngine.openScriptEditor(script) }, modifier = Modifier.weight(1f))
             DdgPrimaryButton(
@@ -471,7 +471,11 @@ private fun HudRunSetupPanel() {
                 enabled = selectedGroups.isNotEmpty() && selectedGroups.any { VaultRepository.hasUnusedData(it) }
             )
         }
-        if (selectedGroups.isNotEmpty() && !selectedGroups.any { VaultRepository.hasUnusedData(it) }) {
+        
+        if (missingGroups.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text("Group(s) ${missingGroups.joinToString(", ")} deleted. Edit script.", color = Color.Red, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        } else if (hasNoUnusedData) {
             Spacer(Modifier.height(6.dp))
             Text("All selected recurring groups are empty or used.", color = Color.Red, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }

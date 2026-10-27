@@ -277,6 +277,7 @@ object AutomationEngine {
 
     fun openRunSetup(script: AutomationScript) {
         hudSelectedScript = script
+        // Keep the script's group names so the HUD can warn if a group was deleted.
         hudSelectedGroups = script.groupNames
         hudSelectedDefaultGroup = script.defaultGroupName
         hudRunRepeatCount = 1
@@ -718,14 +719,22 @@ object AutomationEngine {
         Log.d(TAG, "runScriptExecution: script=${script.name}, steps=${script.steps.size}, target=${config.targetRepeatCount}, navigateFirstCycle=$navigateFirstCycle")
 
         while (completed < config.targetRepeatCount && scope.isActive) {
-            val activeGroup = config.groupNames.firstOrNull { VaultRepository.hasUnusedData(it) }
+            val activeGroup = config.groupNames.firstOrNull {
+                VaultRepository.getGroup(it) != null && VaultRepository.hasUnusedData(it)
+            }
+
             if (activeGroup == null) {
-                Log.d(TAG, "runScriptExecution: no unused data -> WAITING_DATA_EXHAUSTED")
+                val missing = config.groupNames.filter { VaultRepository.getGroup(it) == null }
+                if (missing.isNotEmpty()) {
+                    updateStatus("Group(s) ${missing.joinToString(", ")} deleted. Please edit the script.")
+                } else {
+                    updateStatus("Recurring data is empty or used.")
+                }
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
-                updateStatus("All recurring groups exhausted after $completed runs.")
                 return
             }
+
             val profile = VaultRepository.acquireNextProfile(activeGroup, config.mode) ?: run {
                 Log.e(TAG, "runScriptExecution: acquireNextProfile null")
                 return
@@ -784,12 +793,16 @@ object AutomationEngine {
                                     fireDialogContinuation = cont
                                     onShowFireDialog?.invoke(step.fieldType)
                                 }
-                            } catch (e: Exception) { Log.e(TAG, "Fire dialog failed: ${e.message}") }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Fire dialog failed: ${e.message}")
+                            }
                         }
                         try {
                             if (step.fieldType == "delete_all") clearAllData(webView)
                             else clearTabData(webView)
-                        } catch (e: Exception) { Log.e(TAG, "Clear data failed: ${e.message}") }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Clear data failed: ${e.message}")
+                        }
                         delay(500)
                         true
                     }

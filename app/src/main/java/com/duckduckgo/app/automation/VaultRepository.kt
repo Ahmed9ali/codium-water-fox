@@ -8,8 +8,8 @@ import org.json.JSONObject
 import kotlin.random.Random
 
 enum class DataGroupType {
-    DEFAULT,    // Reusable: Password, DOB, Address, Name, etc.
-    RECURRING   // Consumable: Email, Phone, Username, etc.
+    DEFAULT,
+    RECURRING
 }
 
 data class VaultEntry(
@@ -22,13 +22,10 @@ data class VaultGroup(
     val name: String,
     val entries: List<VaultEntry>,
     val pinned: Boolean = false,
-    val type: DataGroupType = DataGroupType.RECURRING // NEW: Default or Recurring
+    val type: DataGroupType = DataGroupType.RECURRING
 ) {
-    val unusedCount: Int
-        get() = entries.count { !it.used }
-
-    val usedCount: Int
-        get() = entries.count { it.used }
+    val unusedCount: Int get() = entries.count { !it.used }
+    val usedCount: Int get() = entries.count { it.used }
 }
 
 data class ActiveAutomationProfile(
@@ -38,26 +35,31 @@ data class ActiveAutomationProfile(
 ) {
     fun resolveForField(looksLike: String, fieldName: String = "", tag: String = ""): String? {
         val normalizedType = VaultRepository.normalizeFieldKey(looksLike)
+        
+        // 1. Direct match
         fields[normalizedType]?.let { if (it.isNotBlank()) return it }
 
+        // 2. Match by raw field name (e.g. HTML name attribute)
         if (fieldName.isNotBlank()) {
             val normalizedName = VaultRepository.normalizeFieldKey(fieldName)
             fields[normalizedName]?.let { if (it.isNotBlank()) return it }
         }
 
+        // 3. Fuzzy match fallback (e.g., "firstnameinput" contains "firstname")
+        val fuzzyMatch = fields.entries.firstOrNull { 
+            it.value.isNotBlank() && (it.key.contains(normalizedType) || normalizedType.contains(it.key)) 
+        }
+        if (fuzzyMatch != null) return fuzzyMatch.value
+
+        // 4. Strict fallbacks for common pairs
         return when (normalizedType) {
             "confirmpassword" -> fields["password"]
             "confirmemail" -> fields["email"]
             "confirmphone" -> fields["phone"]
-            
-            // STRICT FALLBACKS (Prevents duplicate name concatenation)
-            "firstname" -> fields["firstname"] ?: fields["fullname"]?.trim()?.substringBefore(" ") ?: fields["username"]
-            "middlename" -> fields["middlename"] // Do NOT fallback to fullname for middle name
-            
-            // Prioritize explicit lastname/surname to avoid duplicates
-            "lastname" -> fields["lastname"] ?: fields["surname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
-            "surname" -> fields["surname"] ?: fields["lastname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
-            
+            "firstname" -> fields["fullname"]?.trim()?.substringBefore(" ") ?: fields["username"]
+            "middlename" -> null // Do NOT fallback to fullname for middle name
+            "lastname" -> fields["surname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
+            "surname" -> fields["lastname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
             "fullname" -> {
                 val first = fields["firstname"].orEmpty()
                 val last = fields["lastname"] ?: fields["surname"].orEmpty()
@@ -93,7 +95,6 @@ object VaultRepository {
         groups.value = load()
     }
 
-    // --- HELPER FUNCTIONS FOR GROUP TYPES ---
     fun getDefaultGroups(): List<VaultGroup> = groups.value.filter { it.type == DataGroupType.DEFAULT }
     fun getRecurringGroups(): List<VaultGroup> = groups.value.filter { it.type == DataGroupType.RECURRING }
 
@@ -103,11 +104,7 @@ object VaultRepository {
         val existing = groups.value.firstOrNull { it.name.equals(trimmedName, ignoreCase = true) }
         if (existing != null) {
             groups.value = groups.value.map { g ->
-                if (g.name.equals(trimmedName, ignoreCase = true)) {
-                    g.copy(entries = g.entries + entries)
-                } else {
-                    g
-                }
+                if (g.name.equals(trimmedName, ignoreCase = true)) g.copy(entries = g.entries + entries) else g
             }
         } else {
             val finalPinned = pinned && groups.value.count { it.pinned } < MAX_PINNED
@@ -117,9 +114,6 @@ object VaultRepository {
         save()
     }
 
-    /**
-     * Adds 1 or more values with an explicit [fieldType] directly into [groupName] from GroupDetailScreen.
-     */
     fun addSpecificEntries(groupName: String, fieldType: String, rawValues: String) {
         val normalizedType = normalizeFieldKey(fieldType)
         val newEntries = rawValues
@@ -127,30 +121,17 @@ object VaultRepository {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .map { line ->
-                // If user still typed "key: value", respect it; otherwise use the chosen fieldType
                 val parts = line.split(":", limit = 2)
                 if (parts.size == 2 && parts[0].trim().length in 2..20 && !parts[0].contains("@") && !parts[0].contains(" ")) {
-                    VaultEntry(
-                        fieldType = normalizeFieldKey(parts[0]),
-                        value = parts[1].trim(),
-                        used = false,
-                    )
+                    VaultEntry(fieldType = normalizeFieldKey(parts[0]), value = parts[1].trim(), used = false)
                 } else {
-                    VaultEntry(
-                        fieldType = normalizedType,
-                        value = line,
-                        used = false,
-                    )
+                    VaultEntry(fieldType = normalizedType, value = line, used = false)
                 }
             }
         if (newEntries.isEmpty()) return
 
         groups.value = groups.value.map { g ->
-            if (g.name == groupName) {
-                g.copy(entries = g.entries + newEntries)
-            } else {
-                g
-            }
+            if (g.name == groupName) g.copy(entries = g.entries + newEntries) else g
         }
         save()
     }
@@ -161,10 +142,7 @@ object VaultRepository {
             if (g.name != groupName) return@map g
             val updated = g.entries.toMutableList()
             if (index in updated.indices) {
-                updated[index] = updated[index].copy(
-                    fieldType = normalizedType,
-                    value = newValue,
-                )
+                updated[index] = updated[index].copy(fieldType = normalizedType, value = newValue)
             }
             g.copy(entries = updated)
         }
@@ -192,20 +170,14 @@ object VaultRepository {
     fun renameGroup(oldName: String, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isBlank()) return
-        groups.value = groups.value.map { g ->
-            if (g.name == oldName) g.copy(name = trimmed) else g
-        }
+        groups.value = groups.value.map { g -> if (g.name == oldName) g.copy(name = trimmed) else g }
         save()
     }
 
     fun togglePin(name: String) {
         val current = groups.value.firstOrNull { it.name == name } ?: return
-        if (!current.pinned && groups.value.count { it.pinned } >= MAX_PINNED) {
-            return
-        }
-        groups.value = groups.value.map { g ->
-            if (g.name == name) g.copy(pinned = !g.pinned) else g
-        }
+        if (!current.pinned && groups.value.count { it.pinned } >= MAX_PINNED) return
+        groups.value = groups.value.map { g -> if (g.name == name) g.copy(pinned = !g.pinned) else g }
         val pinned = groups.value.filter { it.pinned }
         val unpinned = groups.value.filterNot { it.pinned }
         groups.value = pinned + unpinned
@@ -220,9 +192,7 @@ object VaultRepository {
         groups.value = groups.value.map { g ->
             if (g.name != groupName) return@map g
             val updated = g.entries.toMutableList()
-            if (index in updated.indices) {
-                updated[index] = updated[index].copy(value = newValue)
-            }
+            if (index in updated.indices) updated[index] = updated[index].copy(value = newValue)
             g.copy(entries = updated)
         }
         save()
@@ -264,9 +234,7 @@ object VaultRepository {
         val indexSet = profile.consumedIndices.toSet()
         groups.value = groups.value.map { g ->
             if (g.name != profile.groupName) return@map g
-            val updated = g.entries.mapIndexed { idx, entry ->
-                if (idx in indexSet) entry.copy(used = true) else entry
-            }
+            val updated = g.entries.mapIndexed { idx, entry -> if (idx in indexSet) entry.copy(used = true) else entry }
             g.copy(entries = updated)
         }
         save()
@@ -277,13 +245,6 @@ object VaultRepository {
         val unused = group.entries.filter { !it.used }
         if (unused.isEmpty()) return 0
         val countsByType = unused.groupingBy { normalizeFieldKey(it.fieldType) }.eachCount()
-        return countsByType.values.maxOrNull() ?: 0
-    }
-
-    fun totalProfileCount(groupName: String): Int {
-        val group = getGroup(groupName) ?: return 0
-        if (group.entries.isEmpty()) return 0
-        val countsByType = group.entries.groupingBy { normalizeFieldKey(it.fieldType) }.eachCount()
         return countsByType.values.maxOrNull() ?: 0
     }
 
@@ -326,33 +287,23 @@ object VaultRepository {
         val fullName = chosenFields["fullname"]
         if (!fullName.isNullOrBlank()) {
             val parts = fullName.trim().split(Regex("\\s+"))
-            if (!chosenFields.containsKey("firstname") && parts.isNotEmpty()) {
-                chosenFields["firstname"] = parts.first()
-            }
-            if (!chosenFields.containsKey("lastname") && parts.size > 1) {
-                chosenFields["lastname"] = parts.drop(1).joinToString(" ")
-            }
-            if (!chosenFields.containsKey("surname") && parts.size > 1) {
-                chosenFields["surname"] = parts.last()
-            }
-        } else {
-            val first = chosenFields["firstname"].orEmpty()
-            val last = chosenFields["lastname"] ?: chosenFields["surname"].orEmpty()
-            val combined = "$first $last".trim()
-            if (combined.isNotBlank()) {
-                chosenFields["fullname"] = combined
-            }
+            if (!chosenFields.containsKey("firstname") && parts.isNotEmpty()) chosenFields["firstname"] = parts.first()
+            if (!chosenFields.containsKey("lastname") && parts.size > 1) chosenFields["lastname"] = parts.drop(1).joinToString(" ")
+            if (!chosenFields.containsKey("surname") && parts.size > 1) chosenFields["surname"] = parts.last()
         }
 
-        return ActiveAutomationProfile(
-            groupName = groupName,
-            fields = chosenFields,
-            consumedIndices = consumedIndices.distinct(),
-        )
+        return ActiveAutomationProfile(groupName, chosenFields, consumedIndices.distinct())
     }
 
     fun normalizeFieldKey(raw: String): String {
-        val clean = raw.trim().lowercase().replace(Regex("[_\\-\\s]+"), "")
+        var clean = raw.trim().lowercase()
+        // Remove common UI suffixes/prefixes that break matching
+        clean = clean.replace(Regex("\\b(input|field|box|form|text|number)\\b"), "")
+        // Remove trailing numbers (e.g. "Phone Number 1" -> "phone number")
+        clean = clean.replace(Regex("\\d+"), "")
+        // Remove all spaces, dashes, underscores
+        clean = clean.replace(Regex("[_\\-\\s]+"), "")
+        
         return when {
             clean in listOf("email", "emailaddress", "mail", "usermail") -> "email"
             clean in listOf("confirmemail", "retypeemail", "repeatemail", "verifyemail") -> "confirmemail"
@@ -386,43 +337,31 @@ object VaultRepository {
     private fun parseEntries(rawText: String, groupHint: String = ""): List<VaultEntry> {
         val result = mutableListOf<VaultEntry>()
         val hintedType = normalizeFieldKey(groupHint)
-        val hasSpecificGroupHint = hintedType != "text" &&
-            !hintedType.startsWith("group") &&
-            !hintedType.startsWith("form") &&
-            !hintedType.startsWith("imported")
+        val hasSpecificGroupHint = hintedType != "text" && !hintedType.startsWith("group") && !hintedType.startsWith("form") && !hintedType.startsWith("imported")
 
-        rawText
-            .lines()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .forEach { line ->
-                val colonParts = line.split(":", limit = 2)
-                if (colonParts.size == 2 && colonParts[0].trim().length in 2..25 && !colonParts[0].contains("@")) {
-                    val key = normalizeFieldKey(colonParts[0])
-                    val value = colonParts[1].trim()
-                    if (value.isNotEmpty()) {
-                        result.add(VaultEntry(fieldType = key, value = value, used = false))
-                        return@forEach
-                    }
-                }
-
-                if (line.contains("|") && line.count { it == '|' } in 1..4) {
-                    val tokens = line.split("|").map { it.trim() }.filter { it.isNotEmpty() }
-                    tokens.forEach { token ->
-                        val guessed = SmartParser.classifySingleToken(token)
-                        result.add(VaultEntry(fieldType = guessed, value = token, used = false))
-                    }
+        rawText.lines().map { it.trim() }.filter { it.isNotEmpty() }.forEach { line ->
+            val colonParts = line.split(":", limit = 2)
+            if (colonParts.size == 2 && colonParts[0].trim().length in 2..25 && !colonParts[0].contains("@")) {
+                val key = normalizeFieldKey(colonParts[0])
+                val value = colonParts[1].trim()
+                if (value.isNotEmpty()) {
+                    result.add(VaultEntry(fieldType = key, value = value, used = false))
                     return@forEach
                 }
-
-                val detectedType = if (hasSpecificGroupHint) {
-                    hintedType
-                } else {
-                    SmartParser.classifySingleToken(line)
-                }
-                result.add(VaultEntry(fieldType = detectedType, value = line, used = false))
             }
 
+            if (line.contains("|") && line.count { it == '|' } in 1..4) {
+                val tokens = line.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                tokens.forEach { token ->
+                    val guessed = SmartParser.classifySingleToken(token)
+                    result.add(VaultEntry(fieldType = guessed, value = token, used = false))
+                }
+                return@forEach
+            }
+
+            val detectedType = if (hasSpecificGroupHint) hintedType else SmartParser.classifySingleToken(line)
+            result.add(VaultEntry(fieldType = detectedType, value = line, used = false))
+        }
         return result
     }
 
@@ -432,7 +371,7 @@ object VaultRepository {
             val groupJson = JSONObject()
             groupJson.put("name", group.name)
             groupJson.put("pinned", group.pinned)
-            groupJson.put("type", group.type.name) // SAVE TYPE
+            groupJson.put("type", group.type.name)
             val entriesJson = JSONArray()
             group.entries.forEach { entry ->
                 val entryJson = JSONObject()
