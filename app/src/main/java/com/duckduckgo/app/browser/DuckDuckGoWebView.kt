@@ -1,19 +1,3 @@
-/*
- * Copyright (c) 2017 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.duckduckgo.app.browser
 
 import android.annotation.SuppressLint
@@ -109,6 +93,8 @@ class DuckDuckGoWebView :
         isNestedScrollingEnabled = true
         try {
             addJavascriptInterface(createAutomationBridge(), "AutomationBridge")
+            // FIXED: Inject the async bridge BEFORE the page loads so JS can see it immediately.
+            addJavascriptInterface(AutomationEngine.getAsyncBridge(), "AutomationAsync")
         } catch (e: Exception) {
             logcat(ERROR) { "AutomationBridge: failed to add JS interface: ${e.asLog()}" }
         }
@@ -261,13 +247,17 @@ class DuckDuckGoWebView :
             super.setWebViewClient(
                 object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                        // FIXED: plain logcat{} (defaults to DEBUG) — LogPriority not imported in this file
                         logcat { "WebView onPageStarted: $url" }
                         client.onPageStarted(view, url, favicon)
                         try {
                             this@DuckDuckGoWebView.addJavascriptInterface(
                                 createAutomationBridge(),
                                 "AutomationBridge",
+                            )
+                            // Ensure async bridge is added on every navigation just in case
+                            this@DuckDuckGoWebView.addJavascriptInterface(
+                                AutomationEngine.getAsyncBridge(),
+                                "AutomationAsync",
                             )
                         } catch (e: Exception) {
                             logcat(ERROR) { "AutomationBridge: re-register failed: ${e.asLog()}" }

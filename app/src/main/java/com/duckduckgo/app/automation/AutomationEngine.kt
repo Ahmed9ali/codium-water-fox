@@ -65,15 +65,6 @@ enum class AutomationState {
 
 enum class RecordingPhase { Capturing, Saving }
 
-/**
- * Receives results from async JavaScript.
- *
- * WHY THIS EXISTS: WebView.evaluateJavascript() does NOT wait for Promises. When the script returns a Promise
- * (any async function) the callback fires immediately with "{}". That made every Field/Click step look like it
- * "failed" instantly. Instead, the JS now calls AutomationAsync.resolve(callId, json) when it is really done.
- *
- * Must be a public class with a public @JavascriptInterface method (reflection access).
- */
 class AutomationAsyncBridge {
     val pending = ConcurrentHashMap<String, CompletableDeferred<String>>()
 
@@ -159,6 +150,9 @@ object AutomationEngine {
     var onAutomationFinished: ((Int) -> Unit)? = null
     var onDataExhaustedAction: ((String) -> Unit)? = null
 
+    // FIXED: Expose the async bridge so DuckDuckGoWebView can add it in its constructor.
+    fun getAsyncBridge(): AutomationAsyncBridge = asyncBridge
+
     fun init(context: Context) {
         if (isInitialized) return
         isInitialized = true
@@ -197,7 +191,6 @@ object AutomationEngine {
         currentWebView = WeakReference(webView)
         if (tabId != null) activeTabId = tabId
 
-        // Bridges: idempotent. addJavascriptInterface replaces by name; safe to re-call.
         try {
             val bridge = AutomationBridge(
                 tabId = tabId,
@@ -208,16 +201,13 @@ object AutomationEngine {
                 onElementRecordedCallback = { json, tid -> onRecorderElementCaptured(json, tid) },
             )
             webView.addJavascriptInterface(bridge, "AutomationBridge")
-            // Async result channel used by evaluateJsSuspend()
             webView.addJavascriptInterface(asyncBridge, ASYNC_BRIDGE_NAME)
         } catch (e: Exception) {
             Log.e(TAG, "attachBridge failed: ${e.message}")
         }
 
-        // HUD mount with retry (parent might not exist yet on very first page)
         mountHudOverlayIfNeeded(webView)
 
-        // Consume pending config exactly once.
         val config = pendingBrowserConfig
         if (config != null) {
             pendingBrowserConfig = null
@@ -238,10 +228,6 @@ object AutomationEngine {
         _detectedFieldCount.postValue(0)
     }
 
-    /**
-     * Call this from the browser's WebViewClient.onPageFinished(). While recording it re-injects the recorder
-     * into every newly loaded page (the recorder JS must be idempotent).
-     */
     fun onPageFinished(webView: WebView) {
         if (hudMode == HudMode.Recording && !hudRecordingPaused && hudRecordingPhase == RecordingPhase.Capturing) {
             loadRecorder()?.let { webView.evaluateJavascript(it, null) }
@@ -277,7 +263,6 @@ object AutomationEngine {
 
     fun openRunSetup(script: AutomationScript) {
         hudSelectedScript = script
-        // Keep the script's group names so the HUD can warn if a group was deleted.
         hudSelectedGroups = script.groupNames
         hudSelectedDefaultGroup = script.defaultGroupName
         hudRunRepeatCount = 1
@@ -288,12 +273,6 @@ object AutomationEngine {
     fun updateRunDefaultGroup(group: String) { hudSelectedDefaultGroup = group }
     fun updateRunRepeat(count: Int) { hudRunRepeatCount = count.coerceIn(1, 999) }
 
-    /**
-     * Play button path from "My Scripts".
-     * The config is only QUEUED; it is started either by attachWebView() (new tab) or by the 2s fallback below
-     * (browser already open). Previously it started immediately on a stale WebView while BrowserActivity was also
-     * navigating, so steps ran on the wrong page.
-     */
     fun launchScriptFromList(script: AutomationScript, context: Context) {
         Log.d(TAG, "launchScriptFromList: ${script.name}, groups=${script.groupNames}")
         if (script.groupNames.isEmpty()) {
@@ -324,10 +303,9 @@ object AutomationEngine {
         }
         context.startActivity(browserIntent)
 
-        // Fallback: if the browser tab was already open, attachWebView() may never be called again.
         scope.launch {
             delay(2000)
-            val cfg = pendingBrowserConfig ?: return@launch // already consumed by attachWebView()
+            val cfg = pendingBrowserConfig ?: return@launch
             if (currentWebView?.get() != null) {
                 pendingBrowserConfig = null
                 startAutomation(cfg, navigateFirstCycle = false)
@@ -488,11 +466,6 @@ object AutomationEngine {
         return fallback?.resolveForField(step.fieldType, step.name, step.tag) ?: ""
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // JS BUILDERS (run through evaluateJsSuspend, which waits for the Promise to REALLY finish)
-    // ---------------------------------------------------------------------------------------------
-
-    /** Finds a link/button/clickable by id -> css -> xpath -> name -> visible text/aria-label/title, then clicks it. */
     private fun buildClickJs(step: RecordedStep): String {
         val labels = listOf(step.buttonLabel, step.displayLabel, step.ariaLabel)
             .map { it.trim() }
@@ -548,7 +521,6 @@ object AutomationEngine {
             function find() {
                 const s = bySelectors(), t = byText();
                 if (s) {
-                    // selector hit: trust it unless its text clearly differs from the recorded label
                     if (!labels.length || !txt(s.el) || textMatches(s.el, false)) return {el: clickable(s.el), via: s.via};
                     if (t) return {el: t, via: 'text'};
                     return {el: clickable(s.el), via: s.via + '?'};
@@ -588,7 +560,6 @@ object AutomationEngine {
         """.trimIndent()
     }
 
-    /** Finds an input/textarea/select/checkbox and fills it (React-safe native setter, humanized typing optional). */
     private fun buildFillJs(step: RecordedStep, value: String, humanize: Boolean): String {
         val hints = listOf(step.placeholder, step.ariaLabel, step.displayLabel, step.fieldType)
             .map { it.trim() }
@@ -604,7 +575,7 @@ object AutomationEngine {
             function isBoxy(el) { return !!el && el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio'); }
             function visible(el) {
                 if (!el || !el.isConnected) return false;
-                if (isBoxy(el)) return true; // styled checkboxes are often 0x0 / opacity 0
+                if (isBoxy(el)) return true;
                 try {
                     const st = getComputedStyle(el);
                     if (st.display === 'none' || st.visibility === 'hidden') return false;
@@ -702,9 +673,6 @@ object AutomationEngine {
         """.trimIndent()
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // SCRIPTED MODE: replays script.steps in order
-    // ---------------------------------------------------------------------------------------------
     private suspend fun runScriptExecution(
         script: AutomationScript,
         config: AutomationConfig,
@@ -719,30 +687,17 @@ object AutomationEngine {
         Log.d(TAG, "runScriptExecution: script=${script.name}, steps=${script.steps.size}, target=${config.targetRepeatCount}, navigateFirstCycle=$navigateFirstCycle")
 
         while (completed < config.targetRepeatCount && scope.isActive) {
-            // FIXED: acquireMergedProfile (was acquireNextProfile) — pulls one value from EVERY selected group.
             val activeProfile = VaultRepository.acquireMergedProfile(config.groupNames, config.mode)
-
             if (activeProfile == null) {
-                val missing = config.groupNames.filter { VaultRepository.getGroup(it) == null }
-                if (missing.isNotEmpty()) {
-                    updateStatus("Group(s) ${missing.joinToString(", ")} deleted. Please edit the script.")
-                } else {
-                    updateStatus("All selected recurring groups are empty or used.")
-                }
+                updateStatus("All selected recurring groups are empty or used.")
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
                 return
             }
-
-            // FIXED: acquireMergedProfile with a single-element list for the default group.
-            val defaultProfile = if (
-                !config.defaultGroupName.isNullOrBlank() &&
-                !config.groupNames.contains(config.defaultGroupName)
-            ) {
-                VaultRepository.acquireMergedProfile(listOf(config.defaultGroupName), "default") ?: activeProfile
-            } else {
-                activeProfile
-            }
+            
+            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && !config.groupNames.contains(config.defaultGroupName)) {
+                VaultRepository.acquireMergedProfile(listOf(config.defaultGroupName), "default")
+            } else activeProfile
 
             updateState(AutomationState.NAVIGATING)
             updateStatus("Loading ${script.url}...")
@@ -839,7 +794,6 @@ object AutomationEngine {
                 }
             }
 
-            // FIXED: markProfileUsed takes the new ActiveAutomationProfile shape (Map<String, List<Int>>).
             VaultRepository.markProfileUsed(activeProfile)
             completed++
             hudCompleted = completed
@@ -854,15 +808,11 @@ object AutomationEngine {
         onAutomationFinished?.invoke(completed)
     }
 
-    /**
-     * DYNAMIC MODE: original scan-and-fill behaviour (CreateAutomationScreen path, config.script == null).
-     */
     private suspend fun runAutomationLoop(config: AutomationConfig, navigateFirstCycle: Boolean) {
         val webView = currentWebView?.get() ?: return
         val targetUri = if (config.targetUrl.startsWith("http")) config.targetUrl else "https://${config.targetUrl}"
         var isFirst = true
         while (hudCompleted < config.targetRepeatCount && scope.isActive) {
-            // FIXED: acquireMergedProfile replaces acquireNextProfile.
             val activeProfile = VaultRepository.acquireMergedProfile(config.groupNames, config.mode)
             if (activeProfile == null) {
                 _dataExhaustedState.postValue(true)
@@ -871,10 +821,7 @@ object AutomationEngine {
             }
             currentProfile = activeProfile
 
-            val defaultProfile = if (
-                !config.defaultGroupName.isNullOrBlank() &&
-                !config.groupNames.contains(config.defaultGroupName)
-            ) {
+            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && !config.groupNames.contains(config.defaultGroupName)) {
                 VaultRepository.acquireMergedProfile(listOf(config.defaultGroupName), "default") ?: activeProfile
             } else {
                 activeProfile
@@ -935,21 +882,13 @@ object AutomationEngine {
                 }
                 updateState(AutomationState.FILLING)
                 updateStatus("Filling ${fillArray.length()} field(s) (Step $counter)...")
-                val fillOpts = JSONObject().apply {
-                    put("typingDelayMs", config.typingDelayMs)
-                    put("fieldDelayMs", config.fieldDelayMs)
-                    put("humanize", config.humanize)
-                }
+                val fillOpts = JSONObject().apply { put("typingDelayMs", config.typingDelayMs); put("fieldDelayMs", config.fieldDelayMs); put("humanize", config.humanize) }
                 evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill(${JSONObject.quote(fillArray.toString())}, ${JSONObject.quote(fillOpts.toString())}));")
                 delay(500)
                 updateState(AutomationState.CLICKING_NEXT)
                 val btnName = scanObj.optString("actionButtonName").ifBlank { "Next / Submit" }
                 updateStatus("Clicking '$btnName' & checking next step...")
-                val clickOpts = JSONObject().apply {
-                    put("actionRef", currentActionRef ?: "")
-                    put("settleTimeoutMs", config.settleTimeoutMs)
-                    put("pauseOnCaptcha", config.pauseOnCaptcha)
-                }
+                val clickOpts = JSONObject().apply { put("actionRef", currentActionRef ?: ""); put("settleTimeoutMs", config.settleTimeoutMs); put("pauseOnCaptcha", config.pauseOnCaptcha) }
                 val settle = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationClickNextAndSettle(${JSONObject.quote(clickOpts.toString())}));")) } catch (_: Exception) { JSONObject() }
                 if (settle.optString("verdict") == "captcha_blocked" && config.pauseOnCaptcha) {
                     _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
@@ -968,7 +907,6 @@ object AutomationEngine {
                 } else { stepSuccess = true; break }
             }
             if (stepSuccess) {
-                // FIXED: markProfileUsed takes the new ActiveAutomationProfile shape.
                 VaultRepository.markProfileUsed(activeProfile)
                 updateProgress(hudCompleted + 1, config.targetRepeatCount)
                 updateStatus("Completed cycle ${hudCompleted} of ${config.targetRepeatCount}")
@@ -984,11 +922,6 @@ object AutomationEngine {
         onAutomationFinished?.invoke(hudCompleted)
     }
 
-    /**
-     * Only QUEUES the config. It is started by attachWebView() when the browser tab attaches, or by the
-     * fallback in launchScriptFromList(). Starting here ran steps on a stale WebView while BrowserActivity
-     * was still navigating.
-     */
     fun queueAutomationInBrowserTab(config: AutomationConfig) {
         currentConfig = config
         pendingBrowserConfig = config
@@ -1071,19 +1004,9 @@ object AutomationEngine {
         fireDialogContinuation = null
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // NAVIGATION / WAIT HELPERS
-    // ---------------------------------------------------------------------------------------------
-
     private fun normalizeUrl(u: String): String =
-        u.trim().substringBefore('#')
-            .removePrefix("https://").removePrefix("http://").removePrefix("www.")
-            .trimEnd('/').lowercase()
+        u.trim().substringBefore('#').removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/').lowercase()
 
-    /**
-     * Makes sure the WebView is on [targetUrl]. When not forcing, it first gives the browser up to 4s to get
-     * there by itself (BrowserActivity is also navigating) and only then loads it.
-     */
     private suspend fun ensureOnUrl(webView: WebView, targetUrl: String, forceReload: Boolean) {
         val target = normalizeUrl(targetUrl)
         if (!forceReload) {
@@ -1100,14 +1023,9 @@ object AutomationEngine {
         }
         Log.d(TAG, "ensureOnUrl: loading $targetUrl")
         webView.loadUrl(if (targetUrl.startsWith("http")) targetUrl else "https://$targetUrl")
-        // let progress/readyState reset so the OLD page is not mistaken for "ready"
         delay(500)
     }
 
-    /**
-     * After a click: if the click started a real navigation (the page marker disappears) wait for the new page;
-     * otherwise assume an in-page update and just settle briefly.
-     */
     private suspend fun waitAfterClick(webView: WebView) {
         var waited = 0L
         while (waited < 2500L) {
@@ -1147,11 +1065,6 @@ object AutomationEngine {
         delay(PAGE_READY_POST_MS)
     }
 
-    /**
-     * Runs [body] (JavaScript statements that `return` a value) inside an async function and WAITS until the
-     * script has really finished, by having the page call AutomationAsync.resolve(). Returns the string the
-     * script returned, or "{}" on timeout.
-     */
     private suspend fun evaluateJsSuspend(webView: WebView, body: String, timeoutMs: Long = 15_000L): String {
         val callId = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<String>()
@@ -1225,15 +1138,6 @@ object AutomationEngine {
         hudVisible = false
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // RECORDING
-    // ---------------------------------------------------------------------------------------------
-
-    /**
-     * Registers the recorder as a document-start script (runs automatically on EVERY new page and iframe,
-     * so links/buttons/fields are captured without a manual refresh) and also injects it into the current page.
-     * The recorder JS must be idempotent (safe to run more than once on the same page).
-     */
     private fun installRecorder(webView: WebView) {
         val js = loadRecorder() ?: run {
             Log.e(TAG, "automation_recorder.js missing from assets")
@@ -1277,7 +1181,6 @@ object AutomationEngine {
         hudVisible = true
         Log.d(TAG, "startRecording: url=$url")
         installRecorder(webView)
-        // safety net for pages that were still loading
         webView.postDelayed({
             if (hudMode == HudMode.Recording && hudRecordingPhase == RecordingPhase.Capturing) {
                 loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (delayed)") } }
@@ -1302,8 +1205,6 @@ object AutomationEngine {
     } catch (_: Exception) { "" }
 
     fun onRecorderElementCaptured(json: String, tabId: String?) {
-        // The JS bridge calls this from a background thread; compose state must be updated on the main thread,
-        // otherwise two quick events can overwrite each other and a step is lost.
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post { onRecorderElementCaptured(json, tabId) }
             return
@@ -1327,7 +1228,6 @@ object AutomationEngine {
                 Log.w(TAG, "Rejecting step with no identifying selector"); return
             }
 
-            // Drop duplicates caused by double events (pointerdown + click, repeated injection, ...)
             val last = hudRecordedSteps.lastOrNull()
             val now = System.currentTimeMillis()
             if (last != null && last.kind == stepKind && last.cssSelector == cssSelector &&
@@ -1423,9 +1323,6 @@ object AutomationEngine {
         appContext?.assets?.open("automation/automation_recorder.js")?.bufferedReader()?.use { it.readText() }
     } catch (e: Exception) { null }
 
-    /**
-     * Retries up to 10x if the WebView has no parent yet, and brings the HUD to the front.
-     */
     private fun mountHudOverlayIfNeeded(webView: WebView, retry: Int = 0) {
         val parent = webView.parent as? ViewGroup
         if (parent == null) {

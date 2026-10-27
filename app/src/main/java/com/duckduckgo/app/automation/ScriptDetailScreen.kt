@@ -595,6 +595,7 @@ fun ScriptDetailScreen(
                                 modifier = Modifier.weight(1f),
                             ) {
                                 waitInput = "2"
+                                showAddStepDialog = false
                                 showWaitDialog = true
                             }
                             ActionCard(
