@@ -1,5 +1,5 @@
 /*
- * Automation Recorder v14 - Link fix + Keyboard suppression
+ * Automation Recorder v14 - Link detection & Keyboard block
  */
 (function () {
   "use strict";
@@ -32,14 +32,22 @@
     return originalFocus.apply(this, args);
   };
 
-  // Instantly blur if an input gets focus while recording
-  document.addEventListener("focusin", (e) => {
+  // FIXED: Prevent keyboard on touch for inputs during recording
+  document.addEventListener("touchstart", (e) => {
     if (isPaused) return;
     const el = e.target;
     if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
-      try { el.blur(); } catch (_) {}
+      e.preventDefault();
     }
-  }, true);
+  }, { capture: true, passive: false });
+
+  document.addEventListener("mousedown", (e) => {
+    if (isPaused) return;
+    const el = e.target;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
+      e.preventDefault();
+    }
+  }, { capture: true, passive: false });
 
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
@@ -167,14 +175,11 @@
     if (target.closest && target.closest("[data-automation-hud]")) return;
 
     let actualTarget = target;
-    
-    // FIXED: Climb up to find interactive elements, including [role="link"] for Google results
-    const interactiveSelector = 'button, a, [role="button"], [role="link"], [role="radio"], [role="checkbox"], [onclick], summary, [aria-disabled="true"]';
+    // FIXED: Added [role="link"] to detect Google and modern web results
     if (!["input", "textarea", "select", "button", "a"].includes(actualTarget.tagName.toLowerCase())) {
-      const parent = actualTarget.closest(interactiveSelector);
+      const parent = actualTarget.closest('button, a, [role="button"], [role="link"], [role="radio"], [role="checkbox"], [onclick], [aria-disabled="true"]');
       if (parent) actualTarget = parent;
     }
-    
     if (!actualTarget) return;
     if (!isVisible(actualTarget)) return;
 
@@ -192,10 +197,10 @@
 
     const tag = actualTarget.tagName.toLowerCase();
     const type = (actualTarget.type || "").toLowerCase();
-    const role = (actualTarget.getAttribute("role") || "").toLowerCase();
     let kind = "Field";
     
-    const isLink = tag === "a" || tag === "button" || type === "submit" || role === "button" || role === "link";
+    // FIXED: Added role="link" to isLink check
+    const isLink = tag === "a" || tag === "button" || type === "submit" || actualTarget.getAttribute("role") === "button" || actualTarget.getAttribute("role") === "link";
     if (isLink) kind = "ClickNext";
 
     const old = actualTarget.style.outline;
@@ -203,7 +208,7 @@
     setTimeout(() => { actualTarget.style.outline = old; }, 600);
 
     const payload = {
-      kind, tag, domType: type || role,
+      kind, tag, domType: type,
       name: actualTarget.getAttribute("name") || "",
       domId: actualTarget.id || "",
       placeholder: actualTarget.getAttribute("placeholder") || "",
@@ -269,11 +274,19 @@
     processTarget(e);
   }
 
+  function handleFocusIn(e) {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) {
+      if (justRecorded) return;
+      processTarget(e);
+    }
+  }
+
   document.addEventListener("touchstart", handleTouchStart, { capture: true, passive: true });
   document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: true });
   document.addEventListener("touchend", handleTouchEnd, { capture: true });
   document.addEventListener("pointerup", handlePointerUp, { capture: true });
   document.addEventListener("click", handleClick, { capture: true });
+  document.addEventListener("focusin", handleFocusIn, { capture: true });
 
   g.__automationRecorderPause = () => { isPaused = true; };
   g.__automationRecorderResume = () => { isPaused = false; };
@@ -284,6 +297,7 @@
     document.removeEventListener("touchend", handleTouchEnd, true);
     document.removeEventListener("pointerup", handlePointerUp, true);
     document.removeEventListener("click", handleClick, true);
+    document.removeEventListener("focusin", handleFocusIn, true);
     if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
     HTMLElement.prototype.focus = originalFocus;
     g.__automationRecorderInstalled = false;

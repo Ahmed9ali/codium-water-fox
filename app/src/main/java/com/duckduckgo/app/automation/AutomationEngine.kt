@@ -1010,29 +1010,21 @@ object AutomationEngine {
 
     private suspend fun ensureOnUrl(webView: WebView, targetUrl: String, forceReload: Boolean) {
         val target = normalizeUrl(targetUrl)
-        val cur = normalizeUrl(webView.url.orEmpty())
-        
-        if (cur == target || cur.startsWith(target)) {
-            Log.d(TAG, "ensureOnUrl: already on target ($cur)")
-            return
-        }
-
         if (!forceReload) {
             var waited = 0L
             while (waited < 4000L) {
-                val check = normalizeUrl(webView.url.orEmpty())
-                if (check == target || check.startsWith(target)) {
-                    Log.d(TAG, "ensureOnUrl: arrived at target after waiting")
+                val cur = normalizeUrl(webView.url.orEmpty())
+                if (cur == target || cur.startsWith(target)) {
+                    Log.d(TAG, "ensureOnUrl: already on target")
                     return
                 }
                 delay(250)
                 waited += 250
             }
         }
-        
         Log.d(TAG, "ensureOnUrl: loading $targetUrl")
         webView.loadUrl(if (targetUrl.startsWith("http")) targetUrl else "https://$targetUrl")
-        delay(1000) // wait for progress to reset
+        delay(500)
     }
 
     private suspend fun waitAfterClick(webView: WebView) {

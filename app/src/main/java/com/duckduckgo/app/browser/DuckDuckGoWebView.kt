@@ -30,6 +30,7 @@ import androidx.webkit.WebViewCompat.WebMessageListener
 import com.duckduckgo.anvil.annotations.InjectWith
 import com.duckduckgo.app.automation.AutomationBridge
 import com.duckduckgo.app.automation.AutomationEngine
+import com.duckduckgo.app.automation.AutomationState
 import com.duckduckgo.app.automation.HudMode
 import com.duckduckgo.app.browser.navigation.safeCopyBackForwardList
 import com.duckduckgo.app.browser.uilock.BrowserUiLockFeature
@@ -44,13 +45,6 @@ import logcat.asLog
 import logcat.logcat
 import javax.inject.Inject
 
-/**
- * WebView subclass which allows the WebView to
- *   - hide the toolbar when placed in a CoordinatorLayout
- *   - add the flag so that users' typing isn't used for personalisation
- *
- * Originally based on https://github.com/takahirom/webview-in-coordinatorlayout for scrolling behaviour
- */
 @InjectWith(ViewScope::class)
 class DuckDuckGoWebView :
     WebView,
@@ -93,7 +87,6 @@ class DuckDuckGoWebView :
         isNestedScrollingEnabled = true
         try {
             addJavascriptInterface(createAutomationBridge(), "AutomationBridge")
-            // FIXED: Inject the async bridge BEFORE the page loads so JS can see it immediately.
             addJavascriptInterface(AutomationEngine.getAsyncBridge(), "AutomationAsync")
         } catch (e: Exception) {
             logcat(ERROR) { "AutomationBridge: failed to add JS interface: ${e.asLog()}" }
@@ -254,7 +247,6 @@ class DuckDuckGoWebView :
                                 createAutomationBridge(),
                                 "AutomationBridge",
                             )
-                            // Ensure async bridge is added on every navigation just in case
                             this@DuckDuckGoWebView.addJavascriptInterface(
                                 AutomationEngine.getAsyncBridge(),
                                 "AutomationAsync",
@@ -271,7 +263,6 @@ class DuckDuckGoWebView :
                             AutomationEngine.attachWebView(this@DuckDuckGoWebView, automationTabId)
                             AutomationEngine.injectScanner()
 
-                            // Re-inject recorder if still recording after navigation/reload
                             if (AutomationEngine.hudMode == HudMode.Recording) {
                                 loadRecorderAsset()?.let { js ->
                                     this@DuckDuckGoWebView.evaluateJavascript(js) {
@@ -374,7 +365,18 @@ class DuckDuckGoWebView :
         stripImeInsetsEnabled = value
     }
 
+    // FIXED: Block the keyboard during recording/running automation
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        val blockKeyboard = (AutomationEngine.hudMode == HudMode.Recording && !AutomationEngine.hudRecordingPaused) ||
+                            (AutomationEngine.hudState != AutomationState.IDLE &&
+                             AutomationEngine.hudState != AutomationState.PAUSED &&
+                             AutomationEngine.hudState != AutomationState.ERROR &&
+                             AutomationEngine.hudState != AutomationState.COMPLETED)
+
+        if (blockKeyboard) {
+            return null
+        }
+
         val inputConnection = super.onCreateInputConnection(outAttrs) ?: return null
         addNoPersonalisedFlag(outAttrs)
         return inputConnection
