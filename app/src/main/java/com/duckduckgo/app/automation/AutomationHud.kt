@@ -418,7 +418,8 @@ private fun HudRunSetupPanel() {
     val selectedDefaultGroup = AutomationEngine.hudSelectedDefaultGroup
     val repeatCount = AutomationEngine.hudRunRepeatCount
 
-    HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {        
+    HudContainer(title = "Setup Run", subtitle = script.name, onClose = { AutomationEngine.openScriptList() }) {
+        
         Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
             Text("Recurring Data", color = DuckDuckGoTheme.colors.text.primary, fontFamily = VarelaRound, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
@@ -460,7 +461,7 @@ private fun HudRunSetupPanel() {
         }
         
         val missingGroups = selectedGroups.filter { VaultRepository.getGroup(it) == null }
-        val hasNoUnusedData = selectedGroups.isNotEmpty() && !selectedGroups.any { VaultRepository.hasUnusedData(it) }
+        val hasNoUnusedData = selectedGroups.isNotEmpty() && selectedGroups.none { VaultRepository.hasUnusedData(it) }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DdgSecondaryButton(text = "Edit Script", onClick = { AutomationEngine.openScriptEditor(script) }, modifier = Modifier.weight(1f))

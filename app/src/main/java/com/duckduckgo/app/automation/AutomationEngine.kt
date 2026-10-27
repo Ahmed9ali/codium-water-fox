@@ -1245,7 +1245,11 @@ object AutomationEngine {
     }
 
     fun startRecording() {
-        if (hudMode == HudMode.Recording) return
+        if (hudMode == HudMode.Recording) {
+            currentWebView?.get()?.let { installRecorder(it) }
+            hudRecordingPaused = false
+            return
+        }
         val webView = currentWebView?.get() ?: return
         webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
         webView.evaluateJavascript("try { window.__automation_active = false; } catch(_) {}", null)

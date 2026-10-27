@@ -29,9 +29,8 @@ data class VaultGroup(
 }
 
 data class ActiveAutomationProfile(
-    val groupName: String,
+    val consumed: Map<String, List<Int>>,
     val fields: Map<String, String>,
-    val consumedIndices: List<Int>,
 ) {
     fun resolveForField(looksLike: String, fieldName: String = "", tag: String = ""): String? {
         val normalizedType = VaultRepository.normalizeFieldKey(looksLike)
@@ -39,25 +38,25 @@ data class ActiveAutomationProfile(
         // 1. Direct match
         fields[normalizedType]?.let { if (it.isNotBlank()) return it }
 
-        // 2. Match by raw field name (e.g. HTML name attribute)
+        // 2. Match by raw field name
         if (fieldName.isNotBlank()) {
             val normalizedName = VaultRepository.normalizeFieldKey(fieldName)
             fields[normalizedName]?.let { if (it.isNotBlank()) return it }
         }
 
-        // 3. Fuzzy match fallback (e.g., "firstnameinput" contains "firstname")
+        // 3. Fuzzy match fallback
         val fuzzyMatch = fields.entries.firstOrNull { 
             it.value.isNotBlank() && (it.key.contains(normalizedType) || normalizedType.contains(it.key)) 
         }
         if (fuzzyMatch != null) return fuzzyMatch.value
 
-        // 4. Strict fallbacks for common pairs
+        // 4. Strict fallbacks
         return when (normalizedType) {
             "confirmpassword" -> fields["password"]
             "confirmemail" -> fields["email"]
             "confirmphone" -> fields["phone"]
             "firstname" -> fields["fullname"]?.trim()?.substringBefore(" ") ?: fields["username"]
-            "middlename" -> null // Do NOT fallback to fullname for middle name
+            "middlename" -> null 
             "lastname" -> fields["surname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
             "surname" -> fields["lastname"] ?: fields["fullname"]?.trim()?.substringAfter(" ", "")?.takeIf { it.isNotBlank() }
             "fullname" -> {
@@ -230,11 +229,13 @@ object VaultRepository {
     }
 
     fun markProfileUsed(profile: ActiveAutomationProfile) {
-        if (profile.consumedIndices.isEmpty()) return
-        val indexSet = profile.consumedIndices.toSet()
+        if (profile.consumed.isEmpty()) return
         groups.value = groups.value.map { g ->
-            if (g.name != profile.groupName) return@map g
-            val updated = g.entries.mapIndexed { idx, entry -> if (idx in indexSet) entry.copy(used = true) else entry }
+            val indices = profile.consumed[g.name] ?: return@map g
+            val indexSet = indices.toSet()
+            val updated = g.entries.mapIndexed { idx, entry -> 
+                if (idx in indexSet) entry.copy(used = true) else entry 
+            }
             g.copy(entries = updated)
         }
         save()
@@ -250,35 +251,45 @@ object VaultRepository {
 
     fun hasUnusedData(groupName: String): Boolean = unusedProfileCount(groupName) > 0
 
-    fun acquireNextProfile(groupName: String, mode: String): ActiveAutomationProfile? {
-        val group = getGroup(groupName) ?: return null
-        val indexedUnused = group.entries.mapIndexedNotNull { index, entry ->
-            if (!entry.used && entry.value.isNotBlank()) index to entry else null
-        }
-        if (indexedUnused.isEmpty()) return null
-
-        val byType = linkedMapOf<String, MutableList<Pair<Int, VaultEntry>>>()
-        for (pair in indexedUnused) {
-            val key = normalizeFieldKey(pair.second.fieldType)
-            byType.getOrPut(key) { mutableListOf() }.add(pair)
-        }
-
+    fun acquireMergedProfile(groupNames: List<String>, mode: String): ActiveAutomationProfile? {
         val chosenFields = mutableMapOf<String, String>()
-        val consumedIndices = mutableListOf<Int>()
+        val consumed = mutableMapOf<String, List<Int>>()
+        var anyFound = false
 
-        val maxBucketSize = byType.values.maxOfOrNull { it.size } ?: 1
-        val randomSlot = if (maxBucketSize > 1) Random.nextInt(maxBucketSize) else 0
-
-        for ((typeKey, candidates) in byType) {
-            if (candidates.isEmpty()) continue
-            val picked = when (mode.lowercase()) {
-                "bottom_up", "bottom" -> candidates.last()
-                "random" -> candidates[randomSlot.coerceAtMost(candidates.lastIndex)]
-                else -> candidates.first()
+        for (name in groupNames) {
+            val group = getGroup(name) ?: continue
+            val indexedUnused = group.entries.mapIndexedNotNull { index, entry ->
+                if (!entry.used && entry.value.isNotBlank()) index to entry else null
             }
-            chosenFields[typeKey] = picked.second.value
-            consumedIndices.add(picked.first)
+            if (indexedUnused.isEmpty()) continue
+            anyFound = true
+
+            val byType = linkedMapOf<String, MutableList<Pair<Int, VaultEntry>>>()
+            for (pair in indexedUnused) {
+                val key = normalizeFieldKey(pair.second.fieldType)
+                byType.getOrPut(key) { mutableListOf() }.add(pair)
+            }
+
+            val groupConsumed = mutableListOf<Int>()
+            val maxBucketSize = byType.values.maxOfOrNull { it.size } ?: 1
+            val randomSlot = if (maxBucketSize > 1) Random.nextInt(maxBucketSize) else 0
+
+            for ((typeKey, candidates) in byType) {
+                if (candidates.isEmpty()) continue
+                val picked = when (mode.lowercase()) {
+                    "bottom_up", "bottom" -> candidates.last()
+                    "random" -> candidates[randomSlot.coerceAtMost(candidates.lastIndex)]
+                    else -> candidates.first()
+                }
+                if (!chosenFields.containsKey(typeKey)) {
+                    chosenFields[typeKey] = picked.second.value
+                }
+                groupConsumed.add(picked.first)
+            }
+            consumed[name] = groupConsumed
         }
+
+        if (!anyFound) return null
 
         chosenFields["password"]?.let { pwd -> chosenFields["confirmpassword"] = pwd }
         chosenFields["email"]?.let { mail -> chosenFields["confirmemail"] = mail }
@@ -292,16 +303,13 @@ object VaultRepository {
             if (!chosenFields.containsKey("surname") && parts.size > 1) chosenFields["surname"] = parts.last()
         }
 
-        return ActiveAutomationProfile(groupName, chosenFields, consumedIndices.distinct())
+        return ActiveAutomationProfile(consumed, chosenFields)
     }
 
     fun normalizeFieldKey(raw: String): String {
         var clean = raw.trim().lowercase()
-        // Remove common UI suffixes/prefixes that break matching
         clean = clean.replace(Regex("\\b(input|field|box|form|text|number)\\b"), "")
-        // Remove trailing numbers (e.g. "Phone Number 1" -> "phone number")
         clean = clean.replace(Regex("\\d+"), "")
-        // Remove all spaces, dashes, underscores
         clean = clean.replace(Regex("[_\\-\\s]+"), "")
         
         return when {
