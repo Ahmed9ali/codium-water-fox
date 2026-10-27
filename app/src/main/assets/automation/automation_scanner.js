@@ -1,5 +1,5 @@
 /*
- * Automation Scanner (v10 - Calendar Date Fix)
+ * Automation Scanner v10 - Keyboard suppression during automation
  */
 (function () {
   "use strict";
@@ -23,11 +23,18 @@
 
   g.__automation_active = false;
 
+  // Block keyboard during engine fill
   const originalFocus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function(...args) {
     if (g.__automation_active) return;
     return originalFocus.apply(this, args);
   };
+  
+  document.addEventListener("focusin", (e) => {
+    if (g.__automation_active) {
+      try { e.target.blur(); } catch (_) {}
+    }
+  }, true);
 
   const RX = {
     otp: /\b(otp|one[-\s]?time\s*(code|password)|2fa|verification\s*code|security\s*code|sms\s*code|auth\s*code)\b/i,
@@ -302,6 +309,7 @@
       } catch (e) { results.push({ ref: item.ref, ok: false, err: String(e) }); }
       if (fieldDelay) await sleep(fieldDelay);
     }
+    g.__automation_active = false;
     return { filled: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results };
   }
 
@@ -309,7 +317,6 @@
     const tag = (el.tagName || "").toLowerCase();
     const type = (el.type || "").toLowerCase();
     
-    // BUG FIX: Handle Date inputs properly (e.g. 15/05/1990 -> 1990-05-15)
     const isDate = type === "date" || type === "datetime-local" || classify(el) === "dob";
     if (isDate) {
       const wasReadonly = el.hasAttribute('readonly');
@@ -318,7 +325,7 @@
       let finalValue = value.trim();
       if (type === "date" && /^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(finalValue)) {
           const parts = finalValue.split(/[\/\-]/);
-          finalValue = `${parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD
+          finalValue = `${parts[2]}-${parts[1]}-${parts[0]}`;
       }
       
       try {

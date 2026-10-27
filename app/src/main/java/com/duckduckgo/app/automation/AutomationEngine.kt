@@ -208,6 +208,7 @@ object AutomationEngine {
 
         mountHudOverlayIfNeeded(webView)
 
+        // FIXED: Prevent restart loop. Only consume config if we aren't already running.
         val config = pendingBrowserConfig
         if (config != null) {
             pendingBrowserConfig = null
@@ -1007,23 +1008,68 @@ object AutomationEngine {
     private fun normalizeUrl(u: String): String =
         u.trim().substringBefore('#').removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/').lowercase()
 
+     fun attachWebView(webView: WebView, tabId: String? = null) {
+        Log.d(TAG, "attachWebView tabId=$tabId")
+        currentWebView = WeakReference(webView)
+        if (tabId != null) activeTabId = tabId
+
+        try {
+            val bridge = AutomationBridge(
+                tabId = tabId,
+                onFieldsDetectedCallback = { json, tid -> onFieldsDetected(json, tid) },
+                onPageScannedCallback = { _, _ -> },
+                onFillCompletedCallback = { _, _ -> },
+                onStepSettledCallback = { _, _ -> },
+                onElementRecordedCallback = { json, tid -> onRecorderElementCaptured(json, tid) },
+            )
+            webView.addJavascriptInterface(bridge, "AutomationBridge")
+            webView.addJavascriptInterface(asyncBridge, ASYNC_BRIDGE_NAME)
+        } catch (e: Exception) {
+            Log.e(TAG, "attachBridge failed: ${e.message}")
+        }
+
+        mountHudOverlayIfNeeded(webView)
+
+        // FIXED: Prevent restart loop. Only consume config if we aren't already running.
+        val config = pendingBrowserConfig
+        if (config != null) {
+            pendingBrowserConfig = null
+            Log.d(TAG, "attachWebView: consuming pendingBrowserConfig (script=${config.script?.name})")
+            startAutomation(config, navigateFirstCycle = false)
+        } else if (hudMode == HudMode.Recording && !hudRecordingPaused) {
+            webView.postDelayed({
+                loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder re-injected after page event") } }
+            }, 200)
+        } else if (hudMode != HudMode.Recording && hudMode != HudMode.Running) {
+            webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
+        }
+    }
+
     private suspend fun ensureOnUrl(webView: WebView, targetUrl: String, forceReload: Boolean) {
         val target = normalizeUrl(targetUrl)
+        val cur = normalizeUrl(webView.url.orEmpty())
+        
+        if (cur == target || cur.startsWith(target)) {
+            Log.d(TAG, "ensureOnUrl: already on target ($cur)")
+            return
+        }
+
         if (!forceReload) {
             var waited = 0L
             while (waited < 4000L) {
-                val cur = normalizeUrl(webView.url.orEmpty())
-                if (cur == target || cur.startsWith(target)) {
-                    Log.d(TAG, "ensureOnUrl: already on target")
+                val check = normalizeUrl(webView.url.orEmpty())
+                if (check == target || check.startsWith(target)) {
+                    Log.d(TAG, "ensureOnUrl: arrived at target after waiting")
                     return
                 }
                 delay(250)
                 waited += 250
             }
         }
+        
         Log.d(TAG, "ensureOnUrl: loading $targetUrl")
         webView.loadUrl(if (targetUrl.startsWith("http")) targetUrl else "https://$targetUrl")
-        delay(500)
+        delay(1000) // wait for progress to reset
     }
 
     private suspend fun waitAfterClick(webView: WebView) {
@@ -1362,7 +1408,8 @@ object AutomationEngine {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
-        parent.addView(composeView, params)
+        parent.addView(composeView, params)]\
+
         composeView.bringToFront()
         Log.d(TAG, "mountHudOverlayIfNeeded: HUD mounted and brought to front")
     }
