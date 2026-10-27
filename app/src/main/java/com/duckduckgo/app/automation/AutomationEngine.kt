@@ -719,31 +719,31 @@ object AutomationEngine {
         Log.d(TAG, "runScriptExecution: script=${script.name}, steps=${script.steps.size}, target=${config.targetRepeatCount}, navigateFirstCycle=$navigateFirstCycle")
 
         while (completed < config.targetRepeatCount && scope.isActive) {
-            val activeGroup = config.groupNames.firstOrNull {
-                VaultRepository.getGroup(it) != null && VaultRepository.hasUnusedData(it)
-            }
+            // FIXED: acquireMergedProfile (was acquireNextProfile) — pulls one value from EVERY selected group.
+            val activeProfile = VaultRepository.acquireMergedProfile(config.groupNames, config.mode)
 
-            if (activeGroup == null) {
+            if (activeProfile == null) {
                 val missing = config.groupNames.filter { VaultRepository.getGroup(it) == null }
                 if (missing.isNotEmpty()) {
                     updateStatus("Group(s) ${missing.joinToString(", ")} deleted. Please edit the script.")
                 } else {
-                    updateStatus("Recurring data is empty or used.")
+                    updateStatus("All selected recurring groups are empty or used.")
                 }
                 _dataExhaustedState.postValue(true)
                 updateState(AutomationState.WAITING_DATA_EXHAUSTED)
                 return
             }
 
-            val profile = VaultRepository.acquireNextProfile(activeGroup, config.mode) ?: run {
-                Log.e(TAG, "runScriptExecution: acquireNextProfile null")
-                return
+            // FIXED: acquireMergedProfile with a single-element list for the default group.
+            val defaultProfile = if (
+                !config.defaultGroupName.isNullOrBlank() &&
+                !config.groupNames.contains(config.defaultGroupName)
+            ) {
+                VaultRepository.acquireMergedProfile(listOf(config.defaultGroupName), "default") ?: activeProfile
+            } else {
+                activeProfile
             }
-            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != activeGroup) {
-                VaultRepository.acquireNextProfile(config.defaultGroupName, "default")
-            } else profile
 
-            // Make sure we are on the script's page (loads it if the browser isn't there yet)
             updateState(AutomationState.NAVIGATING)
             updateStatus("Loading ${script.url}...")
             ensureOnUrl(webView, script.url, forceReload = !isFirst || navigateFirstCycle)
@@ -764,7 +764,7 @@ object AutomationEngine {
                     StepKind.Field -> {
                         updateState(AutomationState.FILLING)
                         updateStatus("Filling ${step.displayLabel}...")
-                        val valToFill = resolveFieldValue(step, profile, defaultProfile)
+                        val valToFill = resolveFieldValue(step, activeProfile, defaultProfile)
                         if (config.humanize) delay(Random.nextLong(500, 3000))
 
                         val raw = evaluateJsSuspend(webView, "return await ${buildFillJs(step, valToFill, config.humanize)};")
@@ -793,16 +793,12 @@ object AutomationEngine {
                                     fireDialogContinuation = cont
                                     onShowFireDialog?.invoke(step.fieldType)
                                 }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Fire dialog failed: ${e.message}")
-                            }
+                            } catch (e: Exception) { Log.e(TAG, "Fire dialog failed: ${e.message}") }
                         }
                         try {
                             if (step.fieldType == "delete_all") clearAllData(webView)
                             else clearTabData(webView)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Clear data failed: ${e.message}")
-                        }
+                        } catch (e: Exception) { Log.e(TAG, "Clear data failed: ${e.message}") }
                         delay(500)
                         true
                     }
@@ -843,7 +839,8 @@ object AutomationEngine {
                 }
             }
 
-            VaultRepository.markProfileUsed(profile)
+            // FIXED: markProfileUsed takes the new ActiveAutomationProfile shape (Map<String, List<Int>>).
+            VaultRepository.markProfileUsed(activeProfile)
             completed++
             hudCompleted = completed
             updateProgress(completed, config.targetRepeatCount)
@@ -865,15 +862,23 @@ object AutomationEngine {
         val targetUri = if (config.targetUrl.startsWith("http")) config.targetUrl else "https://${config.targetUrl}"
         var isFirst = true
         while (hudCompleted < config.targetRepeatCount && scope.isActive) {
-            val activeGroup = config.groupNames.firstOrNull { VaultRepository.hasUnusedData(it) }
-            if (activeGroup == null) {
-                _dataExhaustedState.postValue(true); updateState(AutomationState.WAITING_DATA_EXHAUSTED); return
+            // FIXED: acquireMergedProfile replaces acquireNextProfile.
+            val activeProfile = VaultRepository.acquireMergedProfile(config.groupNames, config.mode)
+            if (activeProfile == null) {
+                _dataExhaustedState.postValue(true)
+                updateState(AutomationState.WAITING_DATA_EXHAUSTED)
+                return
             }
-            val profile = VaultRepository.acquireNextProfile(activeGroup, config.mode) ?: return
-            currentProfile = profile
-            val defaultProfile = if (!config.defaultGroupName.isNullOrBlank() && config.defaultGroupName != activeGroup) {
-                VaultRepository.acquireNextProfile(config.defaultGroupName, "default")
-            } else profile
+            currentProfile = activeProfile
+
+            val defaultProfile = if (
+                !config.defaultGroupName.isNullOrBlank() &&
+                !config.groupNames.contains(config.defaultGroupName)
+            ) {
+                VaultRepository.acquireMergedProfile(listOf(config.defaultGroupName), "default") ?: activeProfile
+            } else {
+                activeProfile
+            }
 
             if (config.clearTabBetweenRuns && hudCompleted > 0) {
                 updateState(AutomationState.CLEARING_DATA)
@@ -910,8 +915,8 @@ object AutomationEngine {
                         looksLike == "termsCheckbox" -> "true"
                         else -> {
                             val isDynamic = DYNAMIC_FIELDS.contains(looksLike.lowercase())
-                            val primary = if (isDynamic) profile else defaultProfile
-                            val fallback = if (isDynamic) defaultProfile else profile
+                            val primary = if (isDynamic) activeProfile else defaultProfile
+                            val fallback = if (isDynamic) defaultProfile else activeProfile
                             val v1 = primary?.resolveForField(looksLike, f.optString("name"), f.optString("tag"))
                             if (!v1.isNullOrBlank()) v1 else fallback?.resolveForField(looksLike, f.optString("name"), f.optString("tag"))
                         }
@@ -930,13 +935,21 @@ object AutomationEngine {
                 }
                 updateState(AutomationState.FILLING)
                 updateStatus("Filling ${fillArray.length()} field(s) (Step $counter)...")
-                val fillOpts = JSONObject().apply { put("typingDelayMs", config.typingDelayMs); put("fieldDelayMs", config.fieldDelayMs); put("humanize", config.humanize) }
+                val fillOpts = JSONObject().apply {
+                    put("typingDelayMs", config.typingDelayMs)
+                    put("fieldDelayMs", config.fieldDelayMs)
+                    put("humanize", config.humanize)
+                }
                 evaluateJsSuspend(webView, "return JSON.stringify(await __automationFill(${JSONObject.quote(fillArray.toString())}, ${JSONObject.quote(fillOpts.toString())}));")
                 delay(500)
                 updateState(AutomationState.CLICKING_NEXT)
                 val btnName = scanObj.optString("actionButtonName").ifBlank { "Next / Submit" }
                 updateStatus("Clicking '$btnName' & checking next step...")
-                val clickOpts = JSONObject().apply { put("actionRef", currentActionRef ?: ""); put("settleTimeoutMs", config.settleTimeoutMs); put("pauseOnCaptcha", config.pauseOnCaptcha) }
+                val clickOpts = JSONObject().apply {
+                    put("actionRef", currentActionRef ?: "")
+                    put("settleTimeoutMs", config.settleTimeoutMs)
+                    put("pauseOnCaptcha", config.pauseOnCaptcha)
+                }
                 val settle = try { JSONObject(evaluateJsSuspend(webView, "return JSON.stringify(await __automationClickNextAndSettle(${JSONObject.quote(clickOpts.toString())}));")) } catch (_: Exception) { JSONObject() }
                 if (settle.optString("verdict") == "captcha_blocked" && config.pauseOnCaptcha) {
                     _captchaState.postValue(true); updateState(AutomationState.WAITING_CAPTCHA_HUMAN); return
@@ -955,7 +968,8 @@ object AutomationEngine {
                 } else { stepSuccess = true; break }
             }
             if (stepSuccess) {
-                VaultRepository.markProfileUsed(profile)
+                // FIXED: markProfileUsed takes the new ActiveAutomationProfile shape.
+                VaultRepository.markProfileUsed(activeProfile)
                 updateProgress(hudCompleted + 1, config.targetRepeatCount)
                 updateStatus("Completed cycle ${hudCompleted} of ${config.targetRepeatCount}")
             } else {
