@@ -8,11 +8,13 @@ import android.util.AttributeSet
 import android.util.SparseArray
 import android.view.ActionMode
 import android.view.MotionEvent
+import android.view.View
 import android.view.WindowInsets
 import android.view.autofill.AutofillValue
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.webkit.DownloadListener
+import android.webkit.WebBackForwardList
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -245,7 +247,7 @@ class DuckDuckGoWebView :
                     override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
                         consoleMessage?.let {
                             if (it.message().contains("WebConsole:")) {
-                                android.util.Log.d("WebConsole", "[${it.messageLevel()}]${it.message()} -- From line ${it.lineNumber()} of${it.sourceId()}")
+                                android.util.Log.d("WebConsole", "[${it.messageLevel()}] ${it.message()} -- From line ${it.lineNumber()} of ${it.sourceId()}")
                             }
                         }
                         return client.onConsoleMessage(consoleMessage) ?: super.onConsoleMessage(consoleMessage)
@@ -256,7 +258,7 @@ class DuckDuckGoWebView :
                     override fun onReceivedTitle(view: WebView?, title: String?) = client.onReceivedTitle(view, title)
                     override fun onReceivedIcon(view: WebView?, icon: android.graphics.Bitmap?) = client.onReceivedIcon(view, icon)
                     override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) = client.onReceivedTouchIconUrl(view, url, precomposed)
-                    override fun onShowCustomView(view: View?, callback: CustomViewCallback?) = client.onShowCustomView(view, callback)
+                    override fun onShowCustomView(view: android.view.View?, callback: android.webkit.WebChromeClient.CustomViewCallback?) = client.onShowCustomView(view, callback)
                     override fun onHideCustomView() = client.onHideCustomView()
                     override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?) = client.onCreateWindow(view, isDialog, isUserGesture, resultMsg)
                     override fun onRequestFocus(view: WebView?) = client.onRequestFocus(view)
@@ -309,6 +311,7 @@ class DuckDuckGoWebView :
                             AutomationEngine.attachWebView(this@DuckDuckGoWebView, automationTabId)
                             AutomationEngine.injectScanner()
 
+                            // Re-inject recorder if still recording after navigation/reload
                             if (AutomationEngine.hudMode == HudMode.Recording) {
                                 loadRecorderAsset()?.let { js ->
                                     this@DuckDuckGoWebView.evaluateJavascript(js) {
@@ -631,7 +634,7 @@ class DuckDuckGoWebView :
             }
         }
     }.getOrElse { exception ->
-        logcat(ERROR) { "Error adding WebMessageListener: $jsObjectName:${exception.asLog()}" }
+        logcat(ERROR) { "Error adding WebMessageListener: $jsObjectName: ${exception.asLog()}" }
     }
 
     @SuppressLint("RequiresFeature", "RemoveWebMessageListenerUsage")
@@ -649,7 +652,7 @@ class DuckDuckGoWebView :
                 }
             }
         }.getOrElse { exception ->
-            logcat(ERROR) { "Error removing WebMessageListener: $jsObjectName:${exception.asLog()}" }
+            logcat(ERROR) { "Error removing WebMessageListener: $jsObjectName: ${exception.asLog()}" }
         }
 
     @SuppressLint("RequiresFeature", "AddDocumentStartJavaScriptUsage")
