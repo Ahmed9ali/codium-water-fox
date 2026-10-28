@@ -1,7 +1,14 @@
 /*
- * Automation Recorder v15
+ * Automation Recorder v16
  *
- * Fixes vs v14:
+ * v16 on top of v15:
+ *  - canary + watchdog: if anything erases our listeners (document.open, page scripts, bfcache restore) they are re-bound within 2s
+ *  - taps that pages try to swallow with stopPropagation()/stopImmediatePropagation() are still recorded
+ *  - text-field dedupe is time-limited (a field you tap again later is recorded again)
+ *  - pointercancel / touchcancel are understood (scroll gestures never become taps)
+ *  - health probe now includes counters (captured / ignored / rebinds)
+ *
+ * Fixes vs v14 (kept from v15):
  *  - NEVER touches document.head at install time (it is null at document-start; v14 threw there AFTER setting the
  *    "installed" flag, which left the recorder permanently dead on every page that loaded with the document-start script)
  *  - the "installed" flag is only set after listeners are really attached; a failed install is retried by the next injection
@@ -14,7 +21,7 @@
 (function () {
   "use strict";
   const g = globalThis;
-  const VERSION = "v15";
+  const VERSION = "v16";
   const DEBUG = true;
 
   function log() {
@@ -40,7 +47,8 @@
 
   const S = {
     version: VERSION, doc: document, active: false, isPaused: carriedPause,
-    listeners: [], outbox: [], pumpTimer: null, styleEl: null, onReady: null, stop: null,
+    listeners: [], outbox: [], pumpTimer: null, watchdog: null, styleEl: null, onReady: null, stop: null,
+    captured: 0, ignored: 0, rebinds: 0, patched: false,
   };
 
   let lastTarget = null;
@@ -311,24 +319,26 @@
     return actual;
   }
 
+  function ignore(msg) { S.ignored++; log(msg); }
+
   function processEvent(e, src) {
     try {
       if (!S.active) return;
-      if (S.isPaused) { log("IGNORED (" + src + "): recorder paused"); return; }
+      if (S.isPaused) { ignore("IGNORED (" + src + "): recorder paused"); return; }
 
       const path = pathOf(e);
-      if (!path.length) { log("IGNORED (" + src + "): no target"); return; }
+      if (!path.length) { ignore("IGNORED (" + src + "): no target"); return; }
       for (let i = 0; i < path.length; i++) {
-        if (path[i].hasAttribute && path[i].hasAttribute("data-automation-hud")) { log("IGNORED (" + src + "): HUD tap"); return; }
+        if (path[i].hasAttribute && path[i].hasAttribute("data-automation-hud")) { ignore("IGNORED (" + src + "): HUD tap"); return; }
       }
 
       const actual = resolveTarget(path);
-      if (!actual) { log("IGNORED (" + src + "): no interactive target, tapped " + describe(path[0])); return; }
-      if (!isVisible(actual) && !isBoxy(actual)) { log("IGNORED (" + src + "): not visible " + describe(actual)); return; }
+      if (!actual) { ignore("IGNORED (" + src + "): no interactive target, tapped " + describe(path[0])); return; }
+      if (!isVisible(actual) && !isBoxy(actual)) { ignore("IGNORED (" + src + "): not visible " + describe(actual)); return; }
 
       // one tap = touchend + pointerup + click + focusin: record once
       const now = Date.now();
-      if (actual === lastTarget && (now - lastTime < 500 || isTextField(actual))) { return; }
+      if (actual === lastTarget && now - lastTime < (isTextField(actual) ? 1200 : 500)) { return; }
       lastTarget = actual;
       lastTime = now;
 
@@ -361,6 +371,7 @@
         buttonLabel: kind === "ClickNext" ? (label || "Button") : "",
         verified: true,
       };
+      S.captured++;
       log("CAPTURED (" + src + "):", tag, payload.displayLabel);
       sendToBridge(payload);
 
@@ -379,63 +390,132 @@
   }
 
   // ---- listeners (window + capture: we see the event before page code can swallow it) ----
+  const processed = new WeakSet();   // events we already handled (so the stopPropagation hook never double-processes)
+  const HANDLERS = {};               // type -> handler, used by the stopPropagation hook
+
   function on(type, fn, opts) {
     window.addEventListener(type, fn, opts);
     S.listeners.push([type, fn, opts]);
   }
 
+  function track(type, fn) {
+    const h = function (e) {
+      if (processed.has(e)) return;
+      processed.add(e);
+      fn(e);
+    };
+    HANDLERS[type] = h;
+    return h;
+  }
+
   let tX = 0, tY = 0, tT = 0, tMoved = false;
+  let canaryHit = false;
 
   function bindListeners() {
     const passiveCap = { capture: true, passive: true };
     const cap = { capture: true };
 
-    on("touchstart", function (e) {
+    on("touchstart", track("touchstart", function (e) {
       if (e.touches && e.touches.length === 1) {
         tX = e.touches[0].clientX; tY = e.touches[0].clientY; tT = Date.now(); tMoved = false;
       }
-    }, passiveCap);
+    }), passiveCap);
 
-    on("touchmove", function (e) {
+    on("pointerdown", track("pointerdown", function (e) {
+      if (e.pointerType === "touch") { tX = e.clientX; tY = e.clientY; tT = Date.now(); tMoved = false; }
+    }), cap);
+
+    on("touchmove", track("touchmove", function (e) {
       if (e.touches && e.touches.length === 1) {
         if (Math.abs(e.touches[0].clientX - tX) > CFG.MOVE_PX || Math.abs(e.touches[0].clientY - tY) > CFG.MOVE_PX) tMoved = true;
       }
-    }, passiveCap);
+    }), passiveCap);
 
-    on("touchend", function (e) {
+    // the browser took the gesture over for scrolling: never treat it as a tap
+    on("pointercancel", function (e) { if (e.pointerType === "touch") tMoved = true; }, cap);
+    on("touchcancel", function () { tT = 0; tMoved = false; }, passiveCap);
+
+    on("touchend", track("touchend", function (e) {
       const moved = tMoved, elapsed = tT ? Date.now() - tT : 0;
       tT = 0;
       if (e.changedTouches && e.changedTouches.length === 1 && !moved && elapsed < CFG.TAP_MAX_MS) processEvent(e, "touchend");
       else if (moved) log("IGNORED (touchend): scroll/swipe");
-    }, passiveCap);
+    }), passiveCap);
 
-    on("pointerup", function (e) {
+    on("pointerup", track("pointerup", function (e) {
       if (e.pointerType !== "touch") return;
       if (tMoved) return;
       processEvent(e, "pointerup");
-    }, cap);
+    }), cap);
 
-    on("click", function (e) { processEvent(e, "click"); }, cap);
+    on("click", track("click", function (e) { processEvent(e, "click"); }), cap);
 
-    on("focusin", function (e) {
+    on("focusin", track("focusin", function (e) {
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) processEvent(e, "focusin");
-    }, cap);
+    }), cap);
 
     // last chance to hand queued events to Kotlin before the page goes away
     on("pagehide", function () { pump(); }, cap);
+    on("pageshow", function (e) { if (e.persisted) verifyListeners("pageshow/bfcache"); }, cap);
+
+    // canary: lets the watchdog prove that our listeners are still attached
+    on("__ddg_canary", function () { canaryHit = true; }, cap);
   }
+
+  function unbindListeners() {
+    S.listeners.forEach(function (l) { try { window.removeEventListener(l[0], l[1], l[2]); } catch (_) {} });
+    S.listeners.length = 0;
+  }
+
+  // if anything erased our listeners (document.open(), page code, bfcache restore) bind them again
+  function verifyListeners(reason) {
+    if (!S.active) return;
+    canaryHit = false;
+    try { window.dispatchEvent(new Event("__ddg_canary")); } catch (_) {}
+    if (!canaryHit) {
+      warn("listeners were erased (" + reason + "), re-binding");
+      unbindListeners();
+      bindListeners();
+      S.rebinds++;
+    }
+    ensureStyle();
+  }
+
+  // ---- pages that call stopPropagation()/stopImmediatePropagation() on a tap must not hide it from us ----
+  const evProto = Event.prototype;
+  const origStop = evProto.stopPropagation;
+  const origStopImm = evProto.stopImmediatePropagation;
+  function hook(orig) {
+    function wrapped() {
+      try {
+        if (S.active) {
+          const h = HANDLERS[this.type];
+          if (h) h(this);
+        }
+      } catch (_) {}
+      return orig.apply(this, arguments);
+    }
+    wrapped.__ddgOrig = orig;
+    return wrapped;
+  }
+  const wrappedStop = hook(origStop);
+  const wrappedStopImm = hook(origStopImm);
 
   // ---- lifecycle ----
   function stop() {
     S.active = false;
-    S.listeners.forEach(function (l) { try { window.removeEventListener(l[0], l[1], l[2]); } catch (_) {} });
-    S.listeners.length = 0;
+    unbindListeners();
     if (S.pumpTimer) { clearInterval(S.pumpTimer); S.pumpTimer = null; }
+    if (S.watchdog) { clearInterval(S.watchdog); S.watchdog = null; }
     if (S.onReady) { try { document.removeEventListener("DOMContentLoaded", S.onReady); } catch (_) {} S.onReady = null; }
     try { if (S.styleEl && S.styleEl.parentNode) S.styleEl.parentNode.removeChild(S.styleEl); } catch (_) {}
     S.styleEl = null;
     try { if (HTMLElement.prototype.focus === wrappedFocus) HTMLElement.prototype.focus = originalFocus; } catch (_) {}
+    try {
+      if (evProto.stopPropagation === wrappedStop) evProto.stopPropagation = origStop;
+      if (evProto.stopImmediatePropagation === wrappedStopImm) evProto.stopImmediatePropagation = origStopImm;
+    } catch (_) {}
     g.__automationRecorderInstalled = false;
     log("Recorder stopped");
   }
@@ -448,8 +528,11 @@
     }
     HTMLElement.prototype.focus = wrappedFocus;
     bindListeners();
+    evProto.stopPropagation = wrappedStop;
+    evProto.stopImmediatePropagation = wrappedStopImm;
     S.active = true;
     g.__ddgRecorderState = S;
+    S.watchdog = setInterval(function () { verifyListeners("watchdog"); }, 2000);
 
     g.__automationRecorderPause = function () { S.isPaused = true; log("Recorder paused"); };
     g.__automationRecorderResume = function () { S.isPaused = false; log("Recorder resumed"); };
@@ -460,6 +543,7 @@
         listeners: S.listeners.length, outbox: S.outbox.length,
         bridge: !!(window.AutomationBridge && window.AutomationBridge.onElementRecorded),
         boundToThisDoc: S.doc === document, readyState: document.readyState, url: location.href,
+        captured: S.captured, ignored: S.ignored, rebinds: S.rebinds,
       });
     };
 
