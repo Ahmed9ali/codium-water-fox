@@ -150,7 +150,6 @@ object AutomationEngine {
     var onAutomationFinished: ((Int) -> Unit)? = null
     var onDataExhaustedAction: ((String) -> Unit)? = null
 
-    // FIXED: Expose the async bridge so DuckDuckGoWebView can add it in its constructor.
     fun getAsyncBridge(): AutomationAsyncBridge = asyncBridge
 
     fun init(context: Context) {
@@ -186,6 +185,13 @@ object AutomationEngine {
         hudTotal = total
     }
 
+    private fun checkRecorderHealth(webView: WebView) {
+        if (hudMode != HudMode.Recording) return
+        webView.evaluateJavascript("try { window.__automationRecorderHealth(); } catch(e) { 'error: ' + e.message; }") { res ->
+            Log.d(TAG, "Health Check: $res (Kotlin paused=$hudRecordingPaused)")
+        }
+    }
+
     fun attachWebView(webView: WebView, tabId: String? = null) {
         Log.d(TAG, "attachWebView tabId=$tabId")
         currentWebView = WeakReference(webView)
@@ -208,15 +214,19 @@ object AutomationEngine {
 
         mountHudOverlayIfNeeded(webView)
 
-        // FIXED: Prevent restart loop. Only consume config if we aren't already running.
         val config = pendingBrowserConfig
         if (config != null) {
             pendingBrowserConfig = null
             Log.d(TAG, "attachWebView: consuming pendingBrowserConfig (script=${config.script?.name})")
             startAutomation(config, navigateFirstCycle = false)
-        } else if (hudMode == HudMode.Recording && !hudRecordingPaused) {
+        } else if (hudMode == HudMode.Recording) {
             webView.postDelayed({
-                loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder re-injected after page event") } }
+                loadRecorder()?.let { js -> 
+                    webView.evaluateJavascript(js) { Log.d(TAG, "Recorder re-injected after attachWebView") }
+                    val pauseJs = if (hudRecordingPaused) "try{ window.__automationRecorderPause(); }catch(_){}" else "try{ window.__automationRecorderResume(); }catch(_){}"
+                    webView.evaluateJavascript(pauseJs, null)
+                    checkRecorderHealth(webView)
+                }
             }, 200)
         } else if (hudMode != HudMode.Recording && hudMode != HudMode.Running) {
             webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
@@ -230,8 +240,13 @@ object AutomationEngine {
     }
 
     fun onPageFinished(webView: WebView) {
-        if (hudMode == HudMode.Recording && !hudRecordingPaused && hudRecordingPhase == RecordingPhase.Capturing) {
-            loadRecorder()?.let { webView.evaluateJavascript(it, null) }
+        if (hudMode == HudMode.Recording && hudRecordingPhase == RecordingPhase.Capturing) {
+            loadRecorder()?.let { js -> 
+                webView.evaluateJavascript(js) { Log.d(TAG, "Recorder injected onPageFinished") }
+                val pauseJs = if (hudRecordingPaused) "try{ window.__automationRecorderPause(); }catch(_){}" else "try{ window.__automationRecorderResume(); }catch(_){}"
+                webView.evaluateJavascript(pauseJs, null)
+                checkRecorderHealth(webView)
+            }
         }
     }
 
@@ -1096,9 +1111,11 @@ object AutomationEngine {
     private fun safeJsonObject(raw: String): JSONObject = try { JSONObject(raw) } catch (_: Exception) { JSONObject() }
 
     fun setActiveTab(tabId: String) {
+        Log.d(TAG, "setActiveTab called: old=$activeTabId new=$tabId mode=$hudMode")
         if (activeTabId == tabId) return
         if (hudMode == HudMode.Menu) { hudMode = HudMode.Hidden; hudVisible = false }
         if (hudMode == HudMode.Recording && activeTabId != null) {
+            Log.w(TAG, "setActiveTab: Cancelling recording because tab changed from $activeTabId to $tabId")
             cancelRecording()
             Toast.makeText(appContext, "Recording cancelled", Toast.LENGTH_SHORT).show()
         }
@@ -1164,12 +1181,17 @@ object AutomationEngine {
     }
 
     fun startRecording() {
+        Log.d(TAG, "startRecording called. Current mode=$hudMode")
         if (hudMode == HudMode.Recording) {
             currentWebView?.get()?.let { installRecorder(it) }
             hudRecordingPaused = false
+            currentWebView?.get()?.evaluateJavascript("try{ window.__automationRecorderResume(); }catch(_){}", null)
             return
         }
-        val webView = currentWebView?.get() ?: return
+        val webView = currentWebView?.get() ?: run {
+            Log.e(TAG, "startRecording: Failed, currentWebView is null")
+            return
+        }
         webView.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
         webView.evaluateJavascript("try { window.__automation_active = false; } catch(_) {}", null)
         val url = webView.url.orEmpty()
@@ -1180,22 +1202,25 @@ object AutomationEngine {
         hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Recording
         hudVisible = true
-        Log.d(TAG, "startRecording: url=$url")
+        Log.d(TAG, "startRecording: url=$url, host=$hudRecordingHost")
         installRecorder(webView)
         webView.postDelayed({
             if (hudMode == HudMode.Recording && hudRecordingPhase == RecordingPhase.Capturing) {
-                loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (delayed)") } }
+                loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (delayed in startRecording)") } }
+                checkRecorderHealth(webView)
             }
         }, 600)
     }
 
     fun pauseRecording() {
+        Log.d(TAG, "pauseRecording called (mode=$hudMode)")
         if (hudMode != HudMode.Recording) return
         hudRecordingPaused = true
         currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderPause(); } catch(_) {}", null)
     }
 
     fun resumeRecording() {
+        Log.d(TAG, "resumeRecording called (mode=$hudMode)")
         if (hudMode != HudMode.Recording) return
         hudRecordingPaused = false
         currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderResume(); } catch(_) {}", null)
@@ -1210,8 +1235,16 @@ object AutomationEngine {
             mainHandler.post { onRecorderElementCaptured(json, tabId) }
             return
         }
-        Log.d(TAG, "onRecorderElementCaptured mode=$hudMode paused=$hudRecordingPaused json=${json.take(200)}")
-        if (hudMode != HudMode.Recording || hudRecordingPaused) return
+        
+        if (hudMode != HudMode.Recording) {
+            Log.w(TAG, "DROPPED tap: mode=$hudMode is not Recording (tabId=$tabId)")
+            return
+        }
+        if (hudRecordingPaused) {
+            Log.w(TAG, "DROPPED tap: hudRecordingPaused=true (tabId=$tabId)")
+            return
+        }
+
         try {
             val obj = JSONObject(json)
             val kindRaw = obj.optString("kind", "Field")
@@ -1225,8 +1258,10 @@ object AutomationEngine {
             val xpathVal = sanitizeString(obj.optString("xpath", ""), 500)
             val domId = sanitizeString(obj.optString("domId", ""), 100)
             val name = sanitizeString(obj.optString("name", ""), 100)
+            
             if (cssSelector.isBlank() && xpathVal.isBlank() && domId.isBlank() && name.isBlank()) {
-                Log.w(TAG, "Rejecting step with no identifying selector"); return
+                Log.w(TAG, "DROPPED tap: Rejecting step with no identifying selector")
+                return
             }
 
             val last = hudRecordedSteps.lastOrNull()
@@ -1234,7 +1269,8 @@ object AutomationEngine {
             if (last != null && last.kind == stepKind && last.cssSelector == cssSelector &&
                 last.xpath == xpathVal && now - lastRecordedAt < 600
             ) {
-                Log.d(TAG, "Ignoring duplicate recorder event"); return
+                Log.d(TAG, "DROPPED tap: Ignoring duplicate recorder event (fast re-click)")
+                return
             }
             lastRecordedAt = now
 
@@ -1308,16 +1344,6 @@ object AutomationEngine {
         hudRecordingPhase = RecordingPhase.Capturing
         hudMode = HudMode.Menu
         hudVisible = true
-    }
-
-    fun cancelRecording() {
-        currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
-        removeRecorderHandler()
-        hudRecordedSteps = emptyList()
-        hudRecordingPaused = false
-        hudRecordingPhase = RecordingPhase.Capturing
-        hudMode = HudMode.Hidden
-        hudVisible = false
     }
 
     private fun loadRecorder(): String? = try {

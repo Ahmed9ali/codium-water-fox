@@ -13,7 +13,6 @@ import android.view.autofill.AutofillValue
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.webkit.DownloadListener
-import android.webkit.WebBackForwardList
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -30,7 +29,6 @@ import androidx.webkit.WebViewCompat.WebMessageListener
 import com.duckduckgo.anvil.annotations.InjectWith
 import com.duckduckgo.app.automation.AutomationBridge
 import com.duckduckgo.app.automation.AutomationEngine
-import com.duckduckgo.app.automation.AutomationState
 import com.duckduckgo.app.automation.HudMode
 import com.duckduckgo.app.browser.navigation.safeCopyBackForwardList
 import com.duckduckgo.app.browser.uilock.BrowserUiLockFeature
@@ -45,6 +43,13 @@ import logcat.asLog
 import logcat.logcat
 import javax.inject.Inject
 
+/**
+ * WebView subclass which allows the WebView to
+ *   - hide the toolbar when placed in a CoordinatorLayout
+ *   - add the flag so that users' typing isn't used for personalisation
+ *
+ * Originally based on https://github.com/takahirom/webview-in-coordinatorlayout for scrolling behaviour
+ */
 @InjectWith(ViewScope::class)
 class DuckDuckGoWebView :
     WebView,
@@ -91,6 +96,9 @@ class DuckDuckGoWebView :
         } catch (e: Exception) {
             logcat(ERROR) { "AutomationBridge: failed to add JS interface: ${e.asLog()}" }
         }
+        
+        // STEP 0: Force Debugging for chrome://inspect
+        WebView.setWebContentsDebuggingEnabled(true)
     }
 
     private fun createAutomationBridge(): AutomationBridge =
@@ -231,7 +239,45 @@ class DuckDuckGoWebView :
 
     override fun setWebChromeClient(client: WebChromeClient?) {
         if (!isDestroyed) {
-            super.setWebChromeClient(client)
+            if (client != null) {
+                // STEP 0: Wrap WebChromeClient to capture JS console logs
+                val wrapper = object : WebChromeClient() {
+                    override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                        consoleMessage?.let {
+                            if (it.message().contains("WebConsole:")) {
+                                android.util.Log.d("WebConsole", "[${it.messageLevel()}]${it.message()} -- From line ${it.lineNumber()} of${it.sourceId()}")
+                            }
+                        }
+                        return client.onConsoleMessage(consoleMessage) ?: super.onConsoleMessage(consoleMessage)
+                    }
+                    
+                    // Delegate all other required methods to original client
+                    override fun onProgressChanged(view: WebView?, newProgress: Int) = client.onProgressChanged(view, newProgress)
+                    override fun onReceivedTitle(view: WebView?, title: String?) = client.onReceivedTitle(view, title)
+                    override fun onReceivedIcon(view: WebView?, icon: android.graphics.Bitmap?) = client.onReceivedIcon(view, icon)
+                    override fun onReceivedTouchIconUrl(view: WebView?, url: String?, precomposed: Boolean) = client.onReceivedTouchIconUrl(view, url, precomposed)
+                    override fun onShowCustomView(view: View?, callback: CustomViewCallback?) = client.onShowCustomView(view, callback)
+                    override fun onHideCustomView() = client.onHideCustomView()
+                    override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?) = client.onCreateWindow(view, isDialog, isUserGesture, resultMsg)
+                    override fun onRequestFocus(view: WebView?) = client.onRequestFocus(view)
+                    override fun onCloseWindow(window: WebView?) = client.onCloseWindow(window)
+                    override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?) = client.onJsAlert(view, url, message, result)
+                    override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?) = client.onJsConfirm(view, url, message, result)
+                    override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: android.webkit.JsPromptResult?) = client.onJsPrompt(view, url, message, defaultValue, result)
+                    override fun onJsBeforeUnload(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?) = client.onJsBeforeUnload(view, url, message, result)
+                    override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: android.webkit.GeolocationPermissions.Callback?) = client.onGeolocationPermissionsShowPrompt(origin, callback)
+                    override fun onGeolocationPermissionsHidePrompt() = client.onGeolocationPermissionsHidePrompt()
+                    override fun onPermissionRequest(request: android.webkit.PermissionRequest?) = client.onPermissionRequest(request)
+                    override fun onPermissionRequestCanceled(request: android.webkit.PermissionRequest?) = client.onPermissionRequestCanceled(request)
+                    override fun onShowFileChooser(webView: WebView?, filePathCallback: android.webkit.ValueCallback<Array<android.net.Uri>>?, fileChooserParams: FileChooserParams?) = client.onShowFileChooser(webView, filePathCallback, fileChooserParams)
+                    override fun getDefaultVideoPoster() = client.defaultVideoPoster
+                    override fun getVideoLoadingProgressView() = client.videoLoadingProgressView
+                    override fun getVisitedHistory(callback: android.webkit.ValueCallback<Array<String>>?) = client.getVisitedHistory(callback)
+                }
+                super.setWebChromeClient(wrapper)
+            } else {
+                super.setWebChromeClient(null)
+            }
         }
     }
 
@@ -365,18 +411,7 @@ class DuckDuckGoWebView :
         stripImeInsetsEnabled = value
     }
 
-    // FIXED: Block the keyboard during recording/running automation
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
-        val blockKeyboard = (AutomationEngine.hudMode == HudMode.Recording && !AutomationEngine.hudRecordingPaused) ||
-                            (AutomationEngine.hudState != AutomationState.IDLE &&
-                             AutomationEngine.hudState != AutomationState.PAUSED &&
-                             AutomationEngine.hudState != AutomationState.ERROR &&
-                             AutomationEngine.hudState != AutomationState.COMPLETED)
-
-        if (blockKeyboard) {
-            return null
-        }
-
         val inputConnection = super.onCreateInputConnection(outAttrs) ?: return null
         addNoPersonalisedFlag(outAttrs)
         return inputConnection
@@ -596,7 +631,7 @@ class DuckDuckGoWebView :
             }
         }
     }.getOrElse { exception ->
-        logcat(ERROR) { "Error adding WebMessageListener: $jsObjectName: ${exception.asLog()}" }
+        logcat(ERROR) { "Error adding WebMessageListener: $jsObjectName:${exception.asLog()}" }
     }
 
     @SuppressLint("RequiresFeature", "RemoveWebMessageListenerUsage")
@@ -614,7 +649,7 @@ class DuckDuckGoWebView :
                 }
             }
         }.getOrElse { exception ->
-            logcat(ERROR) { "Error removing WebMessageListener: $jsObjectName: ${exception.asLog()}" }
+            logcat(ERROR) { "Error removing WebMessageListener: $jsObjectName:${exception.asLog()}" }
         }
 
     @SuppressLint("RequiresFeature", "AddDocumentStartJavaScriptUsage")

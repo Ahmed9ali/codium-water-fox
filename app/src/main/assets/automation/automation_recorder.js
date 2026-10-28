@@ -1,11 +1,12 @@
 /*
- * Automation Recorder v14 - Link detection & Keyboard block
+ * Automation Recorder v14 - Step 0 & 1 (Outbox Queue + Instrumentation)
  */
 (function () {
   "use strict";
   const g = globalThis;
 
   if (g.__automationRecorderInstalled) {
+    console.log("WebConsole: Recorder already installed on this page, skipping.");
     if (typeof g.__automationRecorderResume === "function") g.__automationRecorderResume();
     return;
   }
@@ -16,6 +17,9 @@
   let lastClickTime = 0;
   let justRecorded = false;
 
+  const outbox = [];
+  let pumpInterval = null;
+
   // Disabled elements clickable
   const styleEl = document.createElement("style");
   styleEl.id = "__automation_recorder_style";
@@ -25,29 +29,12 @@
     }`;
   document.head.appendChild(styleEl);
 
-  // Block keyboard on focus
+  // Block keyboard
   const originalFocus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function (...args) {
     if (!isPaused && g.__automationRecorderInstalled) return;
     return originalFocus.apply(this, args);
   };
-
-  // FIXED: Prevent keyboard on touch for inputs during recording
-  document.addEventListener("touchstart", (e) => {
-    if (isPaused) return;
-    const el = e.target;
-    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
-      e.preventDefault();
-    }
-  }, { capture: true, passive: false });
-
-  document.addEventListener("mousedown", (e) => {
-    if (isPaused) return;
-    const el = e.target;
-    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
-      e.preventDefault();
-    }
-  }, { capture: true, passive: false });
 
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
@@ -155,33 +142,63 @@
   }
 
   function sendToBridge(data) {
-    if (window.AutomationBridge && window.AutomationBridge.onElementRecorded) {
-      try { window.AutomationBridge.onElementRecorded(JSON.stringify(data)); }
-      catch (e) { console.error("Recorder: bridge error", e); }
-    } else {
-      console.warn("Recorder: AutomationBridge missing");
+    if (outbox.length >= 200) {
+      console.warn("WebConsole: Outbox full, dropping oldest event");
+      outbox.shift();
     }
+    outbox.push(data);
+  }
+
+  function startPump() {
+    if (pumpInterval) clearInterval(pumpInterval);
+    pumpInterval = setInterval(() => {
+      if (!window.AutomationBridge || !window.AutomationBridge.onElementRecorded) return;
+      while (outbox.length > 0) {
+        const item = outbox[0];
+        try {
+          window.AutomationBridge.onElementRecorded(JSON.stringify(item));
+          outbox.shift();
+        } catch (e) {
+          console.error("WebConsole: Bridge dispatch error", e);
+          break; // Stop pumping this tick, try again next tick
+        }
+      }
+    }, 300);
   }
 
   function processTarget(event) {
-    if (isPaused) return;
+    if (isPaused) {
+      console.log("WebConsole: DROPPED - Recorder is paused");
+      return;
+    }
     
     let target = event.target;
     if (event.changedTouches && event.changedTouches.length > 0) {
         target = event.changedTouches[0].target;
     }
-    if (!target) return;
+    if (!target) {
+      console.log("WebConsole: DROPPED - No target in event");
+      return;
+    }
 
-    if (target.closest && target.closest("[data-automation-hud]")) return;
+    if (target.closest && target.closest("[data-automation-hud]")) {
+      console.log("WebConsole: DROPPED - Ignored HUD tap");
+      return;
+    }
 
     let actualTarget = target;
-    // FIXED: Added [role="link"] to detect Google and modern web results
     if (!["input", "textarea", "select", "button", "a"].includes(actualTarget.tagName.toLowerCase())) {
-      const parent = actualTarget.closest('button, a, [role="button"], [role="link"], [role="radio"], [role="checkbox"], [onclick], [aria-disabled="true"]');
+      const parent = actualTarget.closest('button, a, [role="button"], [role="radio"], [role="checkbox"], [onclick], [aria-disabled="true"]');
       if (parent) actualTarget = parent;
     }
-    if (!actualTarget) return;
-    if (!isVisible(actualTarget)) return;
+    if (!actualTarget) {
+      console.log("WebConsole: DROPPED - Could not resolve interactive target");
+      return;
+    }
+    if (!isVisible(actualTarget)) {
+      console.log("WebConsole: DROPPED - Target is not visible");
+      return;
+    }
 
     const label = actualTarget.closest("label");
     if (label) {
@@ -190,7 +207,10 @@
     }
 
     const now = Date.now();
-    if (actualTarget === lastTarget && now - lastClickTime < 300) return;
+    if (actualTarget === lastTarget && now - lastClickTime < 300) {
+      console.log("WebConsole: DROPPED - Deduped fast click");
+      return;
+    }
     lastTarget = actualTarget;
     lastClickTime = now;
     justRecorded = true;
@@ -198,9 +218,7 @@
     const tag = actualTarget.tagName.toLowerCase();
     const type = (actualTarget.type || "").toLowerCase();
     let kind = "Field";
-    
-    // FIXED: Added role="link" to isLink check
-    const isLink = tag === "a" || tag === "button" || type === "submit" || actualTarget.getAttribute("role") === "button" || actualTarget.getAttribute("role") === "link";
+    const isLink = tag === "a" || tag === "button" || type === "submit" || actualTarget.getAttribute("role") === "button";
     if (isLink) kind = "ClickNext";
 
     const old = actualTarget.style.outline;
@@ -220,7 +238,8 @@
       buttonLabel: kind === "ClickNext" ? (getLabel(actualTarget) || "Button") : "",
       verified: true,
     };
-    console.log("Recorder: captured", tag, payload.displayLabel);
+    
+    console.log("WebConsole: Captured tap on", tag, payload.displayLabel);
     sendToBridge(payload);
 
     if (isLink) {
@@ -288,9 +307,24 @@
   document.addEventListener("click", handleClick, { capture: true });
   document.addEventListener("focusin", handleFocusIn, { capture: true });
 
-  g.__automationRecorderPause = () => { isPaused = true; };
-  g.__automationRecorderResume = () => { isPaused = false; };
+  g.__automationRecorderPause = () => {
+    isPaused = true;
+    console.log("WebConsole: JS Recorder Paused");
+  };
+  g.__automationRecorderResume = () => {
+    isPaused = false;
+    console.log("WebConsole: JS Recorder Resumed");
+  };
   
+  g.__automationRecorderHealth = () => {
+    return JSON.stringify({
+      installed: !!g.__automationRecorderInstalled,
+      paused: isPaused,
+      outboxSize: outbox.length,
+      bridgeVisible: !!(window.AutomationBridge && window.AutomationBridge.onElementRecorded)
+    });
+  };
+
   g.__automationRecorderStop = () => {
     document.removeEventListener("touchstart", handleTouchStart, true);
     document.removeEventListener("touchmove", handleTouchMove, true);
@@ -299,8 +333,12 @@
     document.removeEventListener("click", handleClick, true);
     document.removeEventListener("focusin", handleFocusIn, true);
     if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+    if (pumpInterval) clearInterval(pumpInterval);
     HTMLElement.prototype.focus = originalFocus;
     g.__automationRecorderInstalled = false;
+    console.log("WebConsole: JS Recorder Stopped");
   };
-  console.log("Recorder: installed");
+  
+  startPump();
+  console.log("WebConsole: JS Recorder Installed successfully");
 })();
