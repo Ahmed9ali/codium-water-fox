@@ -54,7 +54,6 @@ data class AutomationConfig(
     val settleTimeoutMs: Long = 2000,
     val pauseOnCaptcha: Boolean = true,
     val clearTabBetweenRuns: Boolean = true,
-    // When non-null, runScriptExecution (scripted) is used instead of runAutomationLoop (dynamic).
     val script: AutomationScript? = null,
 )
 
@@ -1224,6 +1223,17 @@ object AutomationEngine {
         if (hudMode != HudMode.Recording) return
         hudRecordingPaused = false
         currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderResume(); } catch(_) {}", null)
+    }
+
+    fun cancelRecording() {
+        Log.d(TAG, "cancelRecording called")
+        currentWebView?.get()?.evaluateJavascript("try { window.__automationRecorderStop(); } catch(_) {}", null)
+        removeRecorderHandler()
+        hudRecordedSteps = emptyList()
+        hudRecordingPaused = false
+        hudRecordingPhase = RecordingPhase.Capturing
+        hudMode = HudMode.Hidden
+        hudVisible = false
     }
 
     private fun sanitizeString(s: String, maxLen: Int): String = try {
