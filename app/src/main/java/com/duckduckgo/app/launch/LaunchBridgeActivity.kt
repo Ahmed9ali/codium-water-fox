@@ -22,7 +22,7 @@ import com.duckduckgo.anvil.annotations.InjectWith
 import com.duckduckgo.app.browser.BrowserActivity
 import com.duckduckgo.app.browser.R
 import com.duckduckgo.app.browser.mode.AppLauncher
-import com.duckduckgo.app.onboarding.ui.OnboardingActivity
+// import com.duckduckgo.app.onboarding.ui.OnboardingActivity // <-- REMOVED
 import com.duckduckgo.app.pixels.AppReturnPixelSender
 import com.duckduckgo.app.pixels.toPixelLaunchSourceValue
 import com.duckduckgo.common.ui.DuckDuckGoActivity
@@ -40,7 +40,6 @@ class LaunchBridgeActivity : DuckDuckGoActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        splashScreen.setKeepOnScreenCondition { true }
 
         appReturnPixelSender.fireIfNeeded(AppLauncher.toPixelLaunchSourceValue())
 
@@ -52,22 +51,14 @@ class LaunchBridgeActivity : DuckDuckGoActivity() {
     }
 
     private fun configureObservers() {
-        viewModel.command.observe(this) {
-            processCommand(it)
+        viewModel.command.observe(this) { _ ->
+            // CHANGED: Ignore the command type (Onboarding or Home) and always show Home
+            showHome()
         }
     }
 
-    private fun processCommand(it: LaunchViewModel.Command) {
-        when (it) {
-            is LaunchViewModel.Command.Onboarding -> showOnboarding()
-            is LaunchViewModel.Command.Home -> showHome()
-        }
-    }
-
-    private fun showOnboarding() {
-        startActivity(OnboardingActivity.intent(this))
-        finish()
-    }
+    // REMOVED: processCommand() function
+    // REMOVED: showOnboarding() function
 
     private fun showHome() {
         startActivity(BrowserActivity.intent(this, launchSource = AppLauncher))

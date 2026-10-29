@@ -88,8 +88,6 @@ import com.duckduckgo.app.global.view.ORIGIN_CHAT_AUTOCOMPLETE
 import com.duckduckgo.app.global.view.ORIGIN_DUCK_AI_CONTEXTUAL_CHAT
 import com.duckduckgo.app.global.view.ORIGIN_HATCH
 import com.duckduckgo.app.global.view.renderIfChanged
-import com.duckduckgo.app.onboarding.orchestrator.NewUserBrowserOnboardingViewModel
-import com.duckduckgo.app.onboarding.ui.OnboardingActivity
 import com.duckduckgo.app.onboarding.ui.page.DefaultBrowserPage
 import com.duckduckgo.app.permissions.PermissionsScreenNoParams
 import com.duckduckgo.app.pixels.AppPixelName
@@ -267,7 +265,7 @@ open class BrowserActivity : DuckDuckGoActivity() {
         }
 
     private val viewModel: BrowserViewModel by bindViewModel()
-    private val onboardingHostViewModel: NewUserBrowserOnboardingViewModel by bindViewModel()
+ 
     private val duckChatViewModel: DuckChatSharedViewModel by viewModels()
 
     private var instanceStateBundles: CombinedInstanceState? = null
@@ -432,7 +430,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
             .launchIn(lifecycleScope)
 
         observeDuckChatSharedCommands()
-        observeOnboardingHost()
         observeBrowserModeChanges()
 
         viewModel.awaitClearDataFinishedNotification()
@@ -496,7 +493,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
                     currentTab?.onFireDialogVisibilityChanged(isVisible = true)
                 }
                 FireDialog.EVENT_ON_CANCEL -> {
-                    pendingDuckAiOnboardingFire = false
                     pixel.fire(FIRE_DIALOG_CANCEL)
                     if (bundle.getString(FireDialog.RESULT_KEY_ORIGIN) == ORIGIN_CHAT_AUTOCOMPLETE) {
                         currentTab?.onChatDeleteCancelled()
@@ -509,9 +505,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
                 }
                 FireDialog.EVENT_CLEAR_WITHOUT_RESTART_STARTED -> {
                     currentTab?.onFireDialogVisibilityChanged(isVisible = false)
-                    if (pendingDuckAiOnboardingFire) {
-                        currentTab?.dismissDuckAiFireOnboardingCta()
-                    }
                 }
                 FireDialog.EVENT_ON_CHAT_CLEAR_COMPLETE -> {
                     if (bundle.getString(FireDialog.RESULT_KEY_ORIGIN) == ORIGIN_CHAT_AUTOCOMPLETE) {
@@ -539,27 +532,12 @@ override fun onCreate(savedInstanceState: Bundle?) {
                         currentTab?.closeCurrentTab()
                         launchNewTab()
                     }
-                    if (pendingDuckAiOnboardingFire) {
-                        pendingDuckAiOnboardingFire = false
-                        closeDuckChatFullScreen()
-                        onboardingHostViewModel.onDuckAiFireCompleted()
-                    }
                 }
                 FireDialog.EVENT_ON_SINGLE_TAB_CLEAR_FEATURE_NOT_SUPPORTED -> {
                     showSnackbar(R.string.singleTabFireDialogClearNotSupportedSnackbar)
-                    if (pendingDuckAiOnboardingFire) {
-                        pendingDuckAiOnboardingFire = false
-                        closeDuckChatFullScreen()
-                        onboardingHostViewModel.onDuckAiFireCompleted()
-                    }
                 }
                 FireDialog.EVENT_ON_SINGLE_TAB_CLEAR_ERROR -> {
                     showSnackbar(R.string.singleTabFireDialogClearErrorSnackbar)
-                    if (pendingDuckAiOnboardingFire) {
-                        pendingDuckAiOnboardingFire = false
-                        closeDuckChatFullScreen()
-                        onboardingHostViewModel.onDuckAiFireCompleted()
-                    }
                 }
             }
         }
@@ -1078,10 +1056,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
         recreate()
     }
 
-    private var pendingDuckAiOnboardingFire = false
 
-    fun launchFire(launchedFromFocusedNtp: Boolean = false, isDuckAiOnboarding: Boolean = false) {
-        pendingDuckAiOnboardingFire = isDuckAiOnboarding
+    fun launchFire(launchedFromFocusedNtp: Boolean = false) {
+
         val params = mapOf(
             PixelParameter.FROM_FOCUSED_NTP to launchedFromFocusedNtp.toString(),
             PixelParameter.BROWSER_MODE to currentBrowserMode.name.lowercase(),
@@ -1222,34 +1199,6 @@ override fun onCreate(savedInstanceState: Bundle?) {
         }
     }
 
-    private fun observeOnboardingHost() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                onboardingHostViewModel.commands.collect { command ->
-                    when (command) {
-                        NewUserBrowserOnboardingViewModel.Command.HandOffToOnboardingActivity -> {
-                            startActivity(OnboardingActivity.intent(this@BrowserActivity))
-                            finish()
-                        }
-                        is NewUserBrowserOnboardingViewModel.Command.OpenDuckAiOnboardingDemo -> {
-                            duckChat.reportDuckChatEntry(
-                                DuckChatEntryPoint.ONBOARDING,
-                                opensNewTab = true,
-                                hasPrompt = hasAutoSubmittedPrompt(command.url),
-                            )
-                            launchDuckAi(url = command.url)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Recreates the activity whenever the user switches browser mode. The activity is built for
-     * one mode at a time. The previous mode's tab state is stripped from the saved bundle, and any
-     * stale tab fragments are removed after restoration.
-     */
     private fun observeBrowserModeChanges() {
         lifecycleScope.launch {
             viewModel.currentMode

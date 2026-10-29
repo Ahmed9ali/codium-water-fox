@@ -267,14 +267,12 @@ class SettingsSharedPreferences @Inject constructor(
         set(enabled) = preferences.edit { putBoolean(SHOW_AUTOMATIC_FIREPROOF_DIALOG, enabled) }
 
     override var omnibarType: OmnibarType
-        get() = OmnibarType.fromString(
-            preferences.getString(KEY_OMNIBAR_TYPE, OmnibarType.SINGLE_TOP.typeName) ?: OmnibarType.SINGLE_TOP.typeName,
-        )
-        set(value) = preferences.edit { putString(KEY_OMNIBAR_TYPE, value.typeName) }
-
+        get() = OmnibarType.SPLIT // Force the app to always use the SPLIT layout
+        set(value) { /* Ignore any attempts to change it */ }
+        
     override var isSplitOmnibarSelected: Boolean
-        get() = preferences.getBoolean(KEY_SPLIT_OMNIBAR, false)
-        set(value) = preferences.edit { putBoolean(KEY_SPLIT_OMNIBAR, value) }
+         get() = true // Force this to true
+        set(value) { /* Ignore */ }
 
     override var isFullUrlEnabled: Boolean
         get() = preferences.getBoolean(KEY_IS_FULL_URL_ENABLED, true)
