@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.lang.ref.WeakReference
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -1184,6 +1185,7 @@ object AutomationEngine {
         if (hudMode == HudMode.Recording) {
             currentWebView?.get()?.let { installRecorder(it) }
             hudRecordingPaused = false
+            startRecorderPoll()
             currentWebView?.get()?.evaluateJavascript("try{ window.__automationRecorderResume(); }catch(_){}", null)
             return
         }
@@ -1203,6 +1205,7 @@ object AutomationEngine {
         hudVisible = true
         Log.d(TAG, "startRecording: url=$url, host=$hudRecordingHost")
         installRecorder(webView)
+        startRecorderPoll()
         webView.postDelayed({
             if (hudMode == HudMode.Recording && hudRecordingPhase == RecordingPhase.Capturing) {
                 loadRecorder()?.let { webView.evaluateJavascript(it) { Log.d(TAG, "Recorder injected (delayed in startRecording)") } }
@@ -1240,18 +1243,82 @@ object AutomationEngine {
         s.filter { c -> !c.isISOControl() || c == '\n' || c == '\t' }.take(maxLen)
     } catch (_: Exception) { "" }
 
+    private fun peekRecorderSeq(json: String): Int = try {
+        JSONObject(json).optInt("seq", -1)
+    } catch (_: Exception) { -1 }
+
+    /** Tells the page what happened to a captured tap, so the on-screen toast shows the truth. */
+    private fun ackRecorder(seq: Int, ok: Boolean, msg: String) {
+        if (seq < 0) return
+        val webView = currentWebView?.get() ?: return
+        val safe = msg.replace("\\", " ").replace("'", " ").replace("\n", " ").replace("\r", " ")
+        webView.post {
+            webView.evaluateJavascript(
+                "try{ if (window.__automationRecorderAck) window.__automationRecorderAck($seq, $ok, '$safe'); }catch(_){}",
+                null
+            )
+        }
+    }
+
+    private var recorderPoll: Runnable? = null
+
+    /**
+     * Pulls queued taps out of the page with evaluateJavascript. This works even when window.AutomationBridge
+     * is not visible to the current document, so recording never needs a page refresh to start.
+     */
+    private fun startRecorderPoll() {
+        stopRecorderPoll()
+        val r = object : Runnable {
+            override fun run() {
+                if (hudMode != HudMode.Recording) { recorderPoll = null; return }
+                pollRecorderOnce()
+                mainHandler.postDelayed(this, 400)
+            }
+        }
+        recorderPoll = r
+        mainHandler.postDelayed(r, 400)
+    }
+
+    private fun stopRecorderPoll() {
+        recorderPoll?.let { mainHandler.removeCallbacks(it) }
+        recorderPoll = null
+    }
+
+    private fun pollRecorderOnce() {
+        val webView = currentWebView?.get() ?: return
+        webView.evaluateJavascript(
+            "(function(){try{return window.__automationRecorderDrain ? window.__automationRecorderDrain() : '';}catch(e){return '';}})()"
+        ) { raw ->
+            try {
+                if (raw.isNullOrBlank() || raw == "null") return@evaluateJavascript
+                val text = JSONTokener(raw).nextValue() as? String ?: return@evaluateJavascript
+                if (text.isBlank()) return@evaluateJavascript
+                val arr = JSONArray(text)
+                Log.d(TAG, "recorder poll: pulled ${arr.length()} queued tap(s) from the page")
+                for (i in 0 until arr.length()) {
+                    onRecorderElementCaptured(arr.getJSONObject(i).toString(), activeTabId)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "recorder poll parse fail: ${e.message}")
+            }
+        }
+    }
+
     fun onRecorderElementCaptured(json: String, tabId: String?) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainHandler.post { onRecorderElementCaptured(json, tabId) }
             return
         }
-        
+        val seq = peekRecorderSeq(json)
+
         if (hudMode != HudMode.Recording) {
             Log.w(TAG, "DROPPED tap: mode=$hudMode is not Recording (tabId=$tabId)")
+            ackRecorder(seq, false, "mode=$hudMode")
             return
         }
         if (hudRecordingPaused) {
             Log.w(TAG, "DROPPED tap: hudRecordingPaused=true (tabId=$tabId)")
+            ackRecorder(seq, false, "recording is paused")
             return
         }
 
@@ -1268,9 +1335,10 @@ object AutomationEngine {
             val xpathVal = sanitizeString(obj.optString("xpath", ""), 500)
             val domId = sanitizeString(obj.optString("domId", ""), 100)
             val name = sanitizeString(obj.optString("name", ""), 100)
-            
+
             if (cssSelector.isBlank() && xpathVal.isBlank() && domId.isBlank() && name.isBlank()) {
                 Log.w(TAG, "DROPPED tap: Rejecting step with no identifying selector")
+                ackRecorder(seq, false, "no selector")
                 return
             }
 
@@ -1280,6 +1348,7 @@ object AutomationEngine {
                 last.xpath == xpathVal && now - lastRecordedAt < 600
             ) {
                 Log.d(TAG, "DROPPED tap: Ignoring duplicate recorder event (fast re-click)")
+                ackRecorder(seq, false, "duplicate tap")
                 return
             }
             lastRecordedAt = now
@@ -1308,8 +1377,10 @@ object AutomationEngine {
             )
             hudRecordedSteps = hudRecordedSteps + step
             Log.d(TAG, "Recorded step #${step.sequenceIndex} kind=$stepKind label=$displayLabel")
+            ackRecorder(seq, true, "#${step.sequenceIndex}")
         } catch (e: Exception) {
             Log.e(TAG, "onRecorderElementCaptured parse fail: ${e.message}")
+            ackRecorder(seq, false, "error: ${e.message}")
         }
     }
 

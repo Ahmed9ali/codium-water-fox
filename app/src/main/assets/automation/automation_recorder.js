@@ -1,5 +1,12 @@
 /*
- * Automation Recorder v17
+ * Automation Recorder v18
+ *
+ * v18 on top of v17:
+ *  - toasts appear ON the tapped element, not at the bottom of the screen
+ *  - every captured tap carries a sequence number; Kotlin can acknowledge it, so the toast tells the truth
+ *    ("Recorded #4" or "Not recorded: <reason>")
+ *  - __automationRecorderDrain(): Kotlin can PULL queued events with evaluateJavascript, so recording no longer
+ *    depends on window.AutomationBridge being visible to the page
  *
  * v17 on top of v16:
  *  - on-screen toasts show what the recorder is doing (green = captured, orange = bridge not ready, grey = tap had no
@@ -28,7 +35,7 @@
 (function () {
   "use strict";
   const g = globalThis;
-  const VERSION = "v17";
+  const VERSION = "v18";
   const DEBUG = true;
 
   function log() {
@@ -55,7 +62,7 @@
   const S = {
     version: VERSION, doc: document, active: false, isPaused: carriedPause,
     listeners: [], outbox: [], pumpTimer: null, watchdog: null, styleEl: null, onReady: null, stop: null,
-    captured: 0, ignored: 0, rebinds: 0, patched: false,
+    captured: 0, ignored: 0, rebinds: 0, patched: false, seq: 0, pending: new Map(),
   };
 
   let lastTarget = null;
@@ -258,9 +265,9 @@
   }
 
 
-  // ---- on-screen feedback (so failures are visible without logcat) ----
+  // ---- on-screen feedback: the badge sits on the tapped element ----
   let toastEl = null, toastTimer = null;
-  function toast(msg, color) {
+  function toast(msg, color, target) {
     if (!CFG.TOASTS) return;
     try {
       const host = document.body || document.documentElement;
@@ -271,13 +278,28 @@
       el.setAttribute("data-automation-hud", "1");
       el.textContent = msg;
       el.style.cssText =
-        "position:fixed;z-index:2147483647;left:50%;transform:translateX(-50%);bottom:90px;max-width:80vw;" +
+        "position:fixed;z-index:2147483647;top:0;left:0;visibility:hidden;max-width:80vw;" +
         "background:" + color + ";color:#fff;font:700 12px -apple-system,BlinkMacSystemFont,sans-serif;" +
-        "padding:6px 12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.35);pointer-events:none;" +
+        "padding:5px 10px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.35);pointer-events:none;" +
         "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
       host.appendChild(el);
+      const w = el.offsetWidth, hgt = el.offsetHeight;
+      let r = null;
+      try { r = target && target.getBoundingClientRect ? target.getBoundingClientRect() : null; } catch (_) {}
+      let top, left;
+      if (r && (r.width || r.height)) {
+        top = r.top - hgt + 4;                       // sits on the top edge of the element
+        if (top < 6) top = r.top + 4;                // no room above: sit just inside the element
+        left = Math.max(6, Math.min(r.left + 6, window.innerWidth - w - 6));
+      } else {
+        top = window.innerHeight - 110;
+        left = Math.max(6, (window.innerWidth - w) / 2);
+      }
+      el.style.top = top + "px";
+      el.style.left = left + "px";
+      el.style.visibility = "visible";
       toastEl = el;
-      toastTimer = setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (_) {} }, 1300);
+      toastTimer = setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (_) {} }, 1600);
     } catch (_) {}
   }
 
@@ -319,12 +341,12 @@
     if (!S.outbox.length && S.pumpTimer) { clearInterval(S.pumpTimer); S.pumpTimer = null; }
   }
 
-  function sendToBridge(item) {
+  function sendToBridge(item, targetEl) {
     if (S.outbox.length === 0 && deliver(item)) { log("delivered to bridge"); return; }
     if (S.outbox.length >= CFG.OUTBOX_MAX) { warn("outbox full, dropping oldest event"); S.outbox.shift(); }
     S.outbox.push(item);
     warn("bridge not ready, queued (outbox=" + S.outbox.length + ")");
-    toast("\u26A0 Bridge not ready (queued " + S.outbox.length + ")", "#F59E0B");
+    toast("\u23F3 Sending... (bridge not ready)", "#F59E0B", targetEl);
     if (!S.pumpTimer) S.pumpTimer = setInterval(pump, CFG.PUMP_MS);
   }
 
@@ -397,7 +419,7 @@
       }
 
       const actual = resolveTarget(path);
-      if (!actual) { ignore("IGNORED (" + src + "): no interactive target, tapped " + describe(path[0])); toast("Nothing recordable: " + describe(path[0]), "#6B7280"); return; }
+      if (!actual) { ignore("IGNORED (" + src + "): no interactive target, tapped " + describe(path[0])); toast("Nothing recordable: " + describe(path[0]), "#6B7280", path[0]); return; }
       if (!isVisible(actual) && !isBoxy(actual)) { ignore("IGNORED (" + src + "): not visible " + describe(actual)); return; }
 
       // one tap = touchend + pointerup + click + focusin: record once
@@ -437,8 +459,11 @@
       };
       S.captured++;
       log("CAPTURED (" + src + "):", tag, payload.displayLabel);
-      sendToBridge(payload);
-      if (S.outbox.length === 0) toast("\u2713 Grabbed: " + (payload.displayLabel || tag), "#10B981");
+      payload.seq = ++S.seq;
+      S.pending.set(payload.seq, { el: actual, label: payload.displayLabel || tag });
+      if (S.pending.size > 30) S.pending.delete(S.pending.keys().next().value);
+      sendToBridge(payload, actual);
+      if (S.outbox.length === 0) toast("Grabbed: " + (payload.displayLabel || tag), "#0891B2", actual);
 
       // keyboard is already suppressed through inputmode=none; make sure the field is not left focused
       if (isTextField(actual)) { try { actual.blur(); } catch (_) {} }
@@ -599,13 +624,26 @@
     g.__automationRecorderPause = function () { S.isPaused = true; restoreKeyboard(); log("Recorder paused"); };
     g.__automationRecorderResume = function () { S.isPaused = false; log("Recorder resumed"); };
     g.__automationRecorderStop = stop;
+    // Kotlin can PULL queued events (works even when window.AutomationBridge is not visible to this page)
+    g.__automationRecorderDrain = function () {
+      if (!S.outbox.length) return "";
+      return JSON.stringify(S.outbox.splice(0, S.outbox.length));
+    };
+    // Kotlin acknowledges every event: the toast then shows what really happened
+    g.__automationRecorderAck = function (seq, ok, msg) {
+      const p = S.pending.get(seq);
+      S.pending.delete(seq);
+      const label = p ? p.label : "";
+      if (ok) toast("\u2713 Recorded " + (msg || "") + (label ? ": " + label : ""), "#10B981", p && p.el);
+      else toast("\u2717 Not recorded: " + msg, "#DC2626", p && p.el);
+    };
     g.__automationRecorderHealth = function () {
       return JSON.stringify({
         version: S.version, installed: !!g.__automationRecorderInstalled, active: S.active, paused: S.isPaused,
         listeners: S.listeners.length, outbox: S.outbox.length,
         bridge: !!(window.AutomationBridge && window.AutomationBridge.onElementRecorded),
         boundToThisDoc: S.doc === document, readyState: document.readyState, url: location.href,
-        captured: S.captured, ignored: S.ignored, rebinds: S.rebinds, lastBridgeError: S.lastBridgeError || "",
+        captured: S.captured, ignored: S.ignored, rebinds: S.rebinds, lastBridgeError: S.lastBridgeError || "", pendingAcks: S.pending.size,
       });
     };
 
