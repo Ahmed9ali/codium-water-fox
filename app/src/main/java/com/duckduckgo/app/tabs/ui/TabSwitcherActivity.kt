@@ -29,6 +29,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -317,6 +318,10 @@ class TabSwitcherActivity :
 
         configureViewReferences()
         setupToolbar(toolbar)
+        
+        // 1. REMOVED BACK ARROW
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+
         configureRecycler()
         configureNavigationBar()
         configureFireTabsEmptyState()
@@ -430,9 +435,7 @@ class TabSwitcherActivity :
                         viewModel.onNewTabRequested()
                     }
 
-                    override fun onFireButtonClicked() {
-                        viewModel.onFireButtonTapped()
-                    }
+                    // 2. REMOVED onFireButtonClicked() logic
                 }
             binding.navigationBar.setViewMode(BrowserNavigationBarView.ViewMode.TabManager)
             binding.navigationBar.show()
@@ -626,17 +629,22 @@ class TabSwitcherActivity :
 
         toggle?.visibility = if (showToggle) View.VISIBLE else View.GONE
 
-        supportActionBar?.title =
-            when {
-                mode is Selection ->
-                    if (mode.selectedTabs.isEmpty()) {
-                        getString(R.string.selectTabsMenuItem)
-                    } else {
-                        getString(R.string.tabSelectionTitle, mode.selectedTabs.size)
-                    }
-                showToggle -> ""
-                else -> resources.getQuantityString(R.plurals.tabSwitcherTitle, tabCount, tabCount)
-            }
+        // 3. CENTER TAB PILL: Hide the default ActionBar title
+        supportActionBar?.title = ""
+
+        val titleText = when {
+            mode is Selection ->
+                if (mode.selectedTabs.isEmpty()) {
+                    getString(R.string.selectTabsMenuItem)
+                } else {
+                    getString(R.string.tabSelectionTitle, mode.selectedTabs.size)
+                }
+            showToggle -> ""
+            else -> resources.getQuantityString(R.plurals.tabSwitcherTitle, tabCount, tabCount)
+        }
+
+        // Set the text on the centered custom view added in the XML layout
+        findViewById<TextView>(R.id.tabCountTextView)?.text = titleText
     }
 
     private fun checkTrackerAnimationPanelVisibility() {
@@ -988,14 +996,9 @@ class TabSwitcherActivity :
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.fireToolbarButton -> viewModel.onFireButtonTapped()
             R.id.popupMenuToolbarButton -> showPopupMenu(item.itemId)
             R.id.newTabToolbarButton -> onNewTabRequested(fromOverflowMenu = false)
-            R.id.duckAIToolbarButton -> viewModel.onDuckAIButtonClicked()
-            android.R.id.home -> {
-                viewModel.onUpButtonPressed()
-                return true
-            }
+            // 4. REMOVED DuckAI click handler and Back Arrow click handler
         }
         return super.onOptionsItemSelected(item)
     }

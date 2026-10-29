@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-
 <!--
   ~ Copyright (c) 2022 DuckDuckGo
   ~
@@ -39,6 +37,35 @@
         app:buttonGravity="center_vertical"
         app:contentInsetStartWithNavigation="0dp"
         app:popupTheme="@style/Widget.DuckDuckGo.PopUpOverflowMenu"
-        app:titleMarginStart="@dimen/keyline_4" />
+        app:titleMarginStart="@dimen/keyline_4">
+
+        <!-- Added ConstraintLayout to Center the Tab Count -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- Centered Tab Count View (Replace TextView with your actual custom view if applicable) -->
+            <TextView
+                android:id="@+id/tabCountTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="2"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_tab_count_pill" 
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="4dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <!-- Empty view on the left to ensure perfect centering -->
+            <View
+                android:layout_width="48dp"
+                android:layout_height="match_parent"
+                app:layout_constraintStart_toStartOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.appcompat.widget.Toolbar>
 
 </com.google.android.material.appbar.AppBarLayout>

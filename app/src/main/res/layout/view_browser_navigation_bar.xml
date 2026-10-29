@@ -33,27 +33,10 @@
         app:layout_constraintTop_toTopOf="parent"
         tools:parentTag="androidx.coordinatorlayout.widget.CoordinatorLayout">
 
+        <!-- Left Side: Autofill -->
         <FrameLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content">
-
-            <FrameLayout
-                android:id="@+id/newTabButton"
-                android:layout_width="@dimen/toolbarIcon"
-                android:layout_height="@dimen/toolbarIcon"
-                android:background="@drawable/selectable_item_rounded_corner_background"
-                android:visibility="gone"
-                tools:visibility="visible">
-
-                <ImageView
-                    android:id="@+id/newTabButtonImageView"
-                    android:layout_width="@dimen/bottomNavIcon"
-                    android:layout_height="@dimen/bottomNavIcon"
-                    android:layout_gravity="center"
-                    android:contentDescription="@string/newTabMenuItem"
-                    android:scaleType="center"
-                    android:src="@drawable/ic_add_24" />
-            </FrameLayout>
 
             <FrameLayout
                 android:id="@+id/autofillButton"
@@ -80,6 +63,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1" />
 
+        <!-- Mid-Left: Bookmarks -->
         <FrameLayout
             android:id="@+id/bookmarksButton"
             android:layout_width="@dimen/toolbarIcon"
@@ -101,20 +85,21 @@
             android:layout_height="match_parent"
             android:layout_weight="1" />
 
+        <!-- CENTER: Replaced Fire Button with New Tab (Add) Button -->
         <FrameLayout
-            android:id="@+id/fireButton"
+            android:id="@+id/newTabButton"
             android:layout_width="@dimen/toolbarIcon"
             android:layout_height="@dimen/toolbarIcon"
             android:background="@drawable/selectable_item_rounded_corner_background">
 
             <ImageView
-                android:id="@+id/fireIconImageView"
+                android:id="@+id/newTabButtonImageView"
                 android:layout_width="@dimen/bottomNavIcon"
                 android:layout_height="@dimen/bottomNavIcon"
                 android:layout_gravity="center"
-                android:contentDescription="@string/fireMenu"
+                android:contentDescription="@string/newTabMenuItem"
                 android:scaleType="center"
-                android:src="@drawable/ic_fire_24" />
+                android:src="@drawable/ic_add_24" />
         </FrameLayout>
 
         <Space
@@ -122,6 +107,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1" />
 
+        <!-- Mid-Right: Tab Switcher -->
         <com.duckduckgo.browser.ui.tabs.NewTabSwitcherButton
             android:id="@+id/tabsButton"
             android:layout_width="@dimen/toolbarIcon"
@@ -132,6 +118,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1" />
 
+        <!-- Right Side: Menu -->
         <FrameLayout
             android:id="@+id/menuButton"
             android:layout_width="@dimen/toolbarIcon"
