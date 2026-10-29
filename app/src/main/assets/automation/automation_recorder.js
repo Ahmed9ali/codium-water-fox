@@ -1,5 +1,12 @@
 /*
- * Automation Recorder v16
+ * Automation Recorder v17
+ *
+ * v17 on top of v16:
+ *  - on-screen toasts show what the recorder is doing (green = captured, orange = bridge not ready, grey = tap had no
+ *    recordable element), so you can see which layer fails without logcat
+ *  - wider detection of custom widgets (country-code pickers, date pickers, MUI / Ant / react-select, aria-haspopup...)
+ *  - keyboard is suppressed with inputmode=none BEFORE focus (no keyboard flash), restored on pause/stop
+ *  - stopPropagation hook only acts on real (trusted) user events
  *
  * v16 on top of v15:
  *  - canary + watchdog: if anything erases our listeners (document.open, page scripts, bfcache restore) they are re-bound within 2s
@@ -21,7 +28,7 @@
 (function () {
   "use strict";
   const g = globalThis;
-  const VERSION = "v16";
+  const VERSION = "v17";
   const DEBUG = true;
 
   function log() {
@@ -34,7 +41,7 @@
 
   try { if (window.top !== window) return; } catch (_) { return; }
 
-  const CFG = { OUTBOX_MAX: 200, PUMP_MS: 300, TAP_MAX_MS: 800, MOVE_PX: 30, POINTER_SCAN_DEPTH: 6 };
+  const CFG = { TOASTS: true, OUTBOX_MAX: 200, PUMP_MS: 300, TAP_MAX_MS: 800, MOVE_PX: 30, POINTER_SCAN_DEPTH: 6 };
 
   // ---- re-injection: only skip when we are really bound to THIS document ----
   const prev = g.__ddgRecorderState;
@@ -58,7 +65,14 @@
     'input, textarea, select, button, a, summary, [contenteditable=""], [contenteditable="true"], ' +
     '[role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], ' +
     '[role="combobox"], [role="textbox"], [role="tab"], [role="menuitem"], [role="option"], ' +
-    '[tabindex]:not([tabindex="-1"]), [onclick]';
+    '[tabindex]:not([tabindex="-1"]), [onclick], ' +
+    '[role="spinbutton"], [role="listbox"], [aria-haspopup], ' +
+    '[class*="callingCode"], [class*="calling-code"], [class*="countryDropDown"], [class*="country-code"], ' +
+    '[class*="countryCode"], [class*="dial-code"], [class*="dialCode"], [class*="birthday"], [class*="bday"], ' +
+    '[class*="date-root"], [class*="date-picker"], [class*="datepicker"], ' +
+    '.iti__selected-flag, .iti__selected-country, .iti__flag-container, .PhoneInputCountry, .selected-flag, .flag-dropdown, ' +
+    '[data-dial-code], [data-country-code], [data-datepicker], ' +
+    '.MuiSelect-select, .ant-select-selector, .react-select__control';
   const CLICK_INPUT_TYPES = ["submit", "button", "image", "reset"];
   const FIELD_ROLES = ["checkbox", "radio", "switch", "combobox", "textbox"];
 
@@ -243,12 +257,61 @@
     return false;
   }
 
+
+  // ---- on-screen feedback (so failures are visible without logcat) ----
+  let toastEl = null, toastTimer = null;
+  function toast(msg, color) {
+    if (!CFG.TOASTS) return;
+    try {
+      const host = document.body || document.documentElement;
+      if (!host) return;
+      if (toastEl && toastEl.parentNode) toastEl.parentNode.removeChild(toastEl);
+      clearTimeout(toastTimer);
+      const el = document.createElement("div");
+      el.setAttribute("data-automation-hud", "1");
+      el.textContent = msg;
+      el.style.cssText =
+        "position:fixed;z-index:2147483647;left:50%;transform:translateX(-50%);bottom:90px;max-width:80vw;" +
+        "background:" + color + ";color:#fff;font:700 12px -apple-system,BlinkMacSystemFont,sans-serif;" +
+        "padding:6px 12px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.35);pointer-events:none;" +
+        "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      host.appendChild(el);
+      toastEl = el;
+      toastTimer = setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (_) {} }, 1300);
+    } catch (_) {}
+  }
+
+  // ---- keyboard: inputmode=none BEFORE focus so no keyboard flashes up while recording ----
+  const kbSaved = new Map();
+  function suppressKeyboard(e, doBlur) {
+    try {
+      if (!S.active || S.isPaused) return;
+      const path = pathOf(e);
+      const n = Math.min(path.length, 4);
+      for (let i = 0; i < n; i++) {
+        const el = path[i];
+        if (isTextField(el) || el.isContentEditable) {
+          if (!kbSaved.has(el)) kbSaved.set(el, el.getAttribute("inputmode"));
+          el.setAttribute("inputmode", "none");
+          if (doBlur) { try { el.blur(); } catch (_) {} }
+          return;
+        }
+      }
+    } catch (_) {}
+  }
+  function restoreKeyboard() {
+    kbSaved.forEach(function (orig, el) {
+      try { if (orig === null) el.removeAttribute("inputmode"); else el.setAttribute("inputmode", orig); } catch (_) {}
+    });
+    kbSaved.clear();
+  }
+
   // ---- delivery: immediate first, outbox only as fallback ----
   function deliver(item) {
     const b = window.AutomationBridge;
     if (!b || !b.onElementRecorded) return false;
     try { b.onElementRecorded(JSON.stringify(item)); return true; }
-    catch (e) { warn("bridge call failed:", e && e.message); return false; }
+    catch (e) { S.lastBridgeError = String(e && e.message); warn("bridge call failed:", S.lastBridgeError); toast("\u26A0 bridge call failed", "#DC2626"); return false; }
   }
 
   function pump() {
@@ -261,6 +324,7 @@
     if (S.outbox.length >= CFG.OUTBOX_MAX) { warn("outbox full, dropping oldest event"); S.outbox.shift(); }
     S.outbox.push(item);
     warn("bridge not ready, queued (outbox=" + S.outbox.length + ")");
+    toast("\u26A0 Bridge not ready (queued " + S.outbox.length + ")", "#F59E0B");
     if (!S.pumpTimer) S.pumpTimer = setInterval(pump, CFG.PUMP_MS);
   }
 
@@ -333,7 +397,7 @@
       }
 
       const actual = resolveTarget(path);
-      if (!actual) { ignore("IGNORED (" + src + "): no interactive target, tapped " + describe(path[0])); return; }
+      if (!actual) { ignore("IGNORED (" + src + "): no interactive target, tapped " + describe(path[0])); toast("Nothing recordable: " + describe(path[0]), "#6B7280"); return; }
       if (!isVisible(actual) && !isBoxy(actual)) { ignore("IGNORED (" + src + "): not visible " + describe(actual)); return; }
 
       // one tap = touchend + pointerup + click + focusin: record once
@@ -374,16 +438,10 @@
       S.captured++;
       log("CAPTURED (" + src + "):", tag, payload.displayLabel);
       sendToBridge(payload);
+      if (S.outbox.length === 0) toast("\u2713 Grabbed: " + (payload.displayLabel || tag), "#10B981");
 
-      // keep the on-screen keyboard away from tapped text fields
-      if (isTextField(actual)) {
-        try {
-          const wasRO = actual.hasAttribute("readonly");
-          actual.setAttribute("readonly", "true");
-          actual.blur();
-          setTimeout(function () { try { if (!wasRO) actual.removeAttribute("readonly"); } catch (_) {} }, 250);
-        } catch (_) {}
-      }
+      // keyboard is already suppressed through inputmode=none; make sure the field is not left focused
+      if (isTextField(actual)) { try { actual.blur(); } catch (_) {} }
     } catch (err) {
       warn("processEvent failed:", err && err.message);
     }
@@ -419,10 +477,12 @@
       if (e.touches && e.touches.length === 1) {
         tX = e.touches[0].clientX; tY = e.touches[0].clientY; tT = Date.now(); tMoved = false;
       }
+      suppressKeyboard(e, false);
     }), passiveCap);
 
     on("pointerdown", track("pointerdown", function (e) {
       if (e.pointerType === "touch") { tX = e.clientX; tY = e.clientY; tT = Date.now(); tMoved = false; }
+      suppressKeyboard(e, false);
     }), cap);
 
     on("touchmove", track("touchmove", function (e) {
@@ -451,6 +511,7 @@
     on("click", track("click", function (e) { processEvent(e, "click"); }), cap);
 
     on("focusin", track("focusin", function (e) {
+      suppressKeyboard(e, true);
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) processEvent(e, "focusin");
     }), cap);
@@ -489,7 +550,7 @@
   function hook(orig) {
     function wrapped() {
       try {
-        if (S.active) {
+        if (S.active && this.isTrusted) {
           const h = HANDLERS[this.type];
           if (h) h(this);
         }
@@ -505,6 +566,7 @@
   // ---- lifecycle ----
   function stop() {
     S.active = false;
+    restoreKeyboard();
     unbindListeners();
     if (S.pumpTimer) { clearInterval(S.pumpTimer); S.pumpTimer = null; }
     if (S.watchdog) { clearInterval(S.watchdog); S.watchdog = null; }
@@ -534,7 +596,7 @@
     g.__ddgRecorderState = S;
     S.watchdog = setInterval(function () { verifyListeners("watchdog"); }, 2000);
 
-    g.__automationRecorderPause = function () { S.isPaused = true; log("Recorder paused"); };
+    g.__automationRecorderPause = function () { S.isPaused = true; restoreKeyboard(); log("Recorder paused"); };
     g.__automationRecorderResume = function () { S.isPaused = false; log("Recorder resumed"); };
     g.__automationRecorderStop = stop;
     g.__automationRecorderHealth = function () {
@@ -543,7 +605,7 @@
         listeners: S.listeners.length, outbox: S.outbox.length,
         bridge: !!(window.AutomationBridge && window.AutomationBridge.onElementRecorded),
         boundToThisDoc: S.doc === document, readyState: document.readyState, url: location.href,
-        captured: S.captured, ignored: S.ignored, rebinds: S.rebinds,
+        captured: S.captured, ignored: S.ignored, rebinds: S.rebinds, lastBridgeError: S.lastBridgeError || "",
       });
     };
 
