@@ -26,7 +26,6 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout.AttachedBehavior
 import androidx.coordinatorlayout.widget.CoordinatorLayout.Behavior
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnAttach
-import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelProvider
@@ -38,7 +37,6 @@ import com.duckduckgo.app.browser.databinding.ViewBrowserNavigationBarBinding
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyAutofillButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonClicked
-import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyFireButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyMenuButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyNewTabButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonClicked
@@ -48,7 +46,6 @@ import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewMo
 import com.duckduckgo.app.browser.omnibar.OmnibarType
 import com.duckduckgo.app.browser.omnibar.OmnibarView
 import com.duckduckgo.app.browser.webview.TopOmnibarBrowserContainerLayoutBehavior
-import com.duckduckgo.browser.ui.PulseAnimation
 import com.duckduckgo.common.ui.viewbinding.viewBinding
 import com.duckduckgo.common.utils.ConflatedJob
 import com.duckduckgo.common.utils.ViewViewModelFactory
@@ -101,10 +98,6 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         requireNotNull(findViewTreeLifecycleOwner())
     }
 
-    private val pulseAnimation: PulseAnimation by lazy {
-        PulseAnimation(lifecycleOwner)
-    }
-
     val popupMenuAnchor: View = binding.menuButton
 
     var browserNavigationBarObserver: BrowserNavigationBarObserver? = null
@@ -115,10 +108,9 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         }
     }
 
+    // Kept the method but it does nothing now since the fire button is removed
     fun setFireButtonHighlight(highlighted: Boolean) {
-        doOnAttach {
-            viewModel.setFireButtonHighlight(highlighted)
-        }
+        // No-op
     }
 
     fun setLocked(locked: Boolean) {
@@ -138,7 +130,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
     fun disableViewStateSaving() {
         binding.browserMenuImageView.isSaveEnabled = false
         binding.tabsButton.isSaveEnabled = false
-        binding.fireIconImageView.isSaveEnabled = false
+        // REMOVED: binding.fireIconImageView.isSaveEnabled = false
         binding.bookmarksImageView.isSaveEnabled = false
         binding.autofillButtonImageView.isSaveEnabled = false
         binding.newTabButtonImageView.isSaveEnabled = false
@@ -172,9 +164,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
             viewModel.onBookmarksButtonClicked()
         }
 
-        binding.fireButton.setOnClickListener {
-            viewModel.onFireButtonClicked()
-        }
+        // REMOVED: binding.fireButton.setOnClickListener { ... }
 
         binding.tabsButton.setOnClickListener {
             viewModel.onTabsButtonClicked()
@@ -206,27 +196,27 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         binding.newTabButton.isVisible = viewState.newTabButtonVisible
         binding.autofillButton.isVisible = viewState.autofillButtonVisible
         binding.bookmarksButton.isVisible = viewState.bookmarksButtonVisible
-        binding.fireButton.isVisible = viewState.fireButtonVisible
+        // REMOVED: binding.fireButton.isVisible = viewState.fireButtonVisible
         binding.tabsButton.isVisible = viewState.tabsButtonVisible
         binding.tabsButton.count = viewState.tabsCount
         binding.tabsButton.hasUnread = viewState.hasUnreadTabs
         binding.browserMenuHighlight.isVisible = viewState.showBrowserMenuHighlight
         binding.shadowView.isVisible = viewState.showShadow
 
-        renderFireButtonPulseAnimation(enabled = viewState.fireButtonHighlighted)
+        // REMOVED: renderFireButtonPulseAnimation(enabled = viewState.fireButtonHighlighted)
         applyEnabledState(viewState.enabledState)
     }
 
     private fun applyEnabledState(state: EnabledState) {
         val enabled = state == EnabledState.ALL
-        val fireEnabled = enabled || state == EnabledState.FIRE_BUTTON_ONLY
+        // REMOVED: val fireEnabled = enabled || state == EnabledState.FIRE_BUTTON_ONLY
 
         applyEnabled(binding.newTabButton, enabled)
         applyEnabled(binding.autofillButton, enabled)
         applyEnabled(binding.bookmarksButton, enabled)
         applyEnabled(binding.tabsButton, enabled)
         applyEnabled(binding.menuButton, enabled)
-        applyEnabled(binding.fireButton, fireEnabled)
+        // REMOVED: applyEnabled(binding.fireButton, fireEnabled)
     }
 
     private fun applyEnabled(view: View, enabled: Boolean) {
@@ -236,7 +226,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun processCommands(command: Command) {
         when (command) {
-            NotifyFireButtonClicked -> browserNavigationBarObserver?.onFireButtonClicked()
+            // REMOVED: NotifyFireButtonClicked -> browserNavigationBarObserver?.onFireButtonClicked()
             NotifyTabsButtonClicked -> browserNavigationBarObserver?.onTabsButtonClicked()
             NotifyTabsButtonLongClicked -> browserNavigationBarObserver?.onTabsButtonLongClicked()
             NotifyMenuButtonClicked -> browserNavigationBarObserver?.onMenuButtonClicked()
@@ -246,17 +236,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         }
     }
 
-    private fun renderFireButtonPulseAnimation(enabled: Boolean) {
-        if (enabled) {
-            if (!pulseAnimation.isActive) {
-                doOnLayout {
-                    pulseAnimation.playOn(targetView = binding.fireIconImageView)
-                }
-            }
-        } else {
-            pulseAnimation.stop()
-        }
-    }
+    // REMOVED: renderFireButtonPulseAnimation function entirely
 
     enum class ViewMode {
         CustomTab,
