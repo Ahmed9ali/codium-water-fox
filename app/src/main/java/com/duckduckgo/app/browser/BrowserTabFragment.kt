@@ -1699,10 +1699,8 @@ class BrowserTabFragment :
 
     private fun onFireButtonPressed() {
         val isFocusedNtp = omnibar.viewMode == ViewMode.NewTab && omnibar.getText().isEmpty() && omnibar.omnibarTextInput.hasFocus()
-        val cta = viewModel.ctaViewState.value?.cta
-        val isDuckAiOnboarding =
-            cta is OnboardingDaxDialogCta.DaxDuckAiFireButtonCta || cta is DaxDuckAiFireButtonBrandDesignUpdateContextualCta
-        browserActivity?.launchFire(launchedFromFocusedNtp = isFocusedNtp, isDuckAiOnboarding = isDuckAiOnboarding)
+        // The isDuckAiOnboarding variable is no longer needed here
+        browserActivity?.launchFire(launchedFromFocusedNtp = isFocusedNtp) // <--- FIXED
         viewModel.onFireMenuSelected(omnibar.viewMode)
     }
 
@@ -3161,8 +3159,7 @@ class BrowserTabFragment :
                 browserActivity?.launchFire()
             }
 
-            is Command.LaunchDuckAiOnboardingFireDialog -> browserActivity?.launchFire(isDuckAiOnboarding = true)
-
+                        is Command.LaunchDuckAiOnboardingFireDialog -> browserActivity?.launchFire() // <--- FIXED
             is Command.SwitchToTab -> {
                 binding.focusedView.gone()
                 if (binding.autoCompleteSuggestionsList.isVisible) {
