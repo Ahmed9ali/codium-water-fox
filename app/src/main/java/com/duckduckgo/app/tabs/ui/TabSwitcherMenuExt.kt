@@ -84,9 +84,7 @@ fun Menu.createDynamicInterface(
         }
     }
 
-    // REMOVED: toolbar.navigationIcon block to ensure no back arrow/close icon is set
-
-    // REMOVED: findItem(R.id.fireToolbarButton) and findItem(R.id.duckAIToolbarButton) to fix compilation errors
+    // Removed fire and duck AI menu item visibility toggles
 
     findItem(R.id.newTabToolbarButton).isVisible = dynamicMenu.isNewTabButtonVisible
     findItem(R.id.popupMenuToolbarButton).isVisible = dynamicMenu.isMenuButtonVisible
