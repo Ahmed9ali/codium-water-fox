@@ -29,7 +29,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -242,7 +241,6 @@ class TabSwitcherActivity :
     private lateinit var tabsContainer: FrameLayout
     private lateinit var tabItemDecorator: TabItemDecorator
     private lateinit var toolbar: Toolbar
-    private var centeredTabCountView: TextView? = null // Added for centered tab count
 
     private var layoutTypeMenuItem: MenuItem? = null
     private var tabSwitcherAnimationTileRemovalDialog: DaxAlertDialog? = null
@@ -478,7 +476,7 @@ class TabSwitcherActivity :
         val toggle = BrowserModeToggleView(this).also { browserModeToggle = it }
         toolbar.addView(
             toggle,
-            Toolbar.LayoutParams(Toolbar.LayoutParams.WRAP_CONTENT, Toolbar.LayoutParams.WRAP_CONTENT, Gravity.START or Gravity.CENTER_VERTICAL),
+            Toolbar.LayoutParams(Toolbar.LayoutParams.WRAP_CONTENT, Toolbar.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
         )
         toggle.setOnModeChangedListener { mode, fromDrag -> fadeOutTabsThenRecreate(mode, fromDrag = fromDrag) }
 
@@ -531,43 +529,17 @@ class TabSwitcherActivity :
         val showToggle = toggle != null && mode !is Selection
         toggle?.visibility = if (showToggle) View.VISIBLE else View.GONE
 
-        // Hide the default left-aligned ActionBar title
-        supportActionBar?.title = ""
-
-        val titleText = when {
-            mode is Selection ->
-                if (mode.selectedTabs.isEmpty()) getString(R.string.selectTabsMenuItem)
-                else getString(R.string.tabSelectionTitle, mode.selectedTabs.size)
-            showToggle -> ""
-            else -> resources.getQuantityString(R.plurals.tabSwitcherTitle, tabCount, tabCount)
-        }
-
-        // Create the exact pill view programmatically in the center
-        if (centeredTabCountView == null) {
-            centeredTabCountView = TextView(this).apply {
-                id = View.generateViewId()
-                gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-                textSize = 14f
-                // This creates the dark pill shape from your screenshot
-                val backgroundDrawable = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    cornerRadius = 50f // High value for rounded pill shape
-                    setColor(Color.parseColor("#555555")) // Dark gray
-                }
-                background = backgroundDrawable
-                setPadding(32, 8, 32, 8) // Adjust padding as needed
+        // The BrowserModeToggleView handles the tab count inside the pill.
+        // We only use the standard ActionBar title for Selection mode.
+        if (mode is Selection) {
+            supportActionBar?.title = if (mode.selectedTabs.isEmpty()) {
+                getString(R.string.selectTabsMenuItem)
+            } else {
+                getString(R.string.tabSelectionTitle, mode.selectedTabs.size)
             }
-            val layoutParams = Toolbar.LayoutParams(
-                Toolbar.LayoutParams.WRAP_CONTENT,
-                Toolbar.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER
-            )
-            toolbar.addView(centeredTabCountView, layoutParams)
+        } else {
+            supportActionBar?.title = ""
         }
-
-        centeredTabCountView?.text = titleText
-        centeredTabCountView?.visibility = if (titleText.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun checkTrackerAnimationPanelVisibility() {
@@ -806,7 +778,9 @@ class TabSwitcherActivity :
             dynamicMenu = viewState.dynamicInterface,
             navigationBar = binding.navigationBar,
         )
-        menu.findItem(R.id.newTabToolbarButton).setTitle(
+        
+        // SAFE CALL applied here to prevent crashes
+        menu.findItem(R.id.newTabToolbarButton)?.setTitle(
             when (currentBrowserMode) {
                 BrowserMode.FIRE -> R.string.fireTabsNewTabButton
                 BrowserMode.REGULAR -> R.string.newTabMenuItem

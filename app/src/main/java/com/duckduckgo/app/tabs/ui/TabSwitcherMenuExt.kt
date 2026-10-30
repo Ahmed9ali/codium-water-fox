@@ -1,93 +1,45 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Copyright (c) 2023 DuckDuckGo
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
 
-package com.duckduckgo.app.tabs.ui
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="AlwaysShowAction">
 
-import android.view.Menu
-import androidx.appcompat.widget.Toolbar
-import androidx.core.view.isVisible
-import com.duckduckgo.app.browser.R
-import com.duckduckgo.app.browser.databinding.PopupTabsMenuBinding
-import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarView
-import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.DynamicInterface
-import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.LayoutMode.GRID
-import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.LayoutMode.HIDDEN
-import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.LayoutMode.LIST
+    <!-- 1. INVISIBLE SPACER (Pushes the + button to the center) -->
+    <item
+        android:id="@+id/dummyLeftSpacer"
+        android:icon="@drawable/ic_menu_vertical_24"
+        android:title=""
+        android:visible="invisible"
+        app:showAsAction="always" />
 
-fun Menu.createDynamicInterface(
-    numSelectedTabs: Int,
-    popupMenu: PopupTabsMenuBinding,
-    toolbar: Toolbar,
-    dynamicMenu: DynamicInterface,
-    navigationBar: BrowserNavigationBarView,
-) {
-    popupMenu.selectAllMenuItem.isVisible = dynamicMenu.isSelectAllVisible
-    popupMenu.deselectAllMenuItem.isVisible = dynamicMenu.isDeselectAllVisible
-    popupMenu.selectionActionsDivider.isVisible = dynamicMenu.isSelectionActionsDividerVisible
-    popupMenu.shareSelectedLinksMenuItem.isVisible = dynamicMenu.isShareSelectedLinksVisible
-    popupMenu.bookmarkSelectedTabsMenuItem.isVisible = dynamicMenu.isBookmarkSelectedTabsVisible
-    popupMenu.selectTabsDivider.isVisible = dynamicMenu.isSelectTabsDividerVisible
-    popupMenu.selectTabsMenuItem.isVisible = dynamicMenu.isSelectTabsVisible
-    popupMenu.closeSelectedTabsMenuItem.isVisible = dynamicMenu.isCloseSelectedTabsVisible
-    popupMenu.closeOtherTabsMenuItem.isVisible = dynamicMenu.isCloseOtherTabsVisible
-    popupMenu.closeAllTabsDivider.isVisible = dynamicMenu.isCloseAllTabsDividerVisible
-    popupMenu.closeAllTabsMenuItem.isVisible = dynamicMenu.isCloseAllTabsVisible
+    <!-- 2. CENTER: The Add (+) Button -->
+    <item
+        android:id="@+id/newTabToolbarButton"
+        android:icon="@drawable/ic_add_24"
+        android:title="@string/newTabMenuItem"
+        app:showAsAction="always" />
 
-    popupMenu.shareSelectedLinksMenuItem.apply {
-        setPrimaryText(resources.getQuantityString(R.plurals.shareLinksMenuItem, numSelectedTabs, numSelectedTabs))
-    }
-    popupMenu.bookmarkSelectedTabsMenuItem.apply {
-        setPrimaryText(resources.getQuantityString(R.plurals.bookmarkTabsMenuItem, numSelectedTabs, numSelectedTabs))
-    }
-    popupMenu.closeSelectedTabsMenuItem.apply {
-        setPrimaryText(resources.getQuantityString(R.plurals.closeTabsMenuItem, numSelectedTabs, numSelectedTabs))
-    }
+    <!-- 3. RIGHT: The 3-Dots Menu -->
+    <item
+        android:id="@+id/popupMenuToolbarButton"
+        android:icon="@drawable/ic_menu_vertical_24"
+        android:title="@string/options"
+        app:showAsAction="always" />
 
-    popupMenu.gridLayoutMenuItem.apply {
-        when (dynamicMenu.layoutMenuMode) {
-            GRID -> {
-                setTrailingIconVisibility(false)
-                isVisible = true
-            }
-            LIST -> {
-                setTrailingIconVisibility(true)
-                isVisible = true
-            }
-            HIDDEN -> isVisible = false
-        }
-    }
-
-    popupMenu.listLayoutMenuItem.apply {
-        when (dynamicMenu.layoutMenuMode) {
-            GRID -> {
-                setTrailingIconVisibility(true)
-                isVisible = true
-            }
-            LIST -> {
-                setTrailingIconVisibility(false)
-                isVisible = true
-            }
-            HIDDEN -> isVisible = false
-        }
-    }
-
-    // Removed fire and duck AI menu item visibility toggles
-
-    findItem(R.id.newTabToolbarButton).isVisible = dynamicMenu.isNewTabButtonVisible
-    findItem(R.id.popupMenuToolbarButton).isVisible = dynamicMenu.isMenuButtonVisible
-
-    navigationBar.isVisible = dynamicMenu.isBottomBarVisible
-}
+</menu>
