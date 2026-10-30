@@ -1343,6 +1343,15 @@ class BrowserTabFragment :
         launchDownloadMessagesJob()
     }
 
+    private fun focusOmnibarForSearch() {
+        val input = omnibar.omnibarTextInput
+        input.requestFocus()
+        input.post {
+            val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
     private fun disableViewStateSaving() {
         viewLifecycleOwner.lifecycleScope.launch {
             val reduceBundleSize = withContext(dispatchers.io()) {
@@ -1606,6 +1615,15 @@ class BrowserTabFragment :
 
                 override fun onTabsButtonClicked() {
                     onTabsButtonPressed()
+                }
+
+                override fun onHomeButtonClicked() {
+                    if (newBrowserTab.newTabRootLayout.isVisible) return // already on home
+                    viewModel.onNavigationBarNewTabButtonClicked()
+                }
+
+                override fun onSearchButtonClicked() {
+                    focusOmnibarForSearch()
                 }
 
                 override fun onTabsButtonLongClicked() {

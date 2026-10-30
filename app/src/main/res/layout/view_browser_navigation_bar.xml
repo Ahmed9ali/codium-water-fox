@@ -20,6 +20,14 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
+    <!--
+      Brave-style bar: five EQUAL-WIDTH cells, each icon centered in its cell.
+
+      Browser / New tab / Duck.ai:  Home | Bookmark | Search | Tabs | More
+      Tab manager (tab switcher):   Fire |     -    |  + FAB | -    | More
+
+      Cells 1 and 3 hold two overlapping buttons; the view model decides which one is visible.
+    -->
     <LinearLayout
         android:id="@+id/barView"
         android:layout_width="match_parent"
@@ -33,17 +41,103 @@
         app:layout_constraintTop_toTopOf="parent"
         tools:parentTag="androidx.coordinatorlayout.widget.CoordinatorLayout">
 
+        <!-- Cell 1: Home (browser modes) / Fire (tab manager, or onboarding highlight) -->
         <FrameLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <FrameLayout
+                android:id="@+id/homeButton"
+                android:layout_width="@dimen/toolbarIcon"
+                android:layout_height="@dimen/toolbarIcon"
+                android:layout_gravity="center"
+                android:background="@drawable/selectable_item_rounded_corner_background">
+
+                <ImageView
+                    android:id="@+id/homeImageView"
+                    android:layout_width="@dimen/bottomNavIcon"
+                    android:layout_height="@dimen/bottomNavIcon"
+                    android:layout_gravity="center"
+                    android:contentDescription="@string/navBarHome"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_nav_home_24" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/fireButton"
+                android:layout_width="@dimen/toolbarIcon"
+                android:layout_height="@dimen/toolbarIcon"
+                android:layout_gravity="center"
+                android:background="@drawable/selectable_item_rounded_corner_background"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/fireIconImageView"
+                    android:layout_width="@dimen/bottomNavIcon"
+                    android:layout_height="@dimen/bottomNavIcon"
+                    android:layout_gravity="center"
+                    android:contentDescription="@string/fireMenu"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_fire_24" />
+            </FrameLayout>
+        </FrameLayout>
+
+        <!-- Cell 2: Bookmark -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <FrameLayout
+                android:id="@+id/bookmarksButton"
+                android:layout_width="@dimen/toolbarIcon"
+                android:layout_height="@dimen/toolbarIcon"
+                android:layout_gravity="center"
+                android:background="@drawable/selectable_item_rounded_corner_background">
+
+                <ImageView
+                    android:id="@+id/bookmarksImageView"
+                    android:layout_width="@dimen/bottomNavIcon"
+                    android:layout_height="@dimen/bottomNavIcon"
+                    android:layout_gravity="center"
+                    android:contentDescription="@string/bookmarksMenuTitle"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_nav_bookmark_24" />
+            </FrameLayout>
+        </FrameLayout>
+
+        <!-- Cell 3: Search (browser modes) / centered + FAB (tab manager only) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <FrameLayout
+                android:id="@+id/searchButton"
+                android:layout_width="@dimen/toolbarIcon"
+                android:layout_height="@dimen/toolbarIcon"
+                android:layout_gravity="center"
+                android:background="@drawable/selectable_item_rounded_corner_background">
+
+                <ImageView
+                    android:id="@+id/searchImageView"
+                    android:layout_width="@dimen/bottomNavIcon"
+                    android:layout_height="@dimen/bottomNavIcon"
+                    android:layout_gravity="center"
+                    android:contentDescription="@string/navBarSearch"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_nav_search_24" />
+            </FrameLayout>
 
             <FrameLayout
                 android:id="@+id/newTabButton"
-                android:layout_width="@dimen/toolbarIcon"
-                android:layout_height="@dimen/toolbarIcon"
-                android:background="@drawable/selectable_item_rounded_corner_background"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_nav_fab"
                 android:visibility="gone"
-                tools:visibility="visible">
+                tools:visibility="gone">
 
                 <ImageView
                     android:id="@+id/newTabButtonImageView"
@@ -52,110 +146,55 @@
                     android:layout_gravity="center"
                     android:contentDescription="@string/newTabMenuItem"
                     android:scaleType="center"
-                    android:src="@drawable/ic_add_24" />
+                    android:src="@drawable/ic_add_24"
+                    android:tint="@color/waterfoxFabIcon" />
             </FrameLayout>
+        </FrameLayout>
 
-            <FrameLayout
-                android:id="@+id/autofillButton"
+        <!-- Cell 4: Tabs (with count) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <com.duckduckgo.browser.ui.tabs.NewTabSwitcherButton
+                android:id="@+id/tabsButton"
                 android:layout_width="@dimen/toolbarIcon"
                 android:layout_height="@dimen/toolbarIcon"
-                android:background="@drawable/selectable_item_rounded_corner_background"
-                android:visibility="gone"
-                tools:visibility="visible">
+                android:layout_gravity="center" />
+        </FrameLayout>
+
+        <!-- Cell 5: More -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <FrameLayout
+                android:id="@+id/menuButton"
+                android:layout_width="@dimen/toolbarIcon"
+                android:layout_height="@dimen/toolbarIcon"
+                android:layout_gravity="center"
+                android:background="@drawable/selectable_item_rounded_corner_background">
 
                 <ImageView
-                    android:id="@+id/autofillButtonImageView"
+                    android:id="@+id/browserMenuImageView"
                     android:layout_width="@dimen/bottomNavIcon"
                     android:layout_height="@dimen/bottomNavIcon"
                     android:layout_gravity="center"
-                    android:contentDescription="@string/autofillManagementScreenTitle"
+                    android:contentDescription="@string/browserPopupMenu"
                     android:scaleType="center"
-                    android:src="@drawable/ic_key_24" />
+                    android:src="@drawable/ic_menu_vertical_24" />
+
+                <View
+                    android:id="@+id/browserMenuHighlight"
+                    android:layout_width="7dp"
+                    android:layout_height="7dp"
+                    android:layout_gravity="end"
+                    android:layout_margin="@dimen/keyline_2"
+                    android:background="@drawable/ic_dot_indicator_7"
+                    android:visibility="gone" />
             </FrameLayout>
-
-        </FrameLayout>
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-
-        <FrameLayout
-            android:id="@+id/bookmarksButton"
-            android:layout_width="@dimen/toolbarIcon"
-            android:layout_height="@dimen/toolbarIcon"
-            android:background="@drawable/selectable_item_rounded_corner_background">
-
-            <ImageView
-                android:id="@+id/bookmarksImageView"
-                android:layout_width="@dimen/bottomNavIcon"
-                android:layout_height="@dimen/bottomNavIcon"
-                android:layout_gravity="center"
-                android:contentDescription="@string/bookmarksMenuTitle"
-                android:scaleType="center"
-                android:src="@drawable/ic_bookmarks_24" />
-        </FrameLayout>
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-
-        <FrameLayout
-            android:id="@+id/fireButton"
-            android:layout_width="@dimen/toolbarIcon"
-            android:layout_height="@dimen/toolbarIcon"
-            android:background="@drawable/selectable_item_rounded_corner_background">
-
-            <ImageView
-                android:id="@+id/fireIconImageView"
-                android:layout_width="@dimen/bottomNavIcon"
-                android:layout_height="@dimen/bottomNavIcon"
-                android:layout_gravity="center"
-                android:contentDescription="@string/fireMenu"
-                android:scaleType="center"
-                android:src="@drawable/ic_fire_24" />
-        </FrameLayout>
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-
-        <com.duckduckgo.browser.ui.tabs.NewTabSwitcherButton
-            android:id="@+id/tabsButton"
-            android:layout_width="@dimen/toolbarIcon"
-            android:layout_height="@dimen/toolbarIcon" />
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-
-        <FrameLayout
-            android:id="@+id/menuButton"
-            android:layout_width="@dimen/toolbarIcon"
-            android:layout_height="@dimen/toolbarIcon"
-            android:background="@drawable/selectable_item_rounded_corner_background">
-
-            <ImageView
-                android:id="@+id/browserMenuImageView"
-                android:layout_width="@dimen/bottomNavIcon"
-                android:layout_height="@dimen/bottomNavIcon"
-                android:layout_gravity="center"
-                android:contentDescription="@string/browserPopupMenu"
-                android:scaleType="center"
-                android:src="@drawable/ic_menu_vertical_24" />
-
-            <View
-                android:id="@+id/browserMenuHighlight"
-                android:layout_width="7dp"
-                android:layout_height="7dp"
-                android:layout_gravity="end"
-                android:layout_margin="@dimen/keyline_2"
-                android:background="@drawable/ic_dot_indicator_7"
-                android:visibility="gone" />
-
         </FrameLayout>
 
     </LinearLayout>

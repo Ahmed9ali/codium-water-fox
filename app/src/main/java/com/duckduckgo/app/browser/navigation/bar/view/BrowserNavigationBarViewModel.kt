@@ -32,8 +32,10 @@ import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarView.V
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyAutofillButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyFireButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyHomeButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyMenuButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyNewTabButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifySearchButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonLongClicked
 import com.duckduckgo.app.pixels.AppPixelName
@@ -129,6 +131,7 @@ class BrowserNavigationBarViewModel @Inject constructor(
         _commands.trySend(NotifyNewTabButtonClicked)
     }
 
+    // Kept so the existing observer / fragment code still compiles. No button triggers it any more.
     fun onAutofillButtonClicked() {
         pixel.fire(AppPixelName.BROWSER_NAV_PASSWORDS_PRESSED.pixelName)
         _commands.trySend(NotifyAutofillButtonClicked)
@@ -139,58 +142,19 @@ class BrowserNavigationBarViewModel @Inject constructor(
         _commands.trySend(NotifyBookmarksButtonClicked)
     }
 
+    // No pixels for the new buttons on purpose: they would need new AppPixelName entries.
+    fun onHomeButtonClicked() {
+        _commands.trySend(NotifyHomeButtonClicked)
+    }
+
+    fun onSearchButtonClicked() {
+        _commands.trySend(NotifySearchButtonClicked)
+    }
+
     fun setViewMode(viewMode: ViewMode) {
-        when (viewMode) {
-            NewTab -> {
-                _viewState.update {
-                    it.copy(
-                        newTabButtonVisible = false,
-                        autofillButtonVisible = true,
-                        viewMode = viewMode,
-                    )
-                }
-            }
-
-            Browser -> {
-                _viewState.update {
-                    it.copy(
-                        newTabButtonVisible = true,
-                        autofillButtonVisible = false,
-                        viewMode = viewMode,
-                    )
-                }
-            }
-
-            DuckAI -> {
-                _viewState.update {
-                    it.copy(
-                        newTabButtonVisible = true,
-                        autofillButtonVisible = false,
-                        viewMode = viewMode,
-                    )
-                }
-            }
-
-            TabManager -> {
-                _viewState.update {
-                    it.copy(
-                        newTabButtonVisible = true,
-                        autofillButtonVisible = false,
-                        tabsButtonVisible = false,
-                        bookmarksButtonVisible = false,
-                        showShadow = false,
-                        viewMode = viewMode,
-                    )
-                }
-            }
-            CustomTab -> {
-                _viewState.update {
-                    it.copy(
-                        isVisible = false,
-                        viewMode = viewMode,
-                    )
-                }
-            }
+        _viewState.update { state ->
+            val base = if (viewMode == CustomTab) state.copy(isVisible = false) else state
+            base.copy(viewMode = viewMode).withButtonVisibility()
         }
     }
 
@@ -199,7 +163,7 @@ class BrowserNavigationBarViewModel @Inject constructor(
             it.copy(
                 fireButtonHighlighted = highlighted,
                 enabledState = enabledStateFor(locked = locked, fireButtonHighlighted = highlighted),
-            )
+            ).withButtonVisibility()
         }
     }
 
@@ -208,6 +172,29 @@ class BrowserNavigationBarViewModel @Inject constructor(
         _viewState.update {
             it.copy(enabledState = enabledStateFor(locked = locked, fireButtonHighlighted = it.fireButtonHighlighted))
         }
+    }
+
+    /**
+     * Single place that decides which buttons are visible (Brave-style bar).
+     *
+     * - Browser / NewTab / DuckAI: Home, Bookmark, Search, Tabs, More.
+     * - TabManager (tab switcher): Fire (left), + (centered), More.
+     * - Onboarding fire highlight in the normal modes: Fire takes Home's slot so the two never overlap,
+     *   otherwise the onboarding lock (which only allows the fire button) would trap the user.
+     * - CustomTab: the whole bar is hidden elsewhere ([ViewState.isVisible]).
+     */
+    private fun ViewState.withButtonVisibility(): ViewState {
+        val tabManager = viewMode == TabManager
+        val showFire = tabManager || fireButtonHighlighted
+        return copy(
+            homeButtonVisible = !showFire,
+            bookmarksButtonVisible = !tabManager,
+            searchButtonVisible = !tabManager,
+            tabsButtonVisible = !tabManager,
+            newTabButtonVisible = tabManager,
+            fireButtonVisible = showFire,
+            showShadow = !tabManager,
+        )
     }
 
     private fun enabledStateFor(locked: Boolean, fireButtonHighlighted: Boolean): EnabledState = when {
@@ -224,6 +211,8 @@ class BrowserNavigationBarViewModel @Inject constructor(
         data object NotifyNewTabButtonClicked : Command()
         data object NotifyAutofillButtonClicked : Command()
         data object NotifyBookmarksButtonClicked : Command()
+        data object NotifyHomeButtonClicked : Command()
+        data object NotifySearchButtonClicked : Command()
     }
 
     /**
@@ -236,10 +225,11 @@ class BrowserNavigationBarViewModel @Inject constructor(
 
     data class ViewState(
         val isVisible: Boolean = true,
-        val newTabButtonVisible: Boolean = true,
-        val autofillButtonVisible: Boolean = false,
+        val homeButtonVisible: Boolean = true,
+        val newTabButtonVisible: Boolean = false,
         val bookmarksButtonVisible: Boolean = true,
-        val fireButtonVisible: Boolean = true,
+        val searchButtonVisible: Boolean = true,
+        val fireButtonVisible: Boolean = false,
         val fireButtonHighlighted: Boolean = false,
         val tabsButtonVisible: Boolean = true,
         val tabsCount: Int = 0,

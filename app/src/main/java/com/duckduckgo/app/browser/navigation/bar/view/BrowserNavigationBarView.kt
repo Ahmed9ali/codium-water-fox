@@ -39,8 +39,10 @@ import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewMo
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyAutofillButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyFireButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyHomeButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyMenuButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyNewTabButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifySearchButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonLongClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.EnabledState
@@ -140,7 +142,8 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         binding.tabsButton.isSaveEnabled = false
         binding.fireIconImageView.isSaveEnabled = false
         binding.bookmarksImageView.isSaveEnabled = false
-        binding.autofillButtonImageView.isSaveEnabled = false
+        binding.homeImageView.isSaveEnabled = false
+        binding.searchImageView.isSaveEnabled = false
         binding.newTabButtonImageView.isSaveEnabled = false
     }
 
@@ -160,16 +163,20 @@ class BrowserNavigationBarView @JvmOverloads constructor(
             .onEach(::renderView)
             .launchIn(coroutineScope)
 
+        binding.homeButton.setOnClickListener {
+            viewModel.onHomeButtonClicked()
+        }
+
         binding.newTabButton.setOnClickListener {
             viewModel.onNewTabButtonClicked()
         }
 
-        binding.autofillButton.setOnClickListener {
-            viewModel.onAutofillButtonClicked()
-        }
-
         binding.bookmarksButton.setOnClickListener {
             viewModel.onBookmarksButtonClicked()
+        }
+
+        binding.searchButton.setOnClickListener {
+            viewModel.onSearchButtonClicked()
         }
 
         binding.fireButton.setOnClickListener {
@@ -203,9 +210,10 @@ class BrowserNavigationBarView @JvmOverloads constructor(
     private fun renderView(viewState: ViewState) {
         binding.root.isVisible = viewState.isVisible
 
+        binding.homeButton.isVisible = viewState.homeButtonVisible
         binding.newTabButton.isVisible = viewState.newTabButtonVisible
-        binding.autofillButton.isVisible = viewState.autofillButtonVisible
         binding.bookmarksButton.isVisible = viewState.bookmarksButtonVisible
+        binding.searchButton.isVisible = viewState.searchButtonVisible
         binding.fireButton.isVisible = viewState.fireButtonVisible
         binding.tabsButton.isVisible = viewState.tabsButtonVisible
         binding.tabsButton.count = viewState.tabsCount
@@ -221,9 +229,10 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         val enabled = state == EnabledState.ALL
         val fireEnabled = enabled || state == EnabledState.FIRE_BUTTON_ONLY
 
+        applyEnabled(binding.homeButton, enabled)
         applyEnabled(binding.newTabButton, enabled)
-        applyEnabled(binding.autofillButton, enabled)
         applyEnabled(binding.bookmarksButton, enabled)
+        applyEnabled(binding.searchButton, enabled)
         applyEnabled(binding.tabsButton, enabled)
         applyEnabled(binding.menuButton, enabled)
         applyEnabled(binding.fireButton, fireEnabled)
@@ -243,6 +252,8 @@ class BrowserNavigationBarView @JvmOverloads constructor(
             NotifyBookmarksButtonClicked -> browserNavigationBarObserver?.onBookmarksButtonClicked()
             NotifyNewTabButtonClicked -> browserNavigationBarObserver?.onNewTabButtonClicked()
             NotifyAutofillButtonClicked -> browserNavigationBarObserver?.onAutofillButtonClicked()
+            NotifyHomeButtonClicked -> browserNavigationBarObserver?.onHomeButtonClicked()
+            NotifySearchButtonClicked -> browserNavigationBarObserver?.onSearchButtonClicked()
         }
     }
 
