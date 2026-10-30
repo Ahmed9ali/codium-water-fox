@@ -84,10 +84,9 @@ fun Menu.createDynamicInterface(
         }
     }
 
-    // We removed the fire and duck AI menu item visibility toggles here because they no longer exist in the menu
-
-    findItem(R.id.newTabToolbarButton).isVisible = dynamicMenu.isNewTabButtonVisible
-    findItem(R.id.popupMenuToolbarButton).isVisible = dynamicMenu.isMenuButtonVisible
+    // COMMENTED OUT: These IDs no longer exist in menu_tab_switcher_activity.xml
+    // findItem(R.id.newTabToolbarButton).isVisible = dynamicMenu.isNewTabButtonVisible
+    // findItem(R.id.popupMenuToolbarButton).isVisible = dynamicMenu.isMenuButtonVisible
 
     navigationBar.isVisible = dynamicMenu.isBottomBarVisible
 }

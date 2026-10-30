@@ -772,13 +772,15 @@ class TabSwitcherActivity :
             navigationBar = binding.navigationBar,
         )
         
-        // SAFE CALL applied here to prevent crashes
+        // COMMENTED OUT: newTabToolbarButton removed from menu_tab_switcher_activity.xml
+        /*
         menu.findItem(R.id.newTabToolbarButton)?.setTitle(
             when (currentBrowserMode) {
                 BrowserMode.FIRE -> R.string.fireTabsNewTabButton
                 BrowserMode.REGULAR -> R.string.newTabMenuItem
             },
         )
+        */
         return true
     }
 
@@ -799,7 +801,8 @@ class TabSwitcherActivity :
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.popupMenuToolbarButton -> showPopupMenu(findViewById(item.itemId))
+            // COMMENTED OUT: popupMenuToolbarButton removed from menu_tab_switcher_activity.xml
+            // R.id.popupMenuToolbarButton -> showPopupMenu(findViewById(item.itemId))
             // REMOVED DuckAI, Back Arrow, and NewTab click handlers
         }
         return super.onOptionsItemSelected(item)
