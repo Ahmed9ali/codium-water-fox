@@ -57,8 +57,6 @@ import com.duckduckgo.app.browser.api.OmnibarRepository
 import com.duckduckgo.app.browser.databinding.ActivityTabSwitcherBinding
 import com.duckduckgo.app.browser.databinding.PopupTabsMenuBinding
 import com.duckduckgo.app.browser.favicon.FaviconManager
-import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarObserver
-import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarView
 import com.duckduckgo.app.browser.omnibar.OmnibarType
 import com.duckduckgo.app.browser.tabpreview.WebViewPreviewPersister
 import com.duckduckgo.app.pixels.BrowserModeSwitchSource
@@ -267,7 +265,7 @@ class TabSwitcherActivity :
         when (settingsDataStore.omnibarType) {
             OmnibarType.SINGLE_BOTTOM -> toolbar
             OmnibarType.SINGLE_TOP -> null
-            OmnibarType.SPLIT -> binding.navigationBar
+            OmnibarType.SPLIT -> binding.tabSwitcherToolbarBottom.root
         }
     }
 
@@ -307,7 +305,7 @@ class TabSwitcherActivity :
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
 
         configureRecycler()
-        configureNavigationBar()
+        configureBottomToolbar()
         configureFireTabsEmptyState()
         configureEdgeToEdgeInsets()
         configureObservers()
@@ -373,32 +371,29 @@ class TabSwitcherActivity :
             }
             OmnibarType.SINGLE_BOTTOM -> {
                 edgeToEdgeHandler.applyStatusBarInsets(tabsContainer)
-                edgeToEdgeHandler.applyNavigationBarInsets(binding.tabSwitcherToolbarBottom.appBarLayout)
-                binding.tabSwitcherToolbarBottom.appBarLayout.setBackgroundColor(getColorFromAttr(CommonR.attr.daxColorToolbar))
+                edgeToEdgeHandler.applyNavigationBarInsets(binding.tabSwitcherToolbarBottom.root)
+                binding.tabSwitcherToolbarBottom.root.setBackgroundColor(getColorFromAttr(CommonR.attr.daxColorToolbar))
             }
             OmnibarType.SPLIT -> {
                 edgeToEdgeHandler.applyStatusBarInsets(binding.tabSwitcherToolbarTop.root)
-                edgeToEdgeHandler.applyNavigationBarInsets(binding.navigationBar)
+                edgeToEdgeHandler.applyNavigationBarInsets(binding.tabSwitcherToolbarBottom.root)
+                binding.tabSwitcherToolbarBottom.root.setBackgroundColor(getColorFromAttr(CommonR.attr.daxColorToolbar))
             }
         }
     }
 
-    private fun configureNavigationBar() {
-        if (omnibarRepository.omnibarType == OmnibarType.SPLIT) {
-            binding.navigationBar.browserNavigationBarObserver =
-                object : BrowserNavigationBarObserver {
-                    override fun onMenuButtonClicked() {
-                        showPopupMenu(binding.navigationBar.popupMenuAnchor.id)
-                    }
-                    override fun onNewTabButtonClicked() {
-                        viewModel.onNewTabRequested()
-                    }
-                    // REMOVED onFireButtonClicked()
-                }
-            binding.navigationBar.setViewMode(BrowserNavigationBarView.ViewMode.TabManager)
-            binding.navigationBar.show()
-        } else {
-            binding.navigationBar.gone()
+    private fun configureBottomToolbar() {
+        // Hide the browser navigation bar in Tab Switcher
+        binding.navigationBar.gone()
+        
+        // Setup custom bottom bar clicks (for SINGLE_BOTTOM and SPLIT)
+        if (settingsDataStore.omnibarType != OmnibarType.SINGLE_TOP) {
+            binding.tabSwitcherToolbarBottom.newTabButton.setOnClickListener {
+                viewModel.onNewTabRequested(fromOverflowMenu = false)
+            }
+            binding.tabSwitcherToolbarBottom.menuButton.setOnClickListener {
+                showPopupMenu(it)
+            }
         }
     }
 
@@ -413,7 +408,7 @@ class TabSwitcherActivity :
         when (settingsDataStore.omnibarType) {
             OmnibarType.SINGLE_TOP -> binding.root.removeView(binding.tabSwitcherToolbarBottom.root)
             OmnibarType.SINGLE_BOTTOM -> binding.root.removeView(binding.tabSwitcherToolbarTop.root)
-            OmnibarType.SPLIT -> binding.root.removeView(binding.tabSwitcherToolbarBottom.root)
+            OmnibarType.SPLIT -> binding.navigationBar.gone() // Hide browser nav bar, use custom bottom bar
         }
         toolbar = findViewById(R.id.toolbar)
         tabsContainer = findViewById(R.id.tabsContainer)
@@ -529,8 +524,6 @@ class TabSwitcherActivity :
         val showToggle = toggle != null && mode !is Selection
         toggle?.visibility = if (showToggle) View.VISIBLE else View.GONE
 
-        // The BrowserModeToggleView handles the tab count inside the pill.
-        // We only use the standard ActionBar title for Selection mode.
         if (mode is Selection) {
             supportActionBar?.title = if (mode.selectedTabs.isEmpty()) {
                 getString(R.string.selectTabsMenuItem)
@@ -806,15 +799,13 @@ class TabSwitcherActivity :
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.popupMenuToolbarButton -> showPopupMenu(item.itemId)
-            R.id.newTabToolbarButton -> onNewTabRequested(fromOverflowMenu = false)
-            // REMOVED DuckAI and Back Arrow click handlers
+            R.id.popupMenuToolbarButton -> showPopupMenu(findViewById(item.itemId))
+            // REMOVED DuckAI, Back Arrow, and NewTab click handlers
         }
         return super.onOptionsItemSelected(item)
     }
 
-    private fun showPopupMenu(itemId: Int) {
-        val anchorView = findViewById<View>(itemId)
+    private fun showPopupMenu(anchorView: View) {
         popupMenu.show(binding.root, anchorView)
         viewModel.onMenuOpened()
     }

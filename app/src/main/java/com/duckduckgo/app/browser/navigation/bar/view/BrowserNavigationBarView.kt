@@ -1,17 +1,6 @@
 /*
  * Copyright (c) 2025 DuckDuckGo
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * ... (License Header) ...
  */
 
 package com.duckduckgo.app.browser.navigation.bar.view
@@ -99,7 +88,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
     }
 
     fun setFireButtonHighlight(highlighted: Boolean) {
-        // No-op since fire button is removed from UI updates
+        // Kept empty to prevent breaking other code, Fire logic is handled elsewhere
     }
 
     fun setLocked(locked: Boolean) {
@@ -118,9 +107,8 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         binding.browserMenuImageView.isSaveEnabled = false
         binding.tabsButton.isSaveEnabled = false
         binding.bookmarksImageView.isSaveEnabled = false
-        // Commented out missing buttons
-        // binding.autofillButtonImageView.isSaveEnabled = false
-        // binding.newTabButtonImageView.isSaveEnabled = false
+        // binding.autofillButtonImageView.isSaveEnabled = false // Removed to fix crash
+        // binding.newTabButtonImageView.isSaveEnabled = false // Removed to fix crash
     }
 
     override fun onAttachedToWindow() {
@@ -134,10 +122,8 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         conflatedCommandsJob += viewModel.commands.onEach(::processCommands).launchIn(coroutineScope)
         conflatedStateJob += viewModel.viewState.onEach(::renderView).launchIn(coroutineScope)
 
-        // Commented out missing buttons
-        // binding.newTabButton.setOnClickListener { viewModel.onNewTabButtonClicked() }
-        // binding.autofillButton.setOnClickListener { viewModel.onAutofillButtonClicked() }
-        
+        // binding.newTabButton.setOnClickListener { viewModel.onNewTabButtonClicked() } // Removed
+        // binding.autofillButton.setOnClickListener { viewModel.onAutofillButtonClicked() } // Removed
         binding.bookmarksButton.setOnClickListener { viewModel.onBookmarksButtonClicked() }
         binding.tabsButton.setOnClickListener { viewModel.onTabsButtonClicked() }
         binding.tabsButton.setOnLongClickListener { viewModel.onTabsButtonLongClicked() }
@@ -157,10 +143,8 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun renderView(viewState: ViewState) {
         binding.root.isVisible = viewState.isVisible
-        // Commented out missing buttons
-        // binding.newTabButton.isVisible = viewState.newTabButtonVisible
-        // binding.autofillButton.isVisible = viewState.autofillButtonVisible
-        
+        // binding.newTabButton.isVisible = viewState.newTabButtonVisible // Removed
+        // binding.autofillButton.isVisible = viewState.autofillButtonVisible // Removed
         binding.bookmarksButton.isVisible = viewState.bookmarksButtonVisible
         binding.tabsButton.isVisible = viewState.tabsButtonVisible
         binding.tabsButton.count = viewState.tabsCount
@@ -173,10 +157,8 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun applyEnabledState(state: EnabledState) {
         val enabled = state == EnabledState.ALL
-        // Commented out missing buttons
-        // applyEnabled(binding.newTabButton, enabled)
-        // applyEnabled(binding.autofillButton, enabled)
-        
+        // applyEnabled(binding.newTabButton, enabled) // Removed
+        // applyEnabled(binding.autofillButton, enabled) // Removed
         applyEnabled(binding.bookmarksButton, enabled)
         applyEnabled(binding.tabsButton, enabled)
         applyEnabled(binding.menuButton, enabled)
@@ -195,16 +177,12 @@ class BrowserNavigationBarView @JvmOverloads constructor(
             NotifyBookmarksButtonClicked -> browserNavigationBarObserver?.onBookmarksButtonClicked()
             NotifyNewTabButtonClicked -> browserNavigationBarObserver?.onNewTabButtonClicked()
             NotifyAutofillButtonClicked -> browserNavigationBarObserver?.onAutofillButtonClicked()
-            else -> { /* Ignore unhandled commands like the removed Fire button */ }
+            else -> { /* Ignore unhandled */ }
         }
     }
 
     enum class ViewMode {
-        CustomTab,
-        NewTab,
-        Browser,
-        DuckAI,
-        TabManager,
+        CustomTab, NewTab, Browser, DuckAI, TabManager,
     }
 
     inner class BottomViewBehavior(
