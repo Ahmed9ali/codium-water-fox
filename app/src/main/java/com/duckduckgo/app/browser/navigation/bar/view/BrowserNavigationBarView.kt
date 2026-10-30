@@ -1,8 +1,3 @@
-/*
- * Copyright (c) 2025 DuckDuckGo
- * ... (License Header) ...
- */
-
 package com.duckduckgo.app.browser.navigation.bar.view
 
 import android.content.Context
@@ -24,17 +19,13 @@ import androidx.lifecycle.lifecycleScope
 import com.duckduckgo.anvil.annotations.InjectWith
 import com.duckduckgo.app.browser.databinding.ViewBrowserNavigationBarBinding
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command
-import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyAutofillButtonClicked
-import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyMenuButtonClicked
-import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyNewTabButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonLongClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.EnabledState
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.ViewState
 import com.duckduckgo.app.browser.omnibar.OmnibarType
 import com.duckduckgo.app.browser.omnibar.OmnibarView
-import com.duckduckgo.app.browser.webview.TopOmnibarBrowserContainerLayoutBehavior
 import com.duckduckgo.common.ui.viewbinding.viewBinding
 import com.duckduckgo.common.utils.ConflatedJob
 import com.duckduckgo.common.utils.ViewViewModelFactory
@@ -88,7 +79,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
     }
 
     fun setFireButtonHighlight(highlighted: Boolean) {
-        // Kept empty to prevent breaking other code, Fire logic is handled elsewhere
+        // No-op
     }
 
     fun setLocked(locked: Boolean) {
@@ -106,9 +97,6 @@ class BrowserNavigationBarView @JvmOverloads constructor(
     fun disableViewStateSaving() {
         binding.browserMenuImageView.isSaveEnabled = false
         binding.tabsButton.isSaveEnabled = false
-        binding.bookmarksImageView.isSaveEnabled = false
-        // binding.autofillButtonImageView.isSaveEnabled = false // Removed to fix crash
-        // binding.newTabButtonImageView.isSaveEnabled = false // Removed to fix crash
     }
 
     override fun onAttachedToWindow() {
@@ -122,9 +110,6 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         conflatedCommandsJob += viewModel.commands.onEach(::processCommands).launchIn(coroutineScope)
         conflatedStateJob += viewModel.viewState.onEach(::renderView).launchIn(coroutineScope)
 
-        // binding.newTabButton.setOnClickListener { viewModel.onNewTabButtonClicked() } // Removed
-        // binding.autofillButton.setOnClickListener { viewModel.onAutofillButtonClicked() } // Removed
-        binding.bookmarksButton.setOnClickListener { viewModel.onBookmarksButtonClicked() }
         binding.tabsButton.setOnClickListener { viewModel.onTabsButtonClicked() }
         binding.tabsButton.setOnLongClickListener { viewModel.onTabsButtonLongClicked() }
         binding.menuButton.setOnClickListener { viewModel.onMenuButtonClicked() }
@@ -143,9 +128,6 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun renderView(viewState: ViewState) {
         binding.root.isVisible = viewState.isVisible
-        // binding.newTabButton.isVisible = viewState.newTabButtonVisible // Removed
-        // binding.autofillButton.isVisible = viewState.autofillButtonVisible // Removed
-        binding.bookmarksButton.isVisible = viewState.bookmarksButtonVisible
         binding.tabsButton.isVisible = viewState.tabsButtonVisible
         binding.tabsButton.count = viewState.tabsCount
         binding.tabsButton.hasUnread = viewState.hasUnreadTabs
@@ -157,9 +139,6 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun applyEnabledState(state: EnabledState) {
         val enabled = state == EnabledState.ALL
-        // applyEnabled(binding.newTabButton, enabled) // Removed
-        // applyEnabled(binding.autofillButton, enabled) // Removed
-        applyEnabled(binding.bookmarksButton, enabled)
         applyEnabled(binding.tabsButton, enabled)
         applyEnabled(binding.menuButton, enabled)
     }
@@ -174,10 +153,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
             NotifyTabsButtonClicked -> browserNavigationBarObserver?.onTabsButtonClicked()
             NotifyTabsButtonLongClicked -> browserNavigationBarObserver?.onTabsButtonLongClicked()
             NotifyMenuButtonClicked -> browserNavigationBarObserver?.onMenuButtonClicked()
-            NotifyBookmarksButtonClicked -> browserNavigationBarObserver?.onBookmarksButtonClicked()
-            NotifyNewTabButtonClicked -> browserNavigationBarObserver?.onNewTabButtonClicked()
-            NotifyAutofillButtonClicked -> browserNavigationBarObserver?.onAutofillButtonClicked()
-            else -> { /* Ignore unhandled */ }
+            else -> { /* Ignore */ }
         }
     }
 
