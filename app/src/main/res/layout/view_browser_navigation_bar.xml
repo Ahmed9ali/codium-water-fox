@@ -13,62 +13,58 @@
         android:background="?attr/daxColorShadeSolid"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <LinearLayout
-        android:id="@+id/barView"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/navigationBarPaddingHorizontal"
-        android:paddingTop="@dimen/navigationBarPaddingTop"
-        android:paddingBottom="@dimen/navigationBarPaddingBottom"
-        android:weightSum="3"
-        app:layout_constraintTop_toBottomOf="@id/shadowView">
+    <!-- Left: Fire Button -->
+    <FrameLayout
+        android:id="@+id/fireButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="16dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+        <ImageView
+            android:id="@+id/fireButtonImageView"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_fire_24" />
+    </FrameLayout>
 
-        <!-- Left: Fire Button -->
-        <FrameLayout
-            android:id="@+id/fireButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackgroundBorderless">
-            <ImageView
-                android:id="@+id/fireButtonImageView"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_fire_24" />
-        </FrameLayout>
+    <!-- Center: Tabs Button -->
+    <com.duckduckgo.browser.ui.tabs.NewTabSwitcherButton
+        android:id="@+id/tabsButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Center: Tabs -->
-        <com.duckduckgo.browser.ui.tabs.NewTabSwitcherButton
-            android:id="@+id/tabsButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1" />
+    <!-- Right: Menu Button -->
+    <FrameLayout
+        android:id="@+id/menuButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="16dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+        <ImageView
+            android:id="@+id/browserMenuImageView"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_menu_vertical_24" />
+        <View
+            android:id="@+id/browserMenuHighlight"
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:layout_gravity="end"
+            android:layout_margin="@dimen/keyline_2"
+            android:background="@drawable/ic_dot_indicator_7"
+            android:visibility="gone" />
+    </FrameLayout>
 
-        <!-- Right: Menu -->
-        <FrameLayout
-            android:id="@+id/menuButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackgroundBorderless">
-            <ImageView
-                android:id="@+id/browserMenuImageView"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_menu_vertical_24" />
-            <View
-                android:id="@+id/browserMenuHighlight"
-                android:layout_width="7dp"
-                android:layout_height="7dp"
-                android:layout_gravity="end"
-                android:layout_margin="@dimen/keyline_2"
-                android:background="@drawable/ic_dot_indicator_7"
-                android:visibility="gone" />
-        </FrameLayout>
-
-    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

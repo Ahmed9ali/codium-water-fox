@@ -382,16 +382,17 @@ class TabSwitcherActivity :
         }
     }
 
-        private fun configureBottomToolbar() {
+            private fun configureBottomToolbar() {
         // Hide the browser navigation bar in Tab Switcher
         binding.navigationBar.gone()
         
         // Setup custom bottom bar clicks safely
         if (settingsDataStore.omnibarType != OmnibarType.SINGLE_TOP) {
-            binding.tabSwitcherToolbarBottom.root.findViewById<android.widget.ImageButton>(R.id.newTabButton)?.setOnClickListener {
+            val bottomBar = binding.tabSwitcherToolbarBottom.root
+            bottomBar.findViewById<android.widget.ImageButton>(R.id.newTabButton)?.setOnClickListener {
                 viewModel.onNewTabRequested(fromOverflowMenu = false)
             }
-            binding.tabSwitcherToolbarBottom.root.findViewById<android.widget.ImageButton>(R.id.menuButton)?.setOnClickListener {
+            bottomBar.findViewById<android.widget.ImageButton>(R.id.menuButton)?.setOnClickListener {
                 showPopupMenu(it)
             }
         }
