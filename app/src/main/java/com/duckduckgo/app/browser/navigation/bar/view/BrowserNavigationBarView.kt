@@ -99,7 +99,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
     }
 
     fun setFireButtonHighlight(highlighted: Boolean) {
-        // No-op since fire button is removed
+        // No-op since fire button is removed from UI updates
     }
 
     fun setLocked(locked: Boolean) {
@@ -118,8 +118,9 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         binding.browserMenuImageView.isSaveEnabled = false
         binding.tabsButton.isSaveEnabled = false
         binding.bookmarksImageView.isSaveEnabled = false
-        binding.autofillButtonImageView.isSaveEnabled = false
-        binding.newTabButtonImageView.isSaveEnabled = false
+        // Commented out missing buttons
+        // binding.autofillButtonImageView.isSaveEnabled = false
+        // binding.newTabButtonImageView.isSaveEnabled = false
     }
 
     override fun onAttachedToWindow() {
@@ -133,8 +134,10 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         conflatedCommandsJob += viewModel.commands.onEach(::processCommands).launchIn(coroutineScope)
         conflatedStateJob += viewModel.viewState.onEach(::renderView).launchIn(coroutineScope)
 
-        binding.newTabButton.setOnClickListener { viewModel.onNewTabButtonClicked() }
-        binding.autofillButton.setOnClickListener { viewModel.onAutofillButtonClicked() }
+        // Commented out missing buttons
+        // binding.newTabButton.setOnClickListener { viewModel.onNewTabButtonClicked() }
+        // binding.autofillButton.setOnClickListener { viewModel.onAutofillButtonClicked() }
+        
         binding.bookmarksButton.setOnClickListener { viewModel.onBookmarksButtonClicked() }
         binding.tabsButton.setOnClickListener { viewModel.onTabsButtonClicked() }
         binding.tabsButton.setOnLongClickListener { viewModel.onTabsButtonLongClicked() }
@@ -154,8 +157,10 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun renderView(viewState: ViewState) {
         binding.root.isVisible = viewState.isVisible
-        binding.newTabButton.isVisible = viewState.newTabButtonVisible
-        binding.autofillButton.isVisible = viewState.autofillButtonVisible
+        // Commented out missing buttons
+        // binding.newTabButton.isVisible = viewState.newTabButtonVisible
+        // binding.autofillButton.isVisible = viewState.autofillButtonVisible
+        
         binding.bookmarksButton.isVisible = viewState.bookmarksButtonVisible
         binding.tabsButton.isVisible = viewState.tabsButtonVisible
         binding.tabsButton.count = viewState.tabsCount
@@ -168,8 +173,10 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun applyEnabledState(state: EnabledState) {
         val enabled = state == EnabledState.ALL
-        applyEnabled(binding.newTabButton, enabled)
-        applyEnabled(binding.autofillButton, enabled)
+        // Commented out missing buttons
+        // applyEnabled(binding.newTabButton, enabled)
+        // applyEnabled(binding.autofillButton, enabled)
+        
         applyEnabled(binding.bookmarksButton, enabled)
         applyEnabled(binding.tabsButton, enabled)
         applyEnabled(binding.menuButton, enabled)
