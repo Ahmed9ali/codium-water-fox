@@ -20,17 +20,19 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="AlwaysShowAction">
 
-    <!-- HIDDEN: Back Button -->
+    <!-- HIDDEN: Back Button (Using @null since it is invisible) -->
     <item
         android:id="@+id/backToolbarButton"
-        android:icon="@drawable/ic_arrow_back_24"
+        android:icon="@null"
+        android:title=""
         android:visible="false"
         app:showAsAction="always" />
 
-    <!-- HIDDEN: Duck AI Button -->
+    <!-- HIDDEN: Duck AI Button (Using @null since it is invisible) -->
     <item
         android:id="@+id/duckAIToolbarButton"
-        android:icon="@drawable/ic_ai_chat_24"
+        android:icon="@null"
+        android:title=""
         android:visible="false"
         app:showAsAction="always" />
 
