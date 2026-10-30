@@ -1,5 +1,12 @@
 /*
- * Automation Recorder v18
+ * Automation Recorder v19
+ *
+ * v19 on top of v18:
+ *  - at-least-once delivery: every tap is pushed to the bridge AND kept until Kotlin acknowledges it; Kotlin pulls
+ *    anything unacknowledged, and de-duplicates by uid (a silently lost bridge call can no longer lose a step)
+ *  - field classification from ordered evidence: autocomplete/type, own attributes, labels, aria-labelledby,
+ *    web-component (shadow DOM) host labels, nearby label text. Fields stop falling back to "Text Input"
+ *  - toasts also explain "not visible" and "paused" taps
  *
  * v18 on top of v17:
  *  - toasts appear ON the tapped element, not at the bottom of the screen
@@ -35,7 +42,7 @@
 (function () {
   "use strict";
   const g = globalThis;
-  const VERSION = "v18";
+  const VERSION = "v19";
   const DEBUG = true;
 
   function log() {
@@ -62,7 +69,7 @@
   const S = {
     version: VERSION, doc: document, active: false, isPaused: carriedPause,
     listeners: [], outbox: [], pumpTimer: null, watchdog: null, styleEl: null, onReady: null, stop: null,
-    captured: 0, ignored: 0, rebinds: 0, patched: false, seq: 0, pending: new Map(),
+    captured: 0, ignored: 0, rebinds: 0, patched: false, seq: 0, pending: new Map(), unacked: [], docId: Math.random().toString(36).slice(2, 8),
   };
 
   let lastTarget = null;
@@ -218,42 +225,132 @@
     return (label || "").replace(/\s+/g, " ").trim().slice(0, 100);
   }
 
+  // ---- field classification: ordered evidence tiers (mirrors the scanner's token names) ----
+  // Rename a token here if your FieldTypeMapper expects a different spelling (e.g. website -> companywebsite).
+  const TOKEN_OUT = { website: "website" };
+  const AUTOCOMPLETE_MAP = {
+    "given-name": "firstname", "family-name": "lastname", "additional-name": "middlename",
+    name: "fullname", email: "email", username: "username", "current-password": "password",
+    "new-password": "password", "one-time-code": "otp", tel: "phone", "tel-national": "phone",
+    "street-address": "address", "address-line1": "address", "address-line2": "address",
+    "address-level1": "state", "address-level2": "city", "postal-code": "zip",
+    country: "country", "country-name": "country", bday: "dob", "bday-day": "dob",
+    "bday-month": "dob", "bday-year": "dob", organization: "company", "organization-title": "jobtitle", sex: "gender",
+  };
+  const RX = [
+    ["confirmpassword", /\b(confirm|repeat|re-?enter|verify)\b.*\b(password|pass)\b|\b(password|pass)\b.*\b(confirm|repeat)\b/i],
+    ["confirmemail", /\b(confirm|repeat|re-?enter|verify)\b.*\b(e-?mail)\b|\b(e-?mail)\b.*\b(confirm|repeat)\b/i],
+    ["otp", /\b(otp|one[-\s]?time\s*(code|password)|2fa|verification\s*code|security\s*code|sms\s*code|auth\s*code)\b/i],
+    ["password", /\b(password|passwd|passcode|pwd)\b/i],
+    ["email", /e-?mail/i],
+    ["website", /website|web\s*site|homepage|web\s*address|\burl\b/i],
+    ["phone", /phone|mobile|whatsapp|telephone|contact\s*number|\btel\b|\bcell\b/i],
+    ["firstname", /\b(first|given)\s*name\b|\bfname\b|\bforename\b/i],
+    ["middlename", /\b(middle|mid)\s*name\b/i],
+    ["lastname", /\b(last|family|sur)\s*name\b|\blname\b|\bsurname\b/i],
+    ["dob", /\b(dob|date\s*of\s*birth|birth[\s_-]?date|birthday|bday)\b/i],
+    ["nickname", /\b(nick\s*name|nickname|alias)\b/i],
+    ["username", /\b(user[\s_-]?name|user[\s_-]?id|login|handle|screen[\s_-]?name)\b/i],
+    ["zip", /\b(zip|postal|post[\s_-]?code|pin\s*code|pincode)\b/i],
+    ["city", /\b(city|town|ville)\b/i],
+    ["state", /\b(state|province|region|county)\b/i],
+    ["country", /\b(country|nation)\b/i],
+    ["address", /\b(address|street|line\s*1|line\s*2|apartment|apt)\b/i],
+    ["company", /company|organi[sz]ation|employer|business/i],
+    ["jobtitle", /\b(job\s*title|position|role|occupation|designation)\b/i],
+    ["gender", /\b(gender|sex)\b/i],
+    ["fullname", /\b(full\s*name|your\s*name|display\s*name|name)\b/i],
+    ["message", /\b(message|comment|feedback|description|bio|notes?|details?)\b/i],
+  ];
+  function classifyText(t) {
+    if (!t) return "";
+    for (let i = 0; i < RX.length; i++) if (RX[i][1].test(t)) return RX[i][0];
+    return "";
+  }
+  function attrOf(el, n) { try { return (el.getAttribute && el.getAttribute(n)) || ""; } catch (_) { return ""; } }
+  // split camelCase / snake_case / kebab-case so "companyName" and "first_name" match word patterns
+  function clean(s) {
+    return String(s || "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 200);
+  }
+
+  // evidence from the element itself, its labels, its web-component host (shadow DOM) and nearby text
+  function evidence(el) {
+    const own = [attrOf(el, "placeholder"), attrOf(el, "aria-label"), attrOf(el, "title"), attrOf(el, "name"), el.id,
+      attrOf(el, "inputmode"), attrOf(el, "data-testid"), attrOf(el, "data-name")].join(" ");
+    const labels = [];
+    try { if (el.labels) for (let i = 0; i < el.labels.length; i++) labels.push(el.labels[i].textContent); } catch (_) {}
+    try {
+      const ids = attrOf(el, "aria-labelledby").split(/\s+/).filter(Boolean);
+      const root = el.getRootNode ? el.getRootNode() : document;
+      ids.forEach(function (id) {
+        const n = (root.getElementById ? root.getElementById(id) : null) || document.getElementById(id);
+        if (n) labels.push(n.textContent);
+      });
+    } catch (_) {}
+    try { const wl = el.closest && el.closest("label"); if (wl) labels.push(wl.textContent); } catch (_) {}
+    const host = [];
+    try {
+      let root = el.getRootNode ? el.getRootNode() : null, hops = 0;
+      while (root && root.host && hops < 3) {
+        const h = root.host;
+        host.push(attrOf(h, "label"), attrOf(h, "placeholder"), attrOf(h, "name"), h.id, attrOf(h, "aria-label"),
+          attrOf(h, "autocomplete"), attrOf(h, "data-testid"));
+        try { const l = h.querySelector("label, [slot=label]"); if (l) host.push(l.textContent); } catch (_) {}
+        try { const l2 = root.querySelector("label, [part=label], .label"); if (l2) host.push(l2.textContent); } catch (_) {}
+        root = h.getRootNode(); hops++;
+      }
+    } catch (_) {}
+    const near = [];
+    try {
+      let p = el.parentElement;
+      for (let i = 0; i < 3 && p; i++, p = p.parentElement) {
+        // a nearby label only counts when this wrapper holds exactly one control (otherwise it belongs to a neighbour)
+        let nCtl = 0;
+        try { nCtl = p.querySelectorAll("input:not([type=hidden]), select, textarea").length; } catch (_) {}
+        if (nCtl !== 1) break;
+        let lab = null;
+        try { lab = p.querySelector(":scope > label, :scope > legend, :scope > [class*='label' i]"); } catch (_) {}
+        if (lab && lab.textContent && lab.textContent.length < 80 && !lab.contains(el)) { near.push(lab.textContent); break; }
+        const prev = p.previousElementSibling;
+        if (prev && prev.textContent && prev.textContent.length < 60 && !prev.querySelector("input, select, textarea, button")) { near.push(prev.textContent); break; }
+      }
+    } catch (_) {}
+    return { own: clean(own), labels: clean(labels.join(" ")), host: clean(host.join(" ")), near: clean(near.join(" ")) };
+  }
+
+  function bestLabel(el) {
+    const ev = evidence(el);
+    const raw = attrOf(el, "aria-label") || (el.labels && el.labels[0] && el.labels[0].textContent) ||
+      attrOf(el, "placeholder") || ev.labels || ev.host || ev.near || attrOf(el, "name") || el.id || "";
+    return String(raw).replace(/\s+/g, " ").trim().slice(0, 60);
+  }
+
   function classify(el) {
     const tag = (el.tagName || "").toLowerCase();
     const type = (el.type || "").toLowerCase();
-    const role = (el.getAttribute("role") || "").toLowerCase();
-    const ac = (el.getAttribute("autocomplete") || "").toLowerCase();
-    const c = (getLabel(el) + " " + (el.name || "") + " " + (el.id || "")).toLowerCase();
+    const role = attrOf(el, "role").toLowerCase();
+    const out = function (tok) { return TOKEN_OUT[tok] || tok; };
+    const ev = evidence(el);
+
     if (type === "checkbox" || type === "radio" || role === "checkbox" || role === "radio" || role === "switch") {
-      if (/\b(gender|sex|male|female)\b/i.test(c)) return "gender";
+      if (/\b(gender|sex|male|female)\b/i.test(ev.own + " " + ev.labels + " " + ev.near)) return "gender";
       return "termscheckbox";
     }
-    if (ac) {
-      if (ac.includes("email")) return "email";
-      if (ac.includes("tel")) return "phone";
-      if (ac.includes("name")) {
-        if (ac.includes("given")) return "firstName";
-        if (ac.includes("family")) return "lastName";
-        return "fullName";
-      }
-      if (ac.includes("street")) return "address";
-      if (ac.includes("postal")) return "zip";
-    }
+    const ac = attrOf(el, "autocomplete").toLowerCase().split(/\s+/)[0];
+    if (ac && AUTOCOMPLETE_MAP[ac]) return out(AUTOCOMPLETE_MAP[ac]);
+    if (type === "password") return /\b(confirm|repeat|re-?enter|verify)\b/i.test(ev.own + " " + ev.labels) ? "confirmpassword" : "password";
     if (type === "email") return "email";
     if (type === "tel") return "phone";
-    if (type === "password") return "password";
     if (type === "date") return "dob";
-    if (/\b(first|given)\s*name\b|\bfname\b/.test(c)) return "firstName";
-    if (/\b(last|family|sur)\s*name\b|\blname\b/.test(c)) return "lastName";
-    if (/\b(full\s*name|your\s*name|name)\b/.test(c)) return "fullName";
-    if (/\b(e-?mail)\b/.test(c)) return "email";
-    if (/\b(phone|mobile|tel)\b/.test(c)) return "phone";
-    if (/\b(password|pass)\b/.test(c)) return "password";
-    if (/\b(city)\b/.test(c)) return "city";
-    if (/\b(state)\b/.test(c)) return "state";
-    if (/\b(zip|postal)\b/.test(c)) return "zip";
-    if (/\b(country)\b/.test(c)) return "country";
-    if (tag === "textarea" || /\b(message|comment|description)\b/.test(c)) return "message";
+    if (type === "url") return out("website");
+
+    // strongest evidence first; the first tier that recognises the field wins
+    const tiers = [ev.own, ev.labels, ev.host, ev.near, ev.own + " " + ev.labels + " " + ev.host];
+    for (let i = 0; i < tiers.length; i++) {
+      const tok = classifyText(tiers[i]);
+      if (tok) return out(tok);
+    }
+    if (tag === "textarea" || role === "textbox") return "message";
     return "text";
   }
   function isTextField(el) {
@@ -336,13 +433,24 @@
     catch (e) { S.lastBridgeError = String(e && e.message); warn("bridge call failed:", S.lastBridgeError); toast("\u26A0 bridge call failed", "#DC2626"); return false; }
   }
 
+  function capUnacked() {
+    while (S.unacked.length > 50) S.unacked.shift();
+  }
+
   function pump() {
-    while (S.outbox.length && deliver(S.outbox[0])) S.outbox.shift();
+    while (S.outbox.length && deliver(S.outbox[0])) { S.unacked.push(S.outbox.shift()); }
+    capUnacked();
     if (!S.outbox.length && S.pumpTimer) { clearInterval(S.pumpTimer); S.pumpTimer = null; }
   }
 
+  // Push to the bridge now (survives instant navigation) but keep the event until Kotlin acknowledges it.
+  // Anything unacknowledged is pulled by Kotlin through __automationRecorderDrain().
   function sendToBridge(item, targetEl) {
-    if (S.outbox.length === 0 && deliver(item)) { log("delivered to bridge"); return; }
+    if (S.outbox.length === 0 && deliver(item)) {
+      S.unacked.push(item); capUnacked();
+      log("pushed to bridge, waiting for ack");
+      return;
+    }
     if (S.outbox.length >= CFG.OUTBOX_MAX) { warn("outbox full, dropping oldest event"); S.outbox.shift(); }
     S.outbox.push(item);
     warn("bridge not ready, queued (outbox=" + S.outbox.length + ")");
@@ -410,7 +518,7 @@
   function processEvent(e, src) {
     try {
       if (!S.active) return;
-      if (S.isPaused) { ignore("IGNORED (" + src + "): recorder paused"); return; }
+      if (S.isPaused) { ignore("IGNORED (" + src + "): recorder paused"); if (src === "click") toast("Recorder paused", "#6B7280"); return; }
 
       const path = pathOf(e);
       if (!path.length) { ignore("IGNORED (" + src + "): no target"); return; }
@@ -420,7 +528,7 @@
 
       const actual = resolveTarget(path);
       if (!actual) { ignore("IGNORED (" + src + "): no interactive target, tapped " + describe(path[0])); toast("Nothing recordable: " + describe(path[0]), "#6B7280", path[0]); return; }
-      if (!isVisible(actual) && !isBoxy(actual)) { ignore("IGNORED (" + src + "): not visible " + describe(actual)); return; }
+      if (!isVisible(actual) && !isBoxy(actual)) { ignore("IGNORED (" + src + "): not visible " + describe(actual)); toast("Not visible: " + describe(actual), "#6B7280", actual); return; }
 
       // one tap = touchend + pointerup + click + focusin: record once
       const now = Date.now();
@@ -443,7 +551,7 @@
         setTimeout(function () { try { actual.style.outline = old; } catch (_) {} }, 600);
       } catch (_) {}
 
-      const label = getLabel(actual);
+      const label = getLabel(actual) || bestLabel(actual);
       const payload = {
         kind: kind, tag: tag, domType: type,
         name: actual.getAttribute("name") || "",
@@ -453,13 +561,14 @@
         cssSelector: getCssSelector(actual),
         xpath: getXPath(actual),
         looksLike: isFieldLike ? classify(actual) : "",
-        displayLabel: label || "Element",
+        displayLabel: (isFieldLike ? (bestLabel(actual) || label) : label) || "Element",
         buttonLabel: kind === "ClickNext" ? (label || "Button") : "",
         verified: true,
       };
       S.captured++;
       log("CAPTURED (" + src + "):", tag, payload.displayLabel);
       payload.seq = ++S.seq;
+      payload.uid = S.docId + ":" + payload.seq;
       S.pending.set(payload.seq, { el: actual, label: payload.displayLabel || tag });
       if (S.pending.size > 30) S.pending.delete(S.pending.keys().next().value);
       sendToBridge(payload, actual);
@@ -626,13 +735,14 @@
     g.__automationRecorderStop = stop;
     // Kotlin can PULL queued events (works even when window.AutomationBridge is not visible to this page)
     g.__automationRecorderDrain = function () {
-      if (!S.outbox.length) return "";
-      return JSON.stringify(S.outbox.splice(0, S.outbox.length));
+      const all = S.outbox.splice(0, S.outbox.length).concat(S.unacked.splice(0, S.unacked.length));
+      return all.length ? JSON.stringify(all) : "";
     };
     // Kotlin acknowledges every event: the toast then shows what really happened
     g.__automationRecorderAck = function (seq, ok, msg) {
       const p = S.pending.get(seq);
       S.pending.delete(seq);
+      S.unacked = S.unacked.filter(function (i) { return i.seq !== seq; });
       const label = p ? p.label : "";
       if (ok) toast("\u2713 Recorded " + (msg || "") + (label ? ": " + label : ""), "#10B981", p && p.el);
       else toast("\u2717 Not recorded: " + msg, "#DC2626", p && p.el);
@@ -643,7 +753,7 @@
         listeners: S.listeners.length, outbox: S.outbox.length,
         bridge: !!(window.AutomationBridge && window.AutomationBridge.onElementRecorded),
         boundToThisDoc: S.doc === document, readyState: document.readyState, url: location.href,
-        captured: S.captured, ignored: S.ignored, rebinds: S.rebinds, lastBridgeError: S.lastBridgeError || "", pendingAcks: S.pending.size,
+        captured: S.captured, ignored: S.ignored, rebinds: S.rebinds, lastBridgeError: S.lastBridgeError || "", pendingAcks: S.pending.size, unacked: S.unacked.length,
       });
     };
 
