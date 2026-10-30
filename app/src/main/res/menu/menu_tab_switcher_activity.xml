@@ -1,6 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-  ~ Copyright (c) 2022 DuckDuckGo
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ Copyright (c) 2018 DuckDuckGo
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -20,19 +19,28 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="AlwaysShowAction">
 
-    <!-- HIDDEN: Back Button (Using @null since it is invisible) -->
-    <item
-        android:id="@+id/backToolbarButton"
-        android:icon="@null"
-        android:title=""
-        android:visible="false"
-        app:showAsAction="always" />
-
-    <!-- HIDDEN: Duck AI Button (Using @null since it is invisible) -->
     <item
         android:id="@+id/duckAIToolbarButton"
-        android:icon="@null"
-        android:title=""
-        android:visible="false"
+        android:icon="@drawable/ic_ai_chat_24"
+        android:title="@string/duckChatMenuItem"
         app:showAsAction="always" />
+
+    <item
+        android:id="@+id/fireToolbarButton"
+        android:icon="@drawable/ic_fire_24"
+        android:title="@string/fireMenu"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/newTabToolbarButton"
+        android:icon="@drawable/ic_add_24"
+        android:title="@string/newTabMenuItem"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/popupMenuToolbarButton"
+        android:icon="@drawable/ic_menu_vertical_24"
+        android:title="@string/options"
+        app:showAsAction="always" />
+
 </menu>

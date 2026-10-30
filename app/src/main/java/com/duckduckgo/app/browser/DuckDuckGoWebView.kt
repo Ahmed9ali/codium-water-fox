@@ -131,31 +131,10 @@ class DuckDuckGoWebView :
     private fun decorate(callback: ActionMode.Callback?): ActionMode.Callback? =
         if (::duckAiTextSelectionDecorator.isInitialized) duckAiTextSelectionDecorator.decorate(callback, pageUrl = url) else callback
 
-    // While recording, every tab's WebView drains its own recorder queue (works without window.AutomationBridge).
-    private val recorderPollRunnable = object : Runnable {
-        override fun run() {
-            if (isDestroyed || !isAttachedToWindow) return
-            try {
-                if (isShown && AutomationEngine.hudMode == HudMode.Recording) {
-                    AutomationEngine.pollRecorder(this@DuckDuckGoWebView)
-                }
-            } catch (_: Exception) {
-            }
-            postDelayed(this, 400)
-        }
-    }
-
     override fun onAttachedToWindow() {
         AndroidSupportInjection.inject(this)
         super.onAttachedToWindow()
         helper.onViewAttached(this)
-        removeCallbacks(recorderPollRunnable)
-        postDelayed(recorderPollRunnable, 400)
-    }
-
-    override fun onDetachedFromWindow() {
-        removeCallbacks(recorderPollRunnable)
-        super.onDetachedFromWindow()
     }
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {

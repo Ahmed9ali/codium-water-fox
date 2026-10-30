@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+
+
 <!--
   ~ Copyright (c) 2022 DuckDuckGo
   ~
@@ -15,42 +17,23 @@
   ~ limitations under the License.
   -->
 
-<androidx.constraintlayout.widget.ConstraintLayout 
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<com.google.android.material.appbar.AppBarLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/appBarLayout"
     android:layout_width="match_parent"
-    android:layout_height="?attr/actionBarSize"
-    android:background="?attr/daxColorToolbar">
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:outlineProvider="none">
 
-    <!-- The thin divider line at the top -->
-    <View
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="0.5dp"
-        android:background="?attr/daxColorShadeSolid"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/daxColorToolbar"
+        android:theme="@style/TabSwitcher.Widget.Toolbar"
+        app:buttonGravity="center_vertical"
+        app:contentInsetStartWithNavigation="0dp"
+        app:popupTheme="@style/Widget.DuckDuckGo.PopUpOverflowMenu"
+        app:titleMarginStart="@dimen/keyline_4" />
 
-    <!-- The Centered Add (+) Button -->
-    <ImageButton
-        android:id="@+id/newTabToolbarButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@drawable/ic_add_24"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- The Right-Aligned 3 Dots Menu -->
-    <ImageButton
-        android:id="@+id/popupMenuToolbarButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginEnd="16dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@drawable/ic_menu_vertical_24"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.material.appbar.AppBarLayout>

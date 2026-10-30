@@ -17,15 +17,19 @@
 package com.duckduckgo.app.tabs.ui
 
 import android.view.Menu
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.isVisible
 import com.duckduckgo.app.browser.R
 import com.duckduckgo.app.browser.databinding.PopupTabsMenuBinding
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarView
+import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.BackButtonType.ARROW
+import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.BackButtonType.CLOSE
 import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.DynamicInterface
 import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.LayoutMode.GRID
 import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.LayoutMode.HIDDEN
 import com.duckduckgo.app.tabs.ui.TabSwitcherViewModel.ViewState.LayoutMode.LIST
+import com.duckduckgo.mobile.android.R as commonR
 
 fun Menu.createDynamicInterface(
     numSelectedTabs: Int,
@@ -84,9 +88,15 @@ fun Menu.createDynamicInterface(
         }
     }
 
-    // COMMENTED OUT: These IDs no longer exist in menu_tab_switcher_activity.xml
-    // findItem(R.id.newTabToolbarButton).isVisible = dynamicMenu.isNewTabButtonVisible
-    // findItem(R.id.popupMenuToolbarButton).isVisible = dynamicMenu.isMenuButtonVisible
+    toolbar.navigationIcon = when (dynamicMenu.backButtonType) {
+        ARROW -> AppCompatResources.getDrawable(toolbar.context, commonR.drawable.ic_arrow_left_24)
+        CLOSE -> AppCompatResources.getDrawable(toolbar.context, commonR.drawable.ic_close_24)
+    }
+
+    findItem(R.id.fireToolbarButton).isVisible = dynamicMenu.isFireButtonVisible
+    findItem(R.id.duckAIToolbarButton).isVisible = dynamicMenu.isDuckAIButtonVisible
+    findItem(R.id.newTabToolbarButton).isVisible = dynamicMenu.isNewTabButtonVisible
+    findItem(R.id.popupMenuToolbarButton).isVisible = dynamicMenu.isMenuButtonVisible
 
     navigationBar.isVisible = dynamicMenu.isBottomBarVisible
 }

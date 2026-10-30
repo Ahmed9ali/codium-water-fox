@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2025 DuckDuckGo
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.duckduckgo.app.browser.navigation.bar.view
 
 import android.content.Context
@@ -10,6 +26,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout.AttachedBehavior
 import androidx.coordinatorlayout.widget.CoordinatorLayout.Behavior
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnAttach
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelProvider
@@ -19,13 +36,19 @@ import androidx.lifecycle.lifecycleScope
 import com.duckduckgo.anvil.annotations.InjectWith
 import com.duckduckgo.app.browser.databinding.ViewBrowserNavigationBarBinding
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyAutofillButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyFireButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyMenuButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyNewTabButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyTabsButtonLongClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.EnabledState
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.ViewState
 import com.duckduckgo.app.browser.omnibar.OmnibarType
 import com.duckduckgo.app.browser.omnibar.OmnibarView
+import com.duckduckgo.app.browser.webview.TopOmnibarBrowserContainerLayoutBehavior
+import com.duckduckgo.browser.ui.PulseAnimation
 import com.duckduckgo.common.ui.viewbinding.viewBinding
 import com.duckduckgo.common.utils.ConflatedJob
 import com.duckduckgo.common.utils.ViewViewModelFactory
@@ -45,7 +68,14 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     override fun setVisibility(visibility: Int) {
         val isVisibilityUpdated = this.visibility != visibility
+
         super.setVisibility(visibility)
+
+        /**
+         * This notifies all view behaviors that depend on the [BrowserNavigationBarView] to recalculate whenever the bar's visibility changes,
+         * for example, we require that in [TopOmnibarBrowserContainerLayoutBehavior] to remove the bottom inset when navigation bar disappears.
+         * The base coordinator behavior doesn't notify dependent views when visibility changes, so we need to do that manually.
+         */
         val parent = parent
         if (isVisibilityUpdated && parent is CoordinatorLayout) {
             parent.dispatchDependentViewsChanged(this)
@@ -71,19 +101,30 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         requireNotNull(findViewTreeLifecycleOwner())
     }
 
+    private val pulseAnimation: PulseAnimation by lazy {
+        PulseAnimation(lifecycleOwner)
+    }
+
     val popupMenuAnchor: View = binding.menuButton
+
     var browserNavigationBarObserver: BrowserNavigationBarObserver? = null
 
     fun setViewMode(viewMode: ViewMode) {
-        doOnAttach { viewModel.setViewMode(viewMode) }
+        doOnAttach {
+            viewModel.setViewMode(viewMode)
+        }
     }
 
     fun setFireButtonHighlight(highlighted: Boolean) {
-        // No-op
+        doOnAttach {
+            viewModel.setFireButtonHighlight(highlighted)
+        }
     }
 
     fun setLocked(locked: Boolean) {
-        doOnAttach { viewModel.setLocked(locked) }
+        doOnAttach {
+            viewModel.setLocked(locked)
+        }
     }
 
     fun setBrowserMenuIcon(@DrawableRes icon: Int) {
@@ -97,6 +138,10 @@ class BrowserNavigationBarView @JvmOverloads constructor(
     fun disableViewStateSaving() {
         binding.browserMenuImageView.isSaveEnabled = false
         binding.tabsButton.isSaveEnabled = false
+        binding.fireIconImageView.isSaveEnabled = false
+        binding.bookmarksImageView.isSaveEnabled = false
+        binding.autofillButtonImageView.isSaveEnabled = false
+        binding.newTabButtonImageView.isSaveEnabled = false
     }
 
     override fun onAttachedToWindow() {
@@ -107,12 +152,41 @@ class BrowserNavigationBarView @JvmOverloads constructor(
         viewTreeLifecycleOwner.lifecycle.addObserver(viewModel)
         val coroutineScope = viewTreeLifecycleOwner.lifecycleScope
 
-        conflatedCommandsJob += viewModel.commands.onEach(::processCommands).launchIn(coroutineScope)
-        conflatedStateJob += viewModel.viewState.onEach(::renderView).launchIn(coroutineScope)
+        conflatedCommandsJob += viewModel.commands
+            .onEach(::processCommands)
+            .launchIn(coroutineScope)
 
-        binding.tabsButton.setOnClickListener { viewModel.onTabsButtonClicked() }
-        binding.tabsButton.setOnLongClickListener { viewModel.onTabsButtonLongClicked() }
-        binding.menuButton.setOnClickListener { viewModel.onMenuButtonClicked() }
+        conflatedStateJob += viewModel.viewState
+            .onEach(::renderView)
+            .launchIn(coroutineScope)
+
+        binding.newTabButton.setOnClickListener {
+            viewModel.onNewTabButtonClicked()
+        }
+
+        binding.autofillButton.setOnClickListener {
+            viewModel.onAutofillButtonClicked()
+        }
+
+        binding.bookmarksButton.setOnClickListener {
+            viewModel.onBookmarksButtonClicked()
+        }
+
+        binding.fireButton.setOnClickListener {
+            viewModel.onFireButtonClicked()
+        }
+
+        binding.tabsButton.setOnClickListener {
+            viewModel.onTabsButtonClicked()
+        }
+
+        binding.tabsButton.setOnLongClickListener {
+            viewModel.onTabsButtonLongClicked()
+        }
+
+        binding.menuButton.setOnClickListener {
+            viewModel.onMenuButtonClicked()
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -128,19 +202,31 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun renderView(viewState: ViewState) {
         binding.root.isVisible = viewState.isVisible
+
+        binding.newTabButton.isVisible = viewState.newTabButtonVisible
+        binding.autofillButton.isVisible = viewState.autofillButtonVisible
+        binding.bookmarksButton.isVisible = viewState.bookmarksButtonVisible
+        binding.fireButton.isVisible = viewState.fireButtonVisible
         binding.tabsButton.isVisible = viewState.tabsButtonVisible
         binding.tabsButton.count = viewState.tabsCount
         binding.tabsButton.hasUnread = viewState.hasUnreadTabs
         binding.browserMenuHighlight.isVisible = viewState.showBrowserMenuHighlight
         binding.shadowView.isVisible = viewState.showShadow
 
+        renderFireButtonPulseAnimation(enabled = viewState.fireButtonHighlighted)
         applyEnabledState(viewState.enabledState)
     }
 
     private fun applyEnabledState(state: EnabledState) {
         val enabled = state == EnabledState.ALL
+        val fireEnabled = enabled || state == EnabledState.FIRE_BUTTON_ONLY
+
+        applyEnabled(binding.newTabButton, enabled)
+        applyEnabled(binding.autofillButton, enabled)
+        applyEnabled(binding.bookmarksButton, enabled)
         applyEnabled(binding.tabsButton, enabled)
         applyEnabled(binding.menuButton, enabled)
+        applyEnabled(binding.fireButton, fireEnabled)
     }
 
     private fun applyEnabled(view: View, enabled: Boolean) {
@@ -150,26 +236,56 @@ class BrowserNavigationBarView @JvmOverloads constructor(
 
     private fun processCommands(command: Command) {
         when (command) {
+            NotifyFireButtonClicked -> browserNavigationBarObserver?.onFireButtonClicked()
             NotifyTabsButtonClicked -> browserNavigationBarObserver?.onTabsButtonClicked()
             NotifyTabsButtonLongClicked -> browserNavigationBarObserver?.onTabsButtonLongClicked()
             NotifyMenuButtonClicked -> browserNavigationBarObserver?.onMenuButtonClicked()
-            else -> { /* Ignore */ }
+            NotifyBookmarksButtonClicked -> browserNavigationBarObserver?.onBookmarksButtonClicked()
+            NotifyNewTabButtonClicked -> browserNavigationBarObserver?.onNewTabButtonClicked()
+            NotifyAutofillButtonClicked -> browserNavigationBarObserver?.onAutofillButtonClicked()
+        }
+    }
+
+    private fun renderFireButtonPulseAnimation(enabled: Boolean) {
+        if (enabled) {
+            if (!pulseAnimation.isActive) {
+                doOnLayout {
+                    pulseAnimation.playOn(targetView = binding.fireIconImageView)
+                }
+            }
+        } else {
+            pulseAnimation.stop()
         }
     }
 
     enum class ViewMode {
-        CustomTab, NewTab, Browser, DuckAI, TabManager,
+        CustomTab,
+        NewTab,
+        Browser,
+        DuckAI,
+        TabManager,
     }
 
+    /**
+     * Behavior that offsets the navigation bar proportionally to the offset of the top omnibar.
+     */
     inner class BottomViewBehavior(
         context: Context,
         attrs: AttributeSet?,
     ) : Behavior<View>(context, attrs) {
-        override fun layoutDependsOn(parent: CoordinatorLayout, child: View, dependency: View): Boolean {
+        override fun layoutDependsOn(
+            parent: CoordinatorLayout,
+            child: View,
+            dependency: View,
+        ): Boolean {
             return dependency is OmnibarView && dependency.omnibarType == OmnibarType.SPLIT
         }
 
-        override fun onDependentViewChanged(parent: CoordinatorLayout, child: View, dependency: View): Boolean {
+        override fun onDependentViewChanged(
+            parent: CoordinatorLayout,
+            child: View,
+            dependency: View,
+        ): Boolean {
             if (dependency is OmnibarView && dependency.omnibarType == OmnibarType.SPLIT) {
                 val dependencyOffset = abs(dependency.top)
                 val offsetPercentage = dependencyOffset.toFloat() / dependency.measuredHeight.toFloat()
