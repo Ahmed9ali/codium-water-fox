@@ -89,7 +89,7 @@ fun Menu.createDynamicInterface(
     }
 
     toolbar.navigationIcon = when (dynamicMenu.backButtonType) {
-        ARROW -> AppCompatResources.getDrawable(toolbar.context, commonR.drawable.ic_arrow_left_24)
+        ARROW -> null
         CLOSE -> AppCompatResources.getDrawable(toolbar.context, commonR.drawable.ic_close_24)
     }
 
