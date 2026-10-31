@@ -669,7 +669,6 @@ class TabSwitcherAdapter(
             const val SELECTABLE_DUCK_AI_GRID = 5
             const val SELECTABLE_DUCK_AI_LIST = 6
             const val TAB_GROUP = 7
-            const val SELECTABLE_DUCK_AI_LIST = 7
 
 
             const val EXTRA_CLOSE_BUTTON_TOUCH_AREA = 6 // dp

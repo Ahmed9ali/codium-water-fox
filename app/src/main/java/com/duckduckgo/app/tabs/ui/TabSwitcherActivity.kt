@@ -491,6 +491,8 @@ class TabSwitcherActivity :
                 onTabMoved = this::onTabMoved,
                 onTabDraggingStarted = this::onTabDraggingStarted,
                 onTabDraggingFinished = this::onTabDraggingFinished,
+                onGroupDrop = { from, to -> showGroupDialogFor(tabsAdapter.getTabSwitcherItem(from), tabsAdapter.getTabSwitcherItem(to)) },
+                isGroupable = { pos -> tabsAdapter.getTabSwitcherItem(pos) is NormalTab },
             )
 
         val swipeListener = ItemTouchHelper(tabTouchHelper)

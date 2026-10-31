@@ -39,6 +39,8 @@ class TabTouchHelper(
     private val onTabMoved: (Int, Int) -> Unit,
     private val onTabDraggingStarted: () -> Unit,
     private val onTabDraggingFinished: () -> Unit,
+    private val onGroupDrop: (Int, Int) -> Unit = { _, _ -> },
+    private val isGroupable: (Int) -> Boolean = { false },
 ) : ItemTouchHelper.SimpleCallback(
     /* dragDirs = */
     ItemTouchHelper.START or ItemTouchHelper.END or ItemTouchHelper.UP or ItemTouchHelper.DOWN,
@@ -46,6 +48,7 @@ class TabTouchHelper(
     ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT,
 ) {
     var mode: Mode = Mode.Normal
+    private val groupDetector = TabGroupDragDetector(isGroupable)
 
     override fun onSwiped(viewHolder: ViewHolder, direction: Int) {
         onTabSwiped(viewHolder.bindingAdapterPosition)
@@ -64,10 +67,12 @@ class TabTouchHelper(
             val alpha = 1 - (abs(dX) / (recyclerView.width / numberGridColumns))
             viewHolder.itemView.alpha = MathUtils.clamp(alpha, 0f, 1f)
         }
+        if (actionState == ACTION_STATE_DRAG && isCurrentlyActive && mode == Mode.Normal) groupDetector.update(recyclerView, viewHolder, dX, dY)
         super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
     }
 
     override fun onMove(recyclerView: RecyclerView, viewHolder: ViewHolder, target: ViewHolder): Boolean {
+        if (groupDetector.target != null) return false
         val from = viewHolder.bindingAdapterPosition
         val to = target.bindingAdapterPosition
         onTabMoved(from, to)
@@ -103,6 +108,7 @@ class TabTouchHelper(
      */
     override fun clearView(recyclerView: RecyclerView, viewHolder: ViewHolder) {
         super.clearView(recyclerView, viewHolder)
+        groupDetector.finish()?.let { onGroupDrop(viewHolder.bindingAdapterPosition, it.bindingAdapterPosition) }
 
         // Clear alpha, scale and elevation after drag/swipe
         (viewHolder.itemView as? CardView)?.also {
