@@ -184,7 +184,7 @@ abstract class TabsDao {
             } else {
                 tab
             }
-            deleteBlankTabs()
+            if (tab.url != null) deleteBlankTabs()
             insertTab(newTab)
             insertTabSelection(TabSelectionEntity(tabId = newTab.tabId))
         } catch (e: Exception) {

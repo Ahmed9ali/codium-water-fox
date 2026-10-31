@@ -31,6 +31,7 @@ import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarView.V
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarView.ViewMode.TabManager
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyAutofillButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonLongClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyFireButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyHomeButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyMenuButtonClicked
@@ -142,6 +143,10 @@ class BrowserNavigationBarViewModel @Inject constructor(
         _commands.trySend(NotifyBookmarksButtonClicked)
     }
 
+    fun onBookmarksButtonLongClicked() {
+        _commands.trySend(NotifyBookmarksButtonLongClicked)
+    }
+
     // No pixels for the new buttons on purpose: they would need new AppPixelName entries.
     fun onHomeButtonClicked() {
         _commands.trySend(NotifyHomeButtonClicked)
@@ -210,7 +215,7 @@ class BrowserNavigationBarViewModel @Inject constructor(
         data object NotifyMenuButtonClicked : Command()
         data object NotifyNewTabButtonClicked : Command()
         data object NotifyAutofillButtonClicked : Command()
-        data object NotifyBookmarksButtonClicked : Command()
+        data object NotifyBookmarksButtonLongClicked : Command()
         data object NotifyHomeButtonClicked : Command()
         data object NotifySearchButtonClicked : Command()
     }

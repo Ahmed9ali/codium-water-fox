@@ -6086,6 +6086,14 @@ class BrowserTabViewModel @Inject constructor(
     }
 
     fun onNavigationBarBookmarksButtonClicked() {
+        if (url.isNullOrBlank()) {
+            launchBookmarksActivity()   // home / new tab: open the list
+        } else {
+            onBookmarkMenuClicked()     // web page: add bookmark
+        }
+    }
+
+    fun onNavigationBarBookmarksButtonLongClicked() {
         launchBookmarksActivity()
     }
 

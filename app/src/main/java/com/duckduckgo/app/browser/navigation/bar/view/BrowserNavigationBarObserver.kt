@@ -54,4 +54,8 @@ interface BrowserNavigationBarObserver {
     @EmptySuper
     fun onSearchButtonClicked() {
     }
+
+    @EmptySuper
+    fun onBookmarksButtonLongClicked() {
+
 }

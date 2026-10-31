@@ -1648,6 +1648,10 @@ class BrowserTabFragment :
                 override fun onBookmarksButtonClicked() {
                     viewModel.onNavigationBarBookmarksButtonClicked()
                 }
+
+                override fun onBookmarksButtonLongClicked() {
+                    viewModel.onNavigationBarBookmarksButtonLongClicked()
+                }
             }
 
         browserNavigationBarIntegration = BrowserNavigationBarViewIntegration(

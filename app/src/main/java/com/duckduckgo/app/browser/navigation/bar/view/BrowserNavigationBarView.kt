@@ -38,6 +38,7 @@ import com.duckduckgo.app.browser.databinding.ViewBrowserNavigationBarBinding
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyAutofillButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonClicked
+import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyBookmarksButtonLongClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyFireButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyHomeButtonClicked
 import com.duckduckgo.app.browser.navigation.bar.view.BrowserNavigationBarViewModel.Command.NotifyMenuButtonClicked
@@ -175,6 +176,11 @@ class BrowserNavigationBarView @JvmOverloads constructor(
             viewModel.onBookmarksButtonClicked()
         }
 
+        binding.bookmarksButton.setOnLongClickListener {
+            viewModel.onBookmarksButtonLongClicked()
+            true
+        }
+
         binding.searchButton.setOnClickListener {
             viewModel.onSearchButtonClicked()
         }
@@ -250,6 +256,7 @@ class BrowserNavigationBarView @JvmOverloads constructor(
             NotifyTabsButtonLongClicked -> browserNavigationBarObserver?.onTabsButtonLongClicked()
             NotifyMenuButtonClicked -> browserNavigationBarObserver?.onMenuButtonClicked()
             NotifyBookmarksButtonClicked -> browserNavigationBarObserver?.onBookmarksButtonClicked()
+            NotifyBookmarksButtonLongClicked -> browserNavigationBarObserver?.onBookmarksButtonLongClicked()
             NotifyNewTabButtonClicked -> browserNavigationBarObserver?.onNewTabButtonClicked()
             NotifyAutofillButtonClicked -> browserNavigationBarObserver?.onAutofillButtonClicked()
             NotifyHomeButtonClicked -> browserNavigationBarObserver?.onHomeButtonClicked()
