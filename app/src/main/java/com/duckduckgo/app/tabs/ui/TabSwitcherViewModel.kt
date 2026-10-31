@@ -748,27 +748,34 @@ class TabSwitcherViewModel @Inject constructor(
         }
     }
 
+        fun onAddToGroup(tabId: String, groupId: String) {
+        appCoroutineScope.launch(dispatcherProvider.io()) {
+            val count = tabGroupsDao.members().first().count { it.groupId == groupId }
+            tabGroupsDao.insertMember(TabGroupMemberEntity(tabId, groupId, count))
+        }
+    }
+
 private fun foldGroups(
     items: List<TabSwitcherItem>,
     groups: List<TabGroupEntity>,
     members: List<TabGroupMemberEntity>,
 ): List<TabSwitcherItem> {
     if (groups.isEmpty()) return items
-    val tabsById = items.filterIsInstance<NormalTab>().associateBy { it.entity.tabId }
+    val tabsById = items.filterIsInstance<NormalTab>().associateBy { it.tabEntity.tabId }
     val membersByGroup = members.sortedBy { it.position }.groupBy { it.groupId }
     val liveGroups = groups.mapNotNull { g ->
         val tabs = membersByGroup[g.groupId].orEmpty().mapNotNull { tabsById[it.tabId] }
         if (tabs.size >= 2) g to tabs else null
     }.toMap()
-    val groupOfTab = liveGroups.entries.flatMap { (g, tabs) -> tabs.map { it.entity.tabId to g } }.toMap()
+    val groupOfTab = liveGroups.entries.flatMap { (g, tabs) -> tabs.map { it.tabEntity.tabId to g } }.toMap()
     val emitted = mutableSetOf<String>()
     val result = mutableListOf<TabSwitcherItem>()
     for (item in items) {
-        val group = (item as? NormalTab)?.let { groupOfTab[it.entity.tabId] }
+        val group = (item as? NormalTab)?.let { groupOfTab[it.tabEntity.tabId] }
         when {
             group == null -> result.add(item)
             emitted.add(group.groupId) ->
-                result.add(TabGroupItem(group.groupId, group.name, group.colorIndex, liveGroups.getValue(group).map { it.entity }))
+                result.add(TabGroupItem(group.groupId, group.name, group.colorIndex, liveGroups.getValue(group).map { it.tabEntity }))
         }
     }
     return result

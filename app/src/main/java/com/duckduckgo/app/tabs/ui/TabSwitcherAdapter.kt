@@ -209,7 +209,7 @@ class TabSwitcherAdapter(
                     onAnimationTileCloseClickListener?.invoke()
                 }
             }
-            is TabGroupViewHolder -> holder.bindGroup(differ.currentList[position] as TabGroupItem)
+            is TabGroupViewHolder -> { val g = differ.currentList[position] as TabGroupItem; holder.bindGroup(g); loadGroupPreviews(holder, g) }
             else -> throw IllegalArgumentException("Unknown ViewHolder type: $holder")
         }
     }
@@ -515,6 +515,25 @@ class TabSwitcherAdapter(
         }
     }
 
+
+        private fun loadGroupPreviews(holder: TabGroupViewHolder, item: TabGroupItem) {
+        val glide = Glide.with(holder.itemView.context.applicationContext)
+        val cells = listOf(
+            holder.binding.groupPreview0,
+            holder.binding.groupPreview1,
+            holder.binding.groupPreview2,
+            holder.binding.groupPreview3,
+        )
+        val shown = if (item.tabs.size > 4) 3 else item.tabs.size
+        cells.forEachIndexed { i, cell ->
+            if (i < shown) {
+                loadTabPreviewImage(item.tabs[i], glide, cell, holder)
+            } else {
+                glide.clear(cell)
+            }
+        }
+    }
+
     private fun loadTabPreviewImage(
         tab: TabEntity,
         glide: RequestManager,
@@ -669,6 +688,7 @@ class TabSwitcherAdapter(
             const val SELECTABLE_DUCK_AI_GRID = 5
             const val SELECTABLE_DUCK_AI_LIST = 6
             const val TAB_GROUP = 7
+            const val SELECTABLE_DUCK_AI_LIST = 7
 
 
             const val EXTRA_CLOSE_BUTTON_TOUCH_AREA = 6 // dp
