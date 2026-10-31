@@ -215,6 +215,7 @@ class BrowserNavigationBarViewModel @Inject constructor(
         data object NotifyMenuButtonClicked : Command()
         data object NotifyNewTabButtonClicked : Command()
         data object NotifyAutofillButtonClicked : Command()
+        data object NotifyBookmarksButtonClicked : Command()
         data object NotifyBookmarksButtonLongClicked : Command()
         data object NotifyHomeButtonClicked : Command()
         data object NotifySearchButtonClicked : Command()
