@@ -57,5 +57,6 @@ interface BrowserNavigationBarObserver {
 
     @EmptySuper
     fun onBookmarksButtonLongClicked() {
+    }
 
 }
