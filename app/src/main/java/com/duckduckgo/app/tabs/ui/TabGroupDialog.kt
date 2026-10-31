@@ -10,10 +10,10 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 
-fun Context.showGroupDialogFor(dragged: TabSwitcherItem?, target: TabSwitcherItem?) {
-    if (dragged == null || target == null) return
+fun Context.showGroupDialogFor(draggedId: String, targetId: String, onCreate: (String, String, String, Int) -> Unit) {
+
     showNewTabGroupDialog("2 tabs") { name, colorIndex ->
-        Toast.makeText(this, "Group \"$name\" (color $colorIndex)", Toast.LENGTH_SHORT).show()
+        onCreate(draggedId, targetId, name, colorIndex)
     }
 }
 

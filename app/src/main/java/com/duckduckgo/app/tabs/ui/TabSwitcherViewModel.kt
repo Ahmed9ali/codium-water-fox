@@ -95,6 +95,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import com.duckduckgo.app.tabs.groups.TabGroupsDao
+import com.duckduckgo.app.tabs.groups.TabGroupEntity
+import com.duckduckgo.app.tabs.groups.TabGroupMemberEntity
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -119,6 +122,7 @@ class TabSwitcherViewModel @Inject constructor(
     @param:AppCoroutineScope private val appCoroutineScope: CoroutineScope,
     private val fireTabsPromos: FireTabsPromos,
     private val remoteMessageModel: RemoteMessageModel,
+    private val tabGroupsDao: TabGroupsDao,
 ) : ViewModel() {
 
     private val fireModeAvailable = fireModeAvailability.isAvailable()
@@ -174,6 +178,8 @@ class TabSwitcherViewModel @Inject constructor(
         }
     }
 
+    private val groupsAndMembersFlow = combine(tabGroupsDao.groups(), tabGroupsDao.members()) { g, m -> g to m }
+
     private val tabSwitcherItemsFlow: Flow<TabItems> = tabRepositoryFlow.flatMapLatest { repo ->
         combine(
             repo.flowTabs.debounce(100.milliseconds),
@@ -184,6 +190,7 @@ class TabSwitcherViewModel @Inject constructor(
         ) { tabEntities, activeTab, viewState, isAnimationTileDismissed, browserMode ->
             getTabItems(tabEntities, activeTab, isAnimationTileDismissed, viewState.mode, browserMode)
         }
+            .combine(groupsAndMembersFlow) { items, gm -> foldGroups(items, gm.first, gm.second) }
             .map<List<TabSwitcherItem>, TabItems> { TabItems.Loaded(it) }
             .onStart { emit(TabItems.NotInitialized) }
     }
@@ -731,6 +738,41 @@ class TabSwitcherViewModel @Inject constructor(
             tabs
         }
     }
+
+        fun onCreateGroup(draggedTabId: String, targetTabId: String, name: String, colorIndex: Int) {
+        appCoroutineScope.launch(dispatcherProvider.io()) {
+            val groupId = java.util.UUID.randomUUID().toString()
+            tabGroupsDao.insertGroup(TabGroupEntity(groupId, name, colorIndex, System.currentTimeMillis()))
+            tabGroupsDao.insertMember(TabGroupMemberEntity(targetTabId, groupId, 0))
+            tabGroupsDao.insertMember(TabGroupMemberEntity(draggedTabId, groupId, 1))
+        }
+    }
+
+private fun foldGroups(
+    items: List<TabSwitcherItem>,
+    groups: List<TabGroupEntity>,
+    members: List<TabGroupMemberEntity>,
+): List<TabSwitcherItem> {
+    if (groups.isEmpty()) return items
+    val tabsById = items.filterIsInstance<NormalTab>().associateBy { it.entity.tabId }
+    val membersByGroup = members.sortedBy { it.position }.groupBy { it.groupId }
+    val liveGroups = groups.mapNotNull { g ->
+        val tabs = membersByGroup[g.groupId].orEmpty().mapNotNull { tabsById[it.tabId] }
+        if (tabs.size >= 2) g to tabs else null
+    }.toMap()
+    val groupOfTab = liveGroups.entries.flatMap { (g, tabs) -> tabs.map { it.entity.tabId to g } }.toMap()
+    val emitted = mutableSetOf<String>()
+    val result = mutableListOf<TabSwitcherItem>()
+    for (item in items) {
+        val group = (item as? NormalTab)?.let { groupOfTab[it.entity.tabId] }
+        when {
+            group == null -> result.add(item)
+            emitted.add(group.groupId) ->
+                result.add(TabGroupItem(group.groupId, group.name, group.colorIndex, liveGroups.getValue(group).map { it.entity }))
+        }
+    }
+    return result
+}
 
     sealed class TabItems {
         data object NotInitialized : TabItems()

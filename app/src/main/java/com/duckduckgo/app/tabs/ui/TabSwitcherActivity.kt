@@ -491,7 +491,7 @@ class TabSwitcherActivity :
                 onTabMoved = this::onTabMoved,
                 onTabDraggingStarted = this::onTabDraggingStarted,
                 onTabDraggingFinished = this::onTabDraggingFinished,
-                onGroupDrop = { from, to -> showGroupDialogFor(tabsAdapter.getTabSwitcherItem(from), tabsAdapter.getTabSwitcherItem(to)) },
+                onGroupDrop = { from, to -> val a = (tabsAdapter.getTabSwitcherItem(from) as? NormalTab)?.entity?.tabId; val b = (tabsAdapter.getTabSwitcherItem(to) as? NormalTab)?.entity?.tabId; if (a != null && b != null) showGroupDialogFor(a, b, viewModel::onCreateGroup) },
                 isGroupable = { pos -> tabsAdapter.getTabSwitcherItem(pos) is NormalTab },
             )
 
