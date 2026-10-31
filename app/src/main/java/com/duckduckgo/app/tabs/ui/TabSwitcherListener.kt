@@ -21,4 +21,6 @@ interface TabSwitcherListener {
     fun onTabSelected(tabId: String)
     fun onTabDeleted(position: Int, deletedBySwipe: Boolean)
     fun onTabMoved(from: Int, to: Int)
+    fun onGroupMenuClicked(groupId: String, anchor: android.view.View) {}
+    fun onGroupClicked(groupId: String) {}
 }

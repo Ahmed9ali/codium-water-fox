@@ -755,6 +755,26 @@ class TabSwitcherViewModel @Inject constructor(
         }
     }
 
+
+        fun onUngroup(groupId: String) {
+        appCoroutineScope.launch(dispatcherProvider.io()) { tabGroupsDao.ungroup(groupId) }
+    }
+
+    fun onUpdateGroup(groupId: String, name: String, colorIndex: Int) {
+        appCoroutineScope.launch(dispatcherProvider.io()) { tabGroupsDao.updateGroup(groupId, name, colorIndex) }
+    }
+
+        fun onRemoveFromGroup(tabId: String) {
+        appCoroutineScope.launch(dispatcherProvider.io()) { tabGroupsDao.removeTab(tabId) }
+    }
+
+    fun onNewTabInGroup(groupId: String) = viewModelScope.launch {
+        val newId = tabRepository.add()
+        val count = tabGroupsDao.members().first().count { it.groupId == groupId }
+        tabGroupsDao.insertMember(TabGroupMemberEntity(newId, groupId, count))
+        command.value = Command.Close
+    }
+
 private fun foldGroups(
     items: List<TabSwitcherItem>,
     groups: List<TabGroupEntity>,

@@ -209,7 +209,7 @@ class TabSwitcherAdapter(
                     onAnimationTileCloseClickListener?.invoke()
                 }
             }
-            is TabGroupViewHolder -> { val g = differ.currentList[position] as TabGroupItem; holder.bindGroup(g); loadGroupPreviews(holder, g) }
+            is TabGroupViewHolder -> { val g = differ.currentList[position] as TabGroupItem; holder.bindGroup(g); loadGroupPreviews(holder, g); holder.binding.root.setOnClickListener { itemClickListener.onGroupClicked(g.groupId) }; holder.binding.groupMenu.setOnClickListener { itemClickListener.onGroupMenuClicked(g.groupId, it) } }
             else -> throw IllegalArgumentException("Unknown ViewHolder type: $holder")
         }
     }
@@ -688,7 +688,6 @@ class TabSwitcherAdapter(
             const val SELECTABLE_DUCK_AI_GRID = 5
             const val SELECTABLE_DUCK_AI_LIST = 6
             const val TAB_GROUP = 7
-            const val SELECTABLE_DUCK_AI_LIST = 7
 
 
             const val EXTRA_CLOSE_BUTTON_TOUCH_AREA = 6 // dp
