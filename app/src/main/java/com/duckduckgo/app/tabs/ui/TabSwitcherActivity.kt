@@ -317,6 +317,8 @@ class TabSwitcherActivity :
 
         configureViewReferences()
         setupToolbar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+        toolbar.navigationIcon = null
         configureRecycler()
         configureNavigationBar()
         configureFireTabsEmptyState()
@@ -552,7 +554,7 @@ class TabSwitcherActivity :
             Toolbar.LayoutParams(
                 Toolbar.LayoutParams.WRAP_CONTENT,
                 Toolbar.LayoutParams.WRAP_CONTENT,
-                Gravity.START or Gravity.CENTER_VERTICAL,
+                Gravity.CENTER,
             ),
         )
         toggle.setOnModeChangedListener { mode, fromDrag ->

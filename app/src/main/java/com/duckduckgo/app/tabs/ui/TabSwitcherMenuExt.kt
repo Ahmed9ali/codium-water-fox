@@ -94,7 +94,7 @@ fun Menu.createDynamicInterface(
     }
 
     findItem(R.id.fireToolbarButton).isVisible = dynamicMenu.isFireButtonVisible
-    findItem(R.id.duckAIToolbarButton).isVisible = dynamicMenu.isDuckAIButtonVisible
+    findItem(R.id.duckAIToolbarButton).isVisible = false
     findItem(R.id.newTabToolbarButton).isVisible = dynamicMenu.isNewTabButtonVisible
     findItem(R.id.popupMenuToolbarButton).isVisible = dynamicMenu.isMenuButtonVisible
 
