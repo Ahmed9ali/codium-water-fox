@@ -19,13 +19,14 @@ fun Context.showGroupDialogFor(draggedId: String, targetId: String, onCreate: (S
 
 fun Context.showNewTabGroupDialog(
     defaultName: String,
+    initialColor: Int = 0,
     onDone: (name: String, colorIndex: Int) -> Unit,
 ) {
     val ctx = this
     val dp = resources.displayMetrics.density
     fun px(v: Int) = (v * dp).toInt()
 
-    var selected = 0
+    var selected = initialColor
     val circles = mutableListOf<View>()
 
     fun refresh() {

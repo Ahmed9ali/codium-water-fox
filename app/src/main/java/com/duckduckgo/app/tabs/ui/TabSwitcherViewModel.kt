@@ -740,6 +740,7 @@ class TabSwitcherViewModel @Inject constructor(
     }
 
         fun onCreateGroup(draggedTabId: String, targetTabId: String, name: String, colorIndex: Int) {
+        if (currentMode.value != BrowserMode.REGULAR) return
         appCoroutineScope.launch(dispatcherProvider.io()) {
             val groupId = java.util.UUID.randomUUID().toString()
             tabGroupsDao.insertGroup(TabGroupEntity(groupId, name, colorIndex, System.currentTimeMillis()))
@@ -749,6 +750,7 @@ class TabSwitcherViewModel @Inject constructor(
     }
 
         fun onAddToGroup(tabId: String, groupId: String) {
+        if (currentMode.value != BrowserMode.REGULAR) return
         appCoroutineScope.launch(dispatcherProvider.io()) {
             val count = tabGroupsDao.members().first().count { it.groupId == groupId }
             tabGroupsDao.insertMember(TabGroupMemberEntity(tabId, groupId, count))
@@ -774,6 +776,20 @@ class TabSwitcherViewModel @Inject constructor(
         tabGroupsDao.insertMember(TabGroupMemberEntity(newId, groupId, count))
         command.value = Command.Close
     }
+
+
+    private fun cleanupStaleGroups() {
+        appCoroutineScope.launch(dispatcherProvider.io()) {
+            val liveIds = tabRepositoryProvider.forMode(BrowserMode.REGULAR).flowTabs.first().map { it.tabId }.toSet()
+            tabGroupsDao.members().first().filter { it.tabId !in liveIds }.forEach { tabGroupsDao.removeTab(it.tabId) }
+            val members = tabGroupsDao.members().first()
+            tabGroupsDao.groups().first()
+                .filter { g -> members.count { it.groupId == g.groupId } < 2 }
+                .forEach { tabGroupsDao.ungroup(it.groupId) }
+        }
+    }
+
+    suspend fun getActiveTabId(): String? = tabRepository.getSelectedTab()?.tabId
 
 private fun foldGroups(
     items: List<TabSwitcherItem>,

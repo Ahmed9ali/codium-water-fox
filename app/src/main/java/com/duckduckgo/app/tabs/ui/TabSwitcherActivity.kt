@@ -1059,13 +1059,15 @@ class TabSwitcherActivity :
 
         override fun onGroupClicked(groupId: String) {
         val group = viewModel.tabSwitcherItems.filterIsInstance<TabGroupItem>().firstOrNull { it.groupId == groupId } ?: return
-        showTabGroupOverlay(
+        launch { val activeId = viewModel.getActiveTabId(); showTabGroupOverlay(
             group,
             onTabClick = { id -> launch { viewModel.onTabSelected(id) } },
             onNewTab = { viewModel.onNewTabInGroup(groupId) },
             onUpdate = { n, c -> viewModel.onUpdateGroup(groupId, n, c) },
             onUngroup = { viewModel.onUngroup(groupId) },
-        )
+            onRemoveTab = { id -> viewModel.onRemoveFromGroup(id) },
+            activeTabId = activeId,
+        ) }
     }
 
         override fun onGroupMenuClicked(groupId: String, anchor: android.view.View) {
@@ -1075,7 +1077,7 @@ class TabSwitcherActivity :
         popup.menu.add(0, 2, 1, "Ungroup")
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                1 -> showNewTabGroupDialog(group.name) { name, colorIndex ->
+                1 -> showNewTabGroupDialog(group.name, group.colorIndex) { name, colorIndex ->
                     viewModel.onUpdateGroup(groupId, name, colorIndex)
                 }
                 2 -> viewModel.onUngroup(groupId)

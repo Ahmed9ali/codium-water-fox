@@ -19,6 +19,8 @@ fun Context.showTabGroupOverlay(
     onNewTab: () -> Unit,
     onUpdate: (String, Int) -> Unit,
     onUngroup: () -> Unit,
+    onRemoveTab: (String) -> Unit,
+    activeTabId: String? = null,
 ) {
     val dp = resources.displayMetrics.density
     fun px(v: Int) = (v * dp).toInt()
@@ -61,7 +63,7 @@ fun Context.showTabGroupOverlay(
             popup.menu.add(0, 2, 1, "Ungroup")
             popup.setOnMenuItemClickListener { item ->
                 when (item.itemId) {
-                    1 -> { dialog.dismiss(); showNewTabGroupDialog(group.name) { n, c -> onUpdate(n, c) } }
+                    1 -> { dialog.dismiss(); showNewTabGroupDialog(group.name, group.colorIndex) { n, c -> onUpdate(n, c) } }
                     2 -> { dialog.dismiss(); onUngroup() }
                 }
                 true
@@ -89,8 +91,10 @@ fun Context.showTabGroupOverlay(
                     background = GradientDrawable().apply {
                         cornerRadius = px(12).toFloat()
                         setColor(ColorUtils.setAlphaComponent(color, 90))
+                        if (tab.tabId == activeTabId) setStroke(px(3), Color.WHITE)
                     }
                     setOnClickListener { dialog.dismiss(); onTabClick(tab.tabId) }
+                    setOnLongClickListener { v -> PopupMenu(context, v).apply { menu.add("Remove from group"); setOnMenuItemClickListener { dialog.dismiss(); onRemoveTab(tab.tabId); true } }.show(); true }
                 }
             }
             row.addView(card)
