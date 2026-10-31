@@ -7,6 +7,10 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
+import com.bumptech.glide.Glide
+import java.io.File
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
@@ -21,6 +25,7 @@ fun Context.showTabGroupOverlay(
     onUngroup: () -> Unit,
     onRemoveTab: (String) -> Unit,
     activeTabId: String? = null,
+    previewPath: (String, String) -> String = { _, _ -> "" },
 ) {
     val dp = resources.displayMetrics.density
     fun px(v: Int) = (v * dp).toInt()
@@ -80,21 +85,52 @@ fun Context.showTabGroupOverlay(
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for (i in 0..1) {
             val tab = pair.getOrNull(i)
-            val card = TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(0, px(140), 1f).apply { setMargins(px(6), px(6), px(6), px(6)) }
+            val card = FrameLayout(this).apply {
+                layoutParams = LinearLayout.LayoutParams(0, px(160), 1f).apply { setMargins(px(6), px(6), px(6), px(6)) }
                 if (tab != null) {
-                    text = tab.title?.takeIf { it.isNotBlank() } ?: tab.url ?: "New tab"
-                    maxLines = 4
-                    textSize = 14f
-                    setTextColor(Color.WHITE)
-                    setPadding(px(12), px(12), px(12), px(12))
                     background = GradientDrawable().apply {
                         cornerRadius = px(12).toFloat()
                         setColor(ColorUtils.setAlphaComponent(color, 90))
-                        if (tab.tabId == activeTabId) setStroke(px(3), Color.WHITE)
+                    }
+                    clipToOutline = true
+                    val img = ImageView(context).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    }
+                    addView(img)
+                    tab.tabPreviewFile?.let { f ->
+                        Glide.with(context.applicationContext).load(File(previewPath(tab.tabId, f))).into(img)
+                    }
+                    addView(
+                        TextView(context).apply {
+                            text = tab.title?.takeIf { it.isNotBlank() } ?: tab.url ?: "New tab"
+                            maxLines = 2
+                            textSize = 13f
+                            setTextColor(Color.WHITE)
+                            setPadding(px(10), px(6), px(10), px(6))
+                            setBackgroundColor(ColorUtils.setAlphaComponent(Color.BLACK, 140))
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                Gravity.BOTTOM,
+                            )
+                        },
+                    )
+                    if (tab.tabId == activeTabId) {
+                        foreground = GradientDrawable().apply {
+                            cornerRadius = px(12).toFloat()
+                            setStroke(px(3), Color.WHITE)
+                            setColor(Color.TRANSPARENT)
+                        }
                     }
                     setOnClickListener { dialog.dismiss(); onTabClick(tab.tabId) }
-                    setOnLongClickListener { v -> PopupMenu(context, v).apply { menu.add("Remove from group"); setOnMenuItemClickListener { dialog.dismiss(); onRemoveTab(tab.tabId); true } }.show(); true }
+                    setOnLongClickListener { v ->
+                        PopupMenu(context, v).apply {
+                            menu.add("Remove from group")
+                            setOnMenuItemClickListener { dialog.dismiss(); onRemoveTab(tab.tabId); true }
+                        }.show()
+                        true
+                    }
                 }
             }
             row.addView(card)

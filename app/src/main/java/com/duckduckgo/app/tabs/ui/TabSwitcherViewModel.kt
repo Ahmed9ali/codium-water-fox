@@ -158,6 +158,7 @@ class TabSwitcherViewModel @Inject constructor(
     )
 
     private var tabSwitcherPromoHandled = false
+    init { cleanupStaleGroups() }
 
     init {
         viewModelScope.launch {

@@ -1067,6 +1067,7 @@ class TabSwitcherActivity :
             onUngroup = { viewModel.onUngroup(groupId) },
             onRemoveTab = { id -> viewModel.onRemoveFromGroup(id) },
             activeTabId = activeId,
+            previewPath = webViewPreviewPersister::fullPathForFile,
         ) }
     }
 
