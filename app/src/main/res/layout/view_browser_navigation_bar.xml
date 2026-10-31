@@ -145,8 +145,7 @@
                     android:layout_gravity="center"
                     android:contentDescription="@string/newTabMenuItem"
                     android:scaleType="center"
-                    android:src="@drawable/ic_add_24"
-                    android:tint="@color/waterfoxFabIcon" />
+                    android:src="@drawable/ic_add_24" />
             </FrameLayout>
         </FrameLayout>
 
