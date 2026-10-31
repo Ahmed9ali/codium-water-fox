@@ -1049,6 +1049,7 @@ class TabSwitcherActivity :
                     viewModel.onTabCloseInNormalModeRequested(tab, swipeGestureUsed = deletedBySwipe)
                 }
                 is TrackersAnimationInfoPanel -> Unit
+                is TabGroupItem -> Unit
                 is SelectableTab -> Unit
             }
         }

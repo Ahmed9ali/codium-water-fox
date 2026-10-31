@@ -149,6 +149,7 @@ class TabSwitcherAdapter(
                 val binding = ItemTabSwitcherAnimationInfoPanelBinding.inflate(inflater, parent, false)
                 TabSwitcherViewHolder.TrackerAnimationInfoPanelViewHolder(binding)
             }
+            TabSwitcherViewHolder.TAB_GROUP -> TabGroupViewHolder(com.duckduckgo.app.browser.databinding.ItemTabGroupGridBinding.inflate(inflater, parent, false))
             else -> throw IllegalArgumentException("Unknown viewType: $viewType")
         }
     }
@@ -170,6 +171,7 @@ class TabSwitcherAdapter(
                 LIST -> LIST_TAB
             }
             is TabSwitcherItem.TrackersAnimationInfoPanel -> TRACKER_ANIMATION_TILE_INFO_PANEL
+            is TabGroupItem -> TabSwitcherViewHolder.TAB_GROUP
         }
 
     override fun getItemCount(): Int = differ.currentList.size
@@ -207,6 +209,7 @@ class TabSwitcherAdapter(
                     onAnimationTileCloseClickListener?.invoke()
                 }
             }
+            is TabGroupViewHolder -> holder.bindGroup(differ.currentList[position] as TabGroupItem)
             else -> throw IllegalArgumentException("Unknown ViewHolder type: $holder")
         }
     }
@@ -346,6 +349,7 @@ class TabSwitcherAdapter(
         }
 
         when (holder.itemViewType) {
+            TabSwitcherViewHolder.TAB_GROUP -> onBindViewHolder(holder, position)
             GRID_TAB -> handlePayloadsForGridTab(
                 viewHolder = holder as TabSwitcherViewHolder.GridTabViewHolder,
                 tab = differ.currentList[position] as Tab,
@@ -664,6 +668,9 @@ class TabSwitcherAdapter(
             const val DUCK_AI_LIST = 4
             const val SELECTABLE_DUCK_AI_GRID = 5
             const val SELECTABLE_DUCK_AI_LIST = 6
+            const val TAB_GROUP = 7
+            const val SELECTABLE_DUCK_AI_LIST = 7
+
 
             const val EXTRA_CLOSE_BUTTON_TOUCH_AREA = 6 // dp
         }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tabGroupGrey">#DADCE0</color>
+    <color name="tabGroupBlue">#8AB4F8</color>
+    <color name="tabGroupRed">#F28B82</color>
+    <color name="tabGroupYellow">#E6D86B</color>
+    <color name="tabGroupGreen">#6FC8A6</color>
+    <color name="tabGroupPink">#EE82E0</color>
+    <color name="tabGroupPurple">#B08CFA</color>
+    <color name="tabGroupCyan">#78D9FA</color>
+    <color name="tabGroupOrange">#FFA880</color>
+</resources>
