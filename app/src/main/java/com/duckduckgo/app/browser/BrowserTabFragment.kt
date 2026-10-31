@@ -1346,10 +1346,12 @@ class BrowserTabFragment :
 
     private fun focusOmnibarForSearch() {
         val input = omnibar.omnibarTextInput
-        input.requestFocus()
-        input.post {
-            val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        if (input.isFocusable) {
+            input.requestFocus()
+            input.post { showKeyboard() }
+        } else {
+            removeDuckChatContextualSheet()
+            showNativeInput()
         }
     }
 
