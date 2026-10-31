@@ -254,18 +254,7 @@ class TabSwitcherViewModel @Inject constructor(
         tabRepository.getSelectedTab()?.tabId?.let { tabId ->
             duckAiSessionCallback.onExitIntent(tabId, DuckAiSessionExitTrigger.NEW_TAB_OPENED)
         }
-        if (swipingTabsFeature.isEnabled) {
-            val newTab = tabs.firstOrNull { tabItem ->
-                tabItem.isNewTabPage && !tabItem.hasSourceTab
-            }
-            if (newTab != null) {
-                tabRepository.select(tabId = newTab.id)
-            } else {
-                tabRepository.add()
-            }
-        } else {
-            tabRepository.add()
-        }
+        tabRepository.add()
 
         command.value = Command.Close
         val browserModeParam = mapOf(Pixel.PixelParameter.BROWSER_MODE to currentMode.value.name.lowercase())
